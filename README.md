@@ -11,6 +11,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/morrisonkuhlsen/aegis/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/morrisonkuhlsen/aegis/ci.yml?branch=main&style=flat-square&label=CI"></a>
   <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-b7410e?style=flat-square&logo=rust&logoColor=white">
   <img alt="Runs on Linux, Windows, macOS and the web" src="https://img.shields.io/badge/runs%20on-Linux%20%C2%B7%20Windows%20%C2%B7%20macOS%20%C2%B7%20Web-1f6f78?style=flat-square">
   <img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-1f6f78?style=flat-square">

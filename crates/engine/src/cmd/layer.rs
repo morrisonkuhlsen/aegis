@@ -36,7 +36,12 @@ pub const REMOVE: CommandSpec = CommandSpec {
     run: |s, p| {
         let i = s.map.find(&layer_key(p, "layer")?)?;
         let layer = s.map.layers.remove(i);
-        Ok(json!({ "message": format!("removed {}", layer.name) }))
+        // Its spatial weights go with it: they name features that no longer exist (#49).
+        let before = s.map.weights.len();
+        s.map.weights.retain(|w| w.layer != layer.id);
+        let gone = before - s.map.weights.len();
+        let weights = if gone > 0 { format!(" and its {gone} spatial weights") } else { String::new() };
+        Ok(json!({ "message": format!("removed {}{weights}", layer.name) }))
     },
 };
 

@@ -281,9 +281,55 @@ fn spatial_weights_are_built_inspected_saved_and_exchanged() {
     t.execute("project.open", &json!({ "path": project.display().to_string() })).unwrap();
     assert_eq!(t.map.weights.len(), 4);
     t.execute("feature.delete", &json!({ "layer": "Cidades", "rows": [0] })).unwrap();
-    assert!(t.execute("stats.selectNeighbors", &json!({ "weights": "Cidades_knn", "row": 1 })).unwrap_err().to_string().contains("build it again"));
+    assert!(
+        t.execute("stats.selectNeighbors", &json!({ "weights": "Cidades_knn", "row": 1 }))
+            .unwrap_err()
+            .to_string()
+            .contains("build the weights again")
+    );
     t.execute("stats.removeWeights", &json!({ "weights": "Cidades_knn" })).unwrap();
     assert_eq!(t.map.weights.len(), 3);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// #49: weights outlived their layer, attached to a new layer by name, and exported ids that
+/// collided.
+#[test]
+fn weights_follow_their_layer_and_their_files_name_each_feature_once() {
+    let mut s = Session::sample();
+    s.execute("stats.weights", &json!({ "layer": "Cidades" })).unwrap();
+    let id = s.map.layer("Cidades").unwrap().id;
+    // Stale after a feature is deleted: reported, and refused where rows matter.
+    s.execute("feature.delete", &json!({ "layer": "Cidades", "rows": [0] })).unwrap();
+    let info = s.execute("stats.weightsInfo", &json!({ "weights": "Cidades_knn" })).unwrap();
+    assert!(info["problem"].as_str().is_some_and(|p| p.contains("build the weights again")), "{info}");
+    assert!(s.execute("stats.weightsInfo", &json!({ "weights": "Cidades_knn", "row": 1 })).is_err());
+    let dir = scratch("weights-life");
+    let gal = dir.join("w.gal").display().to_string();
+    assert!(s.execute("stats.exportWeights", &json!({ "weights": "Cidades_knn", "path": gal })).is_err());
+    s.execute("edit.undo", &json!({})).unwrap();
+    // Removing the layer removes its weights; a new layer named after the old id doesn't get them.
+    let r = s.execute("layer.remove", &json!({ "layer": "Cidades" })).unwrap();
+    assert!(r["message"].as_str().unwrap().contains("1 spatial weights"), "{r}");
+    assert!(s.map.weights.is_empty());
+    s.execute("edit.undo", &json!({})).unwrap();
+    s.execute("map.addSample", &json!({})).unwrap();
+    let copy = s.map.layers.iter().find(|l| l.name == "Cidades" && l.id != id).map(|l| l.id).unwrap();
+    s.execute("layer.rename", &json!({ "layer": copy, "name": id.to_string() })).unwrap();
+    s.map.weights.retain(|w| w.name == "Cidades_knn");
+    s.execute("layer.remove", &json!({ "layer": id })).unwrap();
+    assert!(s.map.weights.is_empty(), "the weights went with layer {id}, not to the layer named \"{id}\"");
+    // Ids: unique after spaces become `_`, numbers in full; a Text id round-trips.
+    s.execute("stats.weights", &json!({ "layer": copy })).unwrap();
+    let w = s.map.weights.first().map(|w| w.name.clone()).unwrap();
+    s.execute("stats.exportWeights", &json!({ "weights": w, "path": gal, "idField": "NOME" })).unwrap();
+    assert!(std::fs::read_to_string(&gal).unwrap().contains("Porto_Celeste"));
+    let back = s.execute("stats.importWeights", &json!({ "layer": copy, "path": gal, "idField": "NOME" })).unwrap();
+    let names = [w.clone(), back["name"].as_str().unwrap().to_string()];
+    let lists: Vec<_> = names.iter().map(|n| s.map.weights.iter().find(|x| &x.name == n).unwrap().neighbours.clone()).collect();
+    assert_eq!(lists[0], lists[1]);
+    let err = s.execute("stats.exportWeights", &json!({ "weights": w, "path": gal, "idField": "ILHA" })).unwrap_err().to_string();
+    assert!(err.contains("same id"), "{err}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

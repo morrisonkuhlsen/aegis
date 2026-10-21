@@ -182,6 +182,8 @@ impl MapApp {
         };
         match id {
             "map.addData" => self.add_data(),
+            // New and Open replace the map: both ask first when it has unsaved changes (#45).
+            "project.new" => self.new_project(),
             "project.open" => self.open_project(),
             "project.save" => self.save_project(false),
             "project.saveAs" => self.save_project(true),
@@ -821,6 +823,16 @@ mod tests {
         assert!(app.session.map.layers.is_empty());
         app.open_project();
         assert!(!matches!(app.dialog, Some(Dialog::UnsavedChanges { .. })), "an empty new map has nothing to lose");
+    }
+
+    #[test]
+    fn new_from_the_command_search_asks_before_discarding_changes() {
+        let mut app = MapApp::new(Session::sample());
+        app.run("layer.rename", json!({ "layer": "Cidades", "name": "Towns" }));
+        // The command search runs the chosen command through invoke.
+        app.invoke("project.new");
+        assert_eq!(app.dialog, Some(Dialog::UnsavedChanges { then: Discard::New }));
+        assert!(app.session.map.layer("Towns").is_ok(), "nothing is discarded before the answer");
     }
 
     fn harness(app: MapApp) -> egui_kittest::Harness<'static, MapApp> {

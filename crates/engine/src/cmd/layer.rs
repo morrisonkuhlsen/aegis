@@ -208,7 +208,7 @@ pub const ADD_FIELD: CommandSpec = CommandSpec {
     label: "Add Field",
     ribbon: "Table ▸ Field",
     shortcut: None,
-    params: "{layer, name, type?: long|double|text|short}",
+    params: "{layer, name, type?: long|short|double|text|boolean}",
     kind: Kind::Edit,
     enabled: has_layers,
     run: |s, p| {
@@ -217,7 +217,8 @@ pub const ADD_FIELD: CommandSpec = CommandSpec {
             "long" | "integer" | "int" => FieldType::Integer,
             "double" | "float" => FieldType::Double,
             "text" | "string" => FieldType::Text,
-            "short" | "boolean" | "bool" => FieldType::Boolean,
+            "short" => FieldType::Short,
+            "boolean" | "bool" => FieldType::Boolean,
             other => return Err(Error::param("type", format!("unknown field type `{other}`"))),
         };
         layer.data.add_field(Field::new(req_str(p, "name")?, kind))?;
@@ -241,15 +242,16 @@ pub const CALCULATE_FIELD: CommandSpec = CommandSpec {
         let kind = layer.data.fields.get(i).map(|f| f.kind).unwrap_or(FieldType::Text);
         let q = Query::parse(req_str(p, "expression")?, &layer.data)?;
         let rows: Vec<usize> = if only_selected { layer.selection.iter().copied().collect() } else { (0..layer.data.features.len()).collect() };
-        let values: Vec<(usize, mkaegis_core::Value)> = rows.iter().map(|r| (*r, q.evaluate(&layer.data, *r))).collect();
+        let mut values = Vec::with_capacity(rows.len());
+        for r in &rows {
+            let v = q.evaluate(&layer.data, *r);
+            let shown = v.to_string();
+            let fits = kind
+                .coerce(v)
+                .ok_or_else(|| Error::param("expression", format!("row {}: `{shown}` doesn't fit the {} field `{field}`", r + 1, kind.name())))?;
+            values.push((*r, fits));
+        }
         for (r, v) in values {
-            let v = match (kind, v) {
-                (_, mkaegis_core::Value::Null) => mkaegis_core::Value::Null,
-                (FieldType::Integer, v) => v.as_f64().map_or(mkaegis_core::Value::Null, |x| mkaegis_core::Value::Int(x.round() as i64)),
-                (FieldType::Double, v) => v.as_f64().map_or(mkaegis_core::Value::Null, mkaegis_core::Value::Float),
-                (FieldType::Boolean, v) => mkaegis_core::Value::Bool(v.as_f64().is_some_and(|x| x != 0.0)),
-                (FieldType::Text, v) => mkaegis_core::Value::Text(v.to_string()),
-            };
             if let Some(slot) = layer.data.features.get_mut(r).and_then(|f| f.values.get_mut(i)) {
                 *slot = v;
             }

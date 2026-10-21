@@ -215,6 +215,39 @@ fn symbology_labels_fields_and_calculations() {
 }
 
 #[test]
+fn short_fields_hold_16_bit_integers() {
+    let mut s = Session::sample();
+    s.execute("layer.addField", &json!({ "layer": "Cidades", "name": "N", "type": "short" })).unwrap();
+    s.execute("feature.setValue", &json!({ "layer": "Cidades", "row": 1, "field": "N", "value": 7 })).unwrap();
+    s.execute("feature.setValue", &json!({ "layer": "Cidades", "row": 2, "field": "N", "value": "-32768" })).unwrap();
+    let r = s.execute("feature.identify", &json!({ "layer": "Cidades", "row": 1 })).unwrap();
+    assert_eq!(r["attributes"]["N"], 7);
+    for bad in [json!(40000), json!(1.5), json!("abc")] {
+        assert!(s.execute("feature.setValue", &json!({ "layer": "Cidades", "row": 1, "field": "N", "value": bad })).is_err(), "{bad}");
+    }
+    // The sample's flags are Short 0/1, written to GeoJSON as numbers.
+    let r = s.execute("feature.identify", &json!({ "layer": "Cidades", "row": 0 })).unwrap();
+    assert_eq!(r["attributes"]["CAPITAL"], 1);
+    let file = scratch("short").join("cidades.geojson");
+    s.execute("layer.export", &json!({ "layer": "Cidades", "path": file.display().to_string() })).unwrap();
+    assert!(std::fs::read_to_string(&file).unwrap().contains("\"CAPITAL\":1"));
+    let _ = std::fs::remove_dir_all(scratch("short"));
+}
+
+#[test]
+fn calculate_field_refuses_values_that_do_not_fit() {
+    let mut s = Session::sample();
+    let before = s.map.clone();
+    let r = s.execute("layer.calculateField", &json!({ "layer": "Cidades", "field": "CAPITAL", "expression": "100000" }));
+    assert!(r.unwrap_err().to_string().contains("doesn't fit the Short field"));
+    assert_eq!(s.map, before, "nothing was written");
+    assert!(s.execute("layer.calculateField", &json!({ "layer": "Cidades", "field": "POP", "expression": "UPPER(NOME)" })).is_err());
+    s.execute("layer.calculateField", &json!({ "layer": "Cidades", "field": "CAPITAL", "expression": "POP > 100000" })).unwrap();
+    let big = s.execute("map.selectByAttributes", &json!({ "layer": "Cidades", "where": "CAPITAL = 1" })).unwrap();
+    assert_eq!(big["selected"], 4);
+}
+
+#[test]
 fn data_and_projects_round_trip_through_files() {
     let dir = scratch("files");
     let mut s = Session::sample();

@@ -78,7 +78,7 @@ pub fn add_to(map: &mut Map) -> Result<()> {
         "Ilhas",
         GeometryType::Polygon,
         Crs::WGS84,
-        vec![Field::new("NOME", FieldType::Text), Field::new("TIPO", FieldType::Text), Field::new("RESERVA", FieldType::Boolean)],
+        vec![Field::new("NOME", FieldType::Text), Field::new("TIPO", FieldType::Text), Field::new("RESERVA", FieldType::Short)],
     );
     let mut shapes = Vec::new();
     for (i, (name, c, r, _)) in islands_spec.iter().enumerate() {
@@ -90,7 +90,7 @@ pub fn add_to(map: &mut Map) -> Result<()> {
         let g = Geometry::polygon(rings)?;
         shapes.push(g.clone());
         let kind = if i == 0 { "Ilha principal" } else { "Ilha secundária" };
-        islands.push(Some(g), vec![Value::Text((*name).into()), Value::Text(kind.into()), Value::Bool(i == 2)])?;
+        islands.push(Some(g), vec![Value::Text((*name).into()), Value::Text(kind.into()), Value::Int(i64::from(i == 2))])?;
     }
 
     // Towns: random points on land, kept apart.
@@ -101,7 +101,7 @@ pub fn add_to(map: &mut Map) -> Result<()> {
         vec![
             Field::new("NOME", FieldType::Text),
             Field::new("POP", FieldType::Integer),
-            Field::new("CAPITAL", FieldType::Boolean),
+            Field::new("CAPITAL", FieldType::Short),
             Field::new("ILHA", FieldType::Text),
         ],
     );
@@ -130,7 +130,7 @@ pub fn add_to(map: &mut Map) -> Result<()> {
             let pop = if capital { 412_000 } else { (rng.range(7.6, 12.0).exp()).round() as i64 };
             towns.push(
                 Some(Geometry::Point(p)),
-                vec![Value::Text((*name).into()), Value::Int(pop), Value::Bool(capital), Value::Text((*island).into())],
+                vec![Value::Text((*name).into()), Value::Int(pop), Value::Int(i64::from(capital)), Value::Text((*island).into())],
             )?;
             placed.push((p, i));
             on_island += 1;

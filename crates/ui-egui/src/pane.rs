@@ -3,7 +3,7 @@
 
 use egui::Ui;
 use mkaegis_geom::GeometryType;
-use mkaegis_model::{FieldType, Renderer};
+use mkaegis_model::Renderer;
 use serde_json::{Value as Json, json};
 
 use crate::MapApp;
@@ -107,14 +107,7 @@ fn layer_combo(ui: &mut Ui, app: &MapApp, label: &str, id: &str, value: &mut Opt
 fn field_combo(ui: &mut Ui, app: &MapApp, layer: Option<u32>, label: &str, id: &str, value: &mut String, numeric_only: bool) {
     let fields: Vec<String> = layer
         .and_then(|l| app.session.map.layers.iter().find(|x| x.id == l))
-        .map(|l| {
-            l.data
-                .fields
-                .iter()
-                .filter(|f| !numeric_only || matches!(f.kind, FieldType::Integer | FieldType::Double))
-                .map(|f| f.name.clone())
-                .collect()
-        })
+        .map(|l| l.data.fields.iter().filter(|f| !numeric_only || f.kind.is_numeric()).map(|f| f.name.clone()).collect())
         .unwrap_or_default();
     if !fields.contains(value) {
         *value = fields.first().cloned().unwrap_or_default();
@@ -262,8 +255,7 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
         Renderer::GraduatedColors { .. } => "graduatedColors",
     };
     let field = layer.renderer.field().map(str::to_string);
-    let numeric: Vec<String> =
-        layer.data.fields.iter().filter(|f| matches!(f.kind, FieldType::Integer | FieldType::Double)).map(|f| f.name.clone()).collect();
+    let numeric: Vec<String> = layer.data.fields.iter().filter(|f| f.kind.is_numeric()).map(|f| f.name.clone()).collect();
     let all: Vec<String> = layer.data.fields.iter().map(|f| f.name.clone()).collect();
     let labels = layer.labels.clone();
     let opacity = layer.opacity;

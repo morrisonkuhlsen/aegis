@@ -10,6 +10,8 @@ const DESCRIPTOR: usize = 32;
 const DOUBLE_WIDTH: usize = 19;
 const DOUBLE_DECIMALS: usize = 11;
 const INT_WIDTH: usize = 18;
+/// Short integers: six characters hold -32768.
+const SHORT_WIDTH: usize = 6;
 
 pub struct Table {
     pub fields: Vec<Field>,
@@ -97,7 +99,9 @@ pub fn read(b: &[u8], cpg: Option<&str>) -> Result<Table> {
             let t = text.trim();
             row.push(match f.kind {
                 _ if t.is_empty() || t.chars().all(|ch| ch == '*') => Value::Null,
-                FieldType::Integer => t.parse::<i64>().map(Value::Int).or_else(|_| t.parse::<f64>().map(Value::Float)).unwrap_or(Value::Null),
+                FieldType::Integer | FieldType::Short => {
+                    t.parse::<i64>().map(Value::Int).or_else(|_| t.parse::<f64>().map(Value::Float)).unwrap_or(Value::Null)
+                }
                 FieldType::Double => t.parse::<f64>().ok().filter(|x| x.is_finite()).map_or(Value::Null, Value::Float),
                 FieldType::Boolean => match t.chars().next().map(|ch| ch.to_ascii_uppercase()) {
                     Some('T' | 'Y') => Value::Bool(true),
@@ -157,6 +161,7 @@ pub fn write(fields: &[Field], rows: &[&[Value]]) -> Result<Vec<u8>> {
         .enumerate()
         .map(|(i, f)| match f.kind {
             FieldType::Integer => (b'N', INT_WIDTH, 0),
+            FieldType::Short => (b'N', SHORT_WIDTH, 0),
             FieldType::Double => (b'N', DOUBLE_WIDTH, DOUBLE_DECIMALS as u8),
             FieldType::Boolean => (b'L', 1, 0),
             FieldType::Text => (b'C', text_width(i), 0),

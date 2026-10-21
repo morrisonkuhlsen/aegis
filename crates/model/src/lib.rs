@@ -20,9 +20,13 @@ pub const MAX_FIELD_NAME: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FieldType {
+    /// Long integer.
     Integer,
+    /// Short integer: 16 bits, -32768 to 32767.
+    Short,
     Double,
     Text,
+    /// True or false, as GeoJSON booleans and dBASE logical (`L`) columns hold them.
     Boolean,
 }
 
@@ -30,9 +34,33 @@ impl FieldType {
     pub fn name(self) -> &'static str {
         match self {
             FieldType::Integer => "Long",
+            FieldType::Short => "Short",
             FieldType::Double => "Double",
             FieldType::Text => "Text",
-            FieldType::Boolean => "Short",
+            FieldType::Boolean => "Boolean",
+        }
+    }
+
+    pub fn is_numeric(self) -> bool {
+        matches!(self, FieldType::Integer | FieldType::Short | FieldType::Double)
+    }
+
+    /// A value converted to this type, `None` when it doesn't fit: text that isn't a number,
+    /// a number out of range, a boolean other than 0 or 1. Fractions round to the nearest integer.
+    pub fn coerce(self, v: Value) -> Option<Value> {
+        let integer = |v: &Value, min: f64, max: f64| v.as_f64().map(f64::round).filter(|x| (min..=max).contains(x)).map(|x| Value::Int(x as i64));
+        match (self, v) {
+            (_, Value::Null) => Some(Value::Null),
+            (FieldType::Text, v) => Some(Value::Text(v.to_string())),
+            (FieldType::Double, v) => v.as_f64().map(Value::Float),
+            (FieldType::Integer, v) => integer(&v, -9.0e15, 9.0e15),
+            (FieldType::Short, v) => integer(&v, f64::from(i16::MIN), f64::from(i16::MAX)),
+            (FieldType::Boolean, Value::Bool(b)) => Some(Value::Bool(b)),
+            (FieldType::Boolean, v) => match v.as_f64() {
+                Some(0.0) => Some(Value::Bool(false)),
+                Some(1.0) => Some(Value::Bool(true)),
+                _ => None,
+            },
         }
     }
 }
@@ -296,6 +324,20 @@ mod tests {
         fc.push(Some(Geometry::Point(Coord::new(1.0, 2.0))), vec![Value::Text("A".into())]).unwrap();
         fc.push(None, vec![]).unwrap();
         fc
+    }
+
+    #[test]
+    fn values_are_coerced_to_the_field_type() {
+        assert_eq!(FieldType::Short.coerce(Value::Float(7.4)), Some(Value::Int(7)));
+        assert_eq!(FieldType::Short.coerce(Value::Int(32_767)), Some(Value::Int(32_767)));
+        assert_eq!(FieldType::Short.coerce(Value::Int(32_768)), None);
+        assert_eq!(FieldType::Short.coerce(Value::Text("x".into())), None);
+        assert_eq!(FieldType::Integer.coerce(Value::Float(f64::INFINITY)), None);
+        assert_eq!(FieldType::Integer.coerce(Value::Bool(true)), Some(Value::Int(1)));
+        assert_eq!(FieldType::Boolean.coerce(Value::Int(1)), Some(Value::Bool(true)));
+        assert_eq!(FieldType::Boolean.coerce(Value::Int(5)), None);
+        assert_eq!(FieldType::Text.coerce(Value::Int(5)), Some(Value::Text("5".into())));
+        assert_eq!(FieldType::Double.coerce(Value::Null), Some(Value::Null));
     }
 
     #[test]

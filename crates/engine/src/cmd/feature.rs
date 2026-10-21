@@ -18,6 +18,13 @@ pub(crate) fn value_for(v: &Json, kind: FieldType, field: &str) -> Result<Value,
         (Json::String(s), FieldType::Double) => {
             Value::Float(s.trim().replace(',', ".").parse::<f64>().ok().filter(|x| x.is_finite()).ok_or_else(bad)?)
         }
+        (Json::Number(_) | Json::String(_), FieldType::Short) => {
+            let n = v.as_f64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())).ok_or_else(bad)?;
+            if n.fract() != 0.0 {
+                return Err(bad());
+            }
+            FieldType::Short.coerce(Value::Float(n)).ok_or_else(bad)?
+        }
         (Json::Bool(b), FieldType::Boolean) => Value::Bool(*b),
         (Json::String(s), FieldType::Boolean) => match s.trim().to_ascii_lowercase().as_str() {
             "true" | "1" | "sim" | "yes" => Value::Bool(true),

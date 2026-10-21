@@ -177,7 +177,7 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
                 ui.add(egui::TextEdit::singleline(name).desired_width(f32::INFINITY));
                 ui.horizontal(|ui| {
                     ui.label("Type");
-                    for k in ["long", "double", "text", "short"] {
+                    for k in ["long", "short", "double", "text"] {
                         ui.selectable_value(kind, k, k);
                     }
                 });

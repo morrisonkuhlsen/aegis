@@ -182,6 +182,8 @@ impl MapApp {
         };
         match id {
             "map.addData" => self.add_data(),
+            // New and Open replace the map: both ask first when it has unsaved changes (#45).
+            "project.new" => self.new_project(),
             "project.open" => self.open_project(),
             "project.save" => self.save_project(false),
             "project.saveAs" => self.save_project(true),
@@ -362,27 +364,36 @@ impl MapApp {
 
     fn shortcuts(&mut self, ctx: &egui::Context) {
         use egui::{Key, KeyboardShortcut, Modifiers};
-        let typing = ctx.egui_wants_keyboard_input();
         let pressed = |m: Modifiers, k: Key| ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)));
-        if pressed(Modifiers::COMMAND, Key::Z) {
-            self.run("edit.undo", json!({}));
-        }
-        if pressed(Modifiers::COMMAND, Key::Y) || pressed(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z) {
-            self.run("edit.redo", json!({}));
-        }
-        if pressed(Modifiers::COMMAND | Modifiers::SHIFT, Key::S) {
-            self.save_project(true);
-        } else if pressed(Modifiers::COMMAND, Key::S) {
-            self.save_project(false);
-        }
-        if pressed(Modifiers::COMMAND, Key::O) {
-            self.open_project();
-        }
-        if pressed(Modifiers::COMMAND, Key::N) {
-            self.new_project();
-        }
-        if pressed(Modifiers::COMMAND | Modifiers::SHIFT, Key::A) {
-            self.run("map.clearSelection", json!({}));
+        // While a text box has focus, its own undo, redo and Delete come first: the map-level
+        // shortcuts wait until it lets go (#44).
+        if !ctx.egui_wants_keyboard_input() {
+            // Shift first: a shortcut matches with extra modifiers held, so Ctrl+Z would also
+            // take Ctrl+Shift+Z.
+            if pressed(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z) || pressed(Modifiers::COMMAND, Key::Y) {
+                self.run("edit.redo", json!({}));
+            } else if pressed(Modifiers::COMMAND, Key::Z) {
+                self.run("edit.undo", json!({}));
+            }
+            if pressed(Modifiers::COMMAND | Modifiers::SHIFT, Key::S) {
+                self.save_project(true);
+            } else if pressed(Modifiers::COMMAND, Key::S) {
+                self.save_project(false);
+            }
+            if pressed(Modifiers::COMMAND, Key::O) {
+                self.open_project();
+            }
+            if pressed(Modifiers::COMMAND, Key::N) {
+                self.new_project();
+            }
+            if pressed(Modifiers::COMMAND | Modifiers::SHIFT, Key::A) {
+                self.run("map.clearSelection", json!({}));
+            }
+            if pressed(Modifiers::NONE, Key::Delete)
+                && let Some(layer) = self.active_layer().filter(|l| !l.selection.is_empty()).map(|l| l.id)
+            {
+                self.run("feature.delete", json!({ "layer": layer }));
+            }
         }
         if pressed(Modifiers::CTRL, Key::F1) {
             self.ribbon_collapsed = !self.ribbon_collapsed;
@@ -392,12 +403,6 @@ impl MapApp {
         }
         if pressed(Modifiers::CTRL, Key::T) {
             self.show_table = !self.show_table;
-        }
-        if !typing
-            && pressed(Modifiers::NONE, Key::Delete)
-            && let Some(layer) = self.active_layer().filter(|l| !l.selection.is_empty()).map(|l| l.id)
-        {
-            self.run("feature.delete", json!({ "layer": layer }));
         }
     }
 
@@ -821,6 +826,54 @@ mod tests {
         assert!(app.session.map.layers.is_empty());
         app.open_project();
         assert!(!matches!(app.dialog, Some(Dialog::UnsavedChanges { .. })), "an empty new map has nothing to lose");
+    }
+
+    #[test]
+    fn new_from_the_command_search_asks_before_discarding_changes() {
+        let mut app = MapApp::new(Session::sample());
+        app.run("layer.rename", json!({ "layer": "Cidades", "name": "Towns" }));
+        // The command search runs the chosen command through invoke.
+        app.invoke("project.new");
+        assert_eq!(app.dialog, Some(Dialog::UnsavedChanges { then: Discard::New }));
+        assert!(app.session.map.layer("Towns").is_ok(), "nothing is discarded before the answer");
+    }
+
+    #[test]
+    fn ctrl_shift_z_redoes() {
+        let mut harness = harness(MapApp::new(Session::sample()));
+        harness.state_mut().run("layer.remove", json!({ "layer": "Rios" }));
+        harness.state_mut().run("layer.remove", json!({ "layer": "Ilhas" }));
+        harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+        harness.run_steps(1);
+        assert!(harness.state().session.map.layer("Ilhas").is_ok(), "Ctrl+Z undid the last removal");
+        assert!(harness.state().session.map.layer("Rios").is_err(), "and only that one");
+        harness.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z);
+        harness.run_steps(1);
+        assert!(harness.state().session.map.layer("Ilhas").is_err(), "Ctrl+Shift+Z redid it");
+        assert!(harness.state().session.map.layer("Rios").is_err(), "instead of undoing again");
+    }
+
+    #[test]
+    fn map_shortcuts_wait_while_typing() {
+        let mut app = MapApp::new(Session::sample());
+        app.run("layer.remove", json!({ "layer": "Rios" }));
+        app.run("feature.select", json!({ "layer": "Cidades", "rows": [0] }));
+        let cidades = app.session.map.layer("Cidades").map(|l| (l.id, l.data.features.len())).unwrap();
+        app.active = Some(cidades.0);
+        app.dialog = Some(Dialog::Rename { layer: cidades.0, name: "New name".into() });
+        let mut harness = harness(app);
+        harness.get_by_role(egui::accesskit::Role::TextInput).focus();
+        harness.run_steps(1);
+        assert!(harness.ctx.egui_wants_keyboard_input(), "the text box has the keyboard");
+        for (m, k) in [(egui::Modifiers::COMMAND, egui::Key::Z), (egui::Modifiers::NONE, egui::Key::Delete), (egui::Modifiers::COMMAND, egui::Key::N)]
+        {
+            harness.key_press_modifiers(m, k);
+            harness.run_steps(1);
+        }
+        let s = &harness.state().session;
+        assert!(s.map.layer("Rios").is_err(), "Ctrl+Z in a text box is the text box's undo");
+        assert_eq!(s.map.layer("Cidades").map(|l| l.data.features.len()).ok(), Some(cidades.1), "Delete edits the text");
+        assert!(matches!(harness.state().dialog, Some(Dialog::Rename { .. })), "Ctrl+N doesn't start a new map");
     }
 
     fn harness(app: MapApp) -> egui_kittest::Harness<'static, MapApp> {

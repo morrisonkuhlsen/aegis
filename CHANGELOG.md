@@ -32,6 +32,14 @@ data and parameters. Read it before re-running an analysis with a new version.
 - A failure inside a command that changes the selection or the view (not only edits) now
   restores the map too (#59).
 - Undoing back to the saved state no longer marks the project unsaved (#59).
+- **Opening a project checks it** (#58):
+  - A project saved by a newer MK aeGIS is refused with a clear message. Before, it opened with
+    parts missing, and saving wrote it back without them.
+  - A damaged project is refused: two layers with one id, a row whose values don't match its
+    fields, a shape of the wrong type or with non-finite coordinates.
+  - What is safe to repair is repaired with a warning: the next layer id is moved past the ids
+    in use (before, Add Data could give two layers one id), selected rows past the end are
+    cleared, and spatial weights naming missing rows or layers are dropped.
 
 ## [0.1.2] - 2026-10-21
 

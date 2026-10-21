@@ -10,6 +10,10 @@ use mkaegis_model::{FeatureClass, Map};
 
 /// The extension of the project file.
 pub const PROJECT_EXTENSION: &str = "aegis";
+/// The project format this build writes, and the newest it reads.
+pub const PROJECT_VERSION: u64 = 1;
+/// The largest project file read: its JSON is held in memory whole, then the map.
+const MAX_PROJECT_BYTES: u64 = 1 << 30;
 
 /// The data file extensions Add Data opens.
 pub const DATA_EXTENSIONS: [&str; 3] = ["geojson", "json", "shp"];
@@ -61,19 +65,45 @@ pub fn write_data(fc: &FeatureClass, path: &Path) -> Result<()> {
 }
 
 pub fn save_project(map: &Map, path: &Path) -> Result<()> {
-    let text = serde_json::to_string_pretty(&serde_json::json!({ "format": "aegis", "version": 1, "map": map }))
+    let text = serde_json::to_string_pretty(&serde_json::json!({ "format": "aegis", "version": PROJECT_VERSION, "map": map }))
         .map_err(|e| Error::Internal(e.to_string()))?;
     write_atomic(path, text.as_bytes())
 }
 
-pub fn open_project(path: &Path) -> Result<Map> {
+/// A project file's map, checked (see `Map::validate`), and the warnings about what was
+/// repaired. A project from a newer MK aeGIS is refused rather than opened with parts missing
+/// and then saved back without them (#58).
+pub fn open_project(path: &Path) -> Result<(Map, Vec<String>)> {
+    if std::fs::metadata(path)?.len() > MAX_PROJECT_BYTES {
+        return Err(Error::format("project", format!("larger than {} MB", MAX_PROJECT_BYTES >> 20)));
+    }
     let text = std::fs::read_to_string(path)?;
-    let mut root: serde_json::Value = serde_json::from_str(&text).map_err(|e| Error::format("project", e.to_string()))?;
+    read_project(&text)
+}
+
+/// A project from its JSON text: see [`open_project`].
+pub fn read_project(text: &str) -> Result<(Map, Vec<String>)> {
+    let mut root: serde_json::Value = serde_json::from_str(text).map_err(|e| Error::format("project", e.to_string()))?;
     if root.get("format").and_then(serde_json::Value::as_str) != Some("aegis") {
         return Err(Error::format("project", "not a MK aeGIS project"));
     }
+    // Projects written before the version was read all say 1.
+    let version = match root.get("version") {
+        None => 1,
+        Some(v) => v.as_u64().ok_or_else(|| Error::format("project", "the format version is not a whole number"))?,
+    };
+    if version > PROJECT_VERSION {
+        return Err(Error::format(
+            "project",
+            format!(
+                "it was saved by a newer MK aeGIS (project format {version}); this one reads up to {PROJECT_VERSION}: update MK aeGIS to open it"
+            ),
+        ));
+    }
     let map = root.get_mut("map").map(serde_json::Value::take).ok_or_else(|| Error::format("project", "no map"))?;
-    serde_json::from_value(map).map_err(|e| Error::format("project", e.to_string()))
+    let mut map: Map = serde_json::from_value(map).map_err(|e| Error::format("project", e.to_string()))?;
+    let warnings = map.validate()?;
+    Ok((map, warnings))
 }
 
 /// Writes a whole file or leaves the old one as it was: the bytes go to a temporary file in the
@@ -170,5 +200,101 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "new");
         assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #58: project files are hostile input.
+    mod hostile_projects {
+        use super::*;
+        use serde_json::{Value as Json, json};
+
+        /// The sample map as project JSON, to tamper with.
+        fn sample() -> Json {
+            let s = crate::Session::sample();
+            json!({ "format": "aegis", "version": PROJECT_VERSION, "map": s.map })
+        }
+
+        fn open(project: &Json) -> Result<(Map, Vec<String>)> {
+            read_project(&project.to_string())
+        }
+
+        #[test]
+        fn newer_versions_are_refused_and_old_files_without_one_open() {
+            let mut p = sample();
+            p["version"] = json!(PROJECT_VERSION + 1);
+            let err = open(&p).unwrap_err().to_string();
+            assert!(err.contains("newer MK aeGIS"), "{err}");
+            p["version"] = json!("2");
+            assert!(open(&p).is_err());
+            p.as_object_mut().unwrap().remove("version");
+            assert!(open(&p).is_ok());
+        }
+
+        #[test]
+        fn the_next_layer_id_follows_the_ids_in_use() {
+            let mut p = sample();
+            p["map"]["next_id"] = json!(1);
+            let (mut map, _) = open(&p).unwrap();
+            let ids: Vec<u32> = map.layers.iter().map(|l| l.id).collect();
+            let fc = mkaegis_model::FeatureClass::new("new", mkaegis_geom::GeometryType::Point, map.crs, vec![]);
+            let added = map.add_layer(fc);
+            assert!(!ids.contains(&added), "{added} is already used by {ids:?}");
+        }
+
+        #[test]
+        fn what_cannot_be_trusted_is_refused() {
+            let cases: [(&str, fn(&mut Json)); 5] = [
+                ("two layers have the id", |p| p["map"]["layers"][1]["id"] = p["map"]["layers"][0]["id"].clone()),
+                ("values for", |p| p["map"]["layers"][0]["data"]["features"][0]["values"] = json!([])),
+                ("doesn't fit", |p| {
+                    let pop = p["map"]["layers"][0]["data"]["fields"].as_array().unwrap().iter().position(|f| f["name"] == "POP").unwrap();
+                    p["map"]["layers"][0]["data"]["features"][0]["values"][pop] = json!("many");
+                }),
+                ("a Polygon in a Point layer", |p| {
+                    p["map"]["layers"][0]["data"]["features"][0]["geometry"] =
+                        json!({ "Polygon": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]] })
+                }),
+                ("two fields", |p| {
+                    let first = p["map"]["layers"][0]["data"]["fields"][0].clone();
+                    p["map"]["layers"][0]["data"]["fields"][1]["name"] = first["name"].clone();
+                }),
+            ];
+            for (want, tamper) in cases {
+                let mut p = sample();
+                tamper(&mut p);
+                let err = open(&p).map(|_| ()).unwrap_err().to_string();
+                assert!(err.contains(want), "{want}: {err}");
+            }
+        }
+
+        #[test]
+        fn what_can_be_repaired_is_repaired_with_a_warning() {
+            let mut s = crate::Session::sample();
+            s.execute("stats.weights", &json!({ "layer": "Cidades" })).unwrap();
+            let mut p = json!({ "format": "aegis", "version": PROJECT_VERSION, "map": s.map });
+            p["map"]["layers"][0]["selection"] = json!([0, 1, 999]);
+            p["map"]["weights"][0]["neighbours"][0] = json!([[5000, 1.0]]);
+            let (map, warnings) = open(&p).unwrap();
+            assert_eq!(map.layers[0].selection.len(), 2);
+            assert!(map.weights.is_empty());
+            assert_eq!(warnings.len(), 2, "{warnings:?}");
+        }
+
+        #[test]
+        fn hostile_projects_never_panic() {
+            let text = sample().to_string();
+            let bytes = text.as_bytes();
+            for cut in (0..bytes.len()).step_by(bytes.len() / 200 + 1) {
+                let _ = read_project(&String::from_utf8_lossy(bytes.get(..cut).unwrap_or_default()));
+            }
+            let mut flipped = bytes.to_vec();
+            for i in (0..flipped.len()).step_by(97) {
+                let original = flipped[i];
+                for b in [b'0', b'9', b'-', b'e', b'"', b'[', b'{', b'1'] {
+                    flipped[i] = b;
+                    let _ = read_project(&String::from_utf8_lossy(&flipped));
+                }
+                flipped[i] = original;
+            }
+        }
     }
 }

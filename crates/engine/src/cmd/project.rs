@@ -32,10 +32,11 @@ pub const OPEN: CommandSpec = CommandSpec {
     enabled: always,
     run: |s, p| {
         let file = path(p, "path")?;
-        s.map = crate::io::open_project(&file)?;
+        let (map, warnings) = crate::io::open_project(&file)?;
+        s.map = map;
         s.path = Some(file);
         s.view_serial += 1;
-        Ok(json!({ "message": "opened", "layers": s.map.layers.len() }))
+        Ok(json!({ "message": "opened", "layers": s.map.layers.len(), "warnings": warnings }))
     },
 };
 

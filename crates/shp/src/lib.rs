@@ -317,21 +317,6 @@ pub fn write(fc: &FeatureClass) -> Result<Files> {
     Ok(Files { shp, shx, dbf: dbf::write(&fc.fields, &rows)?, prj: Some(fc.crs.to_prj()), cpg: Some("UTF-8".into()) })
 }
 
-/// Writes `path` (`.shp`) and its sidecar files.
-pub fn write_path(fc: &FeatureClass, path: &Path) -> Result<()> {
-    let files = write(fc)?;
-    std::fs::write(path.with_extension("shp"), &files.shp)?;
-    std::fs::write(path.with_extension("shx"), &files.shx)?;
-    std::fs::write(path.with_extension("dbf"), &files.dbf)?;
-    if let Some(prj) = &files.prj {
-        std::fs::write(path.with_extension("prj"), prj)?;
-    }
-    if let Some(cpg) = &files.cpg {
-        std::fs::write(path.with_extension("cpg"), cpg)?;
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

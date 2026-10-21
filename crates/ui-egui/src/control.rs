@@ -169,6 +169,7 @@ fn set(app: &mut MapApp, p: &Json) -> Result<(), String> {
         app.tab = match tab.to_ascii_lowercase().as_str() {
             "map" => Tab::Map,
             "analysis" => Tab::Analysis,
+            "statistics" => Tab::Statistics,
             "edit" => Tab::Edit,
             "view" => Tab::View,
             "share" => Tab::Share,

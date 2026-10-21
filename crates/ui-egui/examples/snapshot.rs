@@ -2,8 +2,8 @@
 //! touching the screen.
 //!
 //! `cargo run -p aegis-ui-egui --example snapshot -- [--sample] [--in file.geojson|.shp|.aegis]
-//!  [--cmd 'id={json}']... [--tab map|analysis|edit|view|share] [--pane geoprocessing|symbology|history]
-//!  [--tool buffer|project|calculate|attributes|location|statistics] [--table] [--select] [--dark]
+//!  [--cmd 'id={json}']... [--tab map|analysis|statistics|edit|view|share] [--pane geoprocessing|symbology|history]
+//!  [--tool buffer|project|calculate|attributes|location|statistics|weights] [--table] [--select] [--dark]
 //!  [--splash] [--icon] [--size 1280x800] out.png`
 
 use aegis_engine::Session;
@@ -36,6 +36,7 @@ fn main() -> Result<(), String> {
             "--tab" => {
                 tab = match value()?.to_ascii_lowercase().as_str() {
                     "analysis" => Tab::Analysis,
+                    "statistics" => Tab::Statistics,
                     "edit" => Tab::Edit,
                     "view" => Tab::View,
                     "share" => Tab::Share,
@@ -84,6 +85,7 @@ fn main() -> Result<(), String> {
             "attributes" => T::SelectByAttributes,
             "location" => T::SelectByLocation,
             "statistics" => T::SummaryStatistics,
+            "weights" => T::SpatialWeights,
             _ => T::Buffer,
         };
         let active = app.active;

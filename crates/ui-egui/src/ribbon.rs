@@ -15,18 +15,20 @@ pub enum Tab {
     #[default]
     Map,
     Analysis,
+    Statistics,
     Edit,
     View,
     Share,
 }
 
 impl Tab {
-    const ALL: [Tab; 5] = [Tab::Map, Tab::Analysis, Tab::Edit, Tab::View, Tab::Share];
+    const ALL: [Tab; 6] = [Tab::Map, Tab::Analysis, Tab::Statistics, Tab::Edit, Tab::View, Tab::Share];
 
     fn label(self) -> &'static str {
         match self {
             Tab::Map => "Map",
             Tab::Analysis => "Analysis",
+            Tab::Statistics => "Statistics",
             Tab::Edit => "Edit",
             Tab::View => "View",
             Tab::Share => "Share",
@@ -41,6 +43,8 @@ fn button(ui: &mut Ui, icon: Icon, label: &str, enabled: bool, checked: bool, ti
     let t = Tokens::get(ui.ctx());
     let (rect, response) = ui.allocate_exact_size(BUTTON, if enabled { Sense::click() } else { Sense::hover() });
     let response = response.on_hover_text(tip);
+    // Named for screen readers (and UI tests), since the label is painted.
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
     if checked {
         ui.painter().rect_filled(rect.shrink(1.0), 3.0, t.accent_soft);
     } else if enabled && response.hovered() {
@@ -265,6 +269,7 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
         match app.tab {
             Tab::Map => map_tab(app, ui),
             Tab::Analysis => analysis_tab(app, ui),
+            Tab::Statistics => statistics_tab(app, ui),
             Tab::Edit => edit_tab(app, ui),
             Tab::View => view_tab(app, ui),
             Tab::Share => share_tab(app, ui),
@@ -368,6 +373,42 @@ fn analysis_tab(app: &mut MapApp, ui: &mut Ui) {
                 app.gp.open(tool, active_id(app));
                 app.pane = Some(Pane::Geoprocessing);
             }
+        }
+    });
+}
+
+/// The Statistics tab: spatial weights first; the statistics that use them come next.
+fn statistics_tab(app: &mut MapApp, ui: &mut Ui) {
+    let layers = has_layers(app);
+    let weights = app.session.enabled("stats.weightsInfo");
+    group(ui, "Weights", |ui| {
+        let open = app.gp.tool == Some(GpTool::SpatialWeights) && app.pane == Some(Pane::Geoprocessing);
+        if button(ui, Icon::Weights, "Spatial Weights", layers, open, GpTool::SpatialWeights.description()) {
+            app.gp.open(GpTool::SpatialWeights, active_id(app));
+            app.pane = Some(Pane::Geoprocessing);
+        }
+        let selected = app.active_layer().and_then(|l| l.selection.first().copied().map(|r| (l.id, r)));
+        let for_layer = selected.and_then(|(id, _)| app.session.map.weights.iter().rev().find(|w| w.layer == id).map(|w| w.name.clone()));
+        if button(
+            ui,
+            Icon::Select,
+            "Neighbors",
+            selected.is_some() && for_layer.is_some(),
+            false,
+            "Select the neighbours of the selected feature, by the layer's latest weights",
+        ) && let (Some((_, row)), Some(name)) = (selected, for_layer)
+        {
+            app.run("stats.selectNeighbors", json!({ "weights": name, "row": row }));
+        }
+        if button(ui, Icon::Open, "Import Weights", layers, false, "Read a GAL or GWT weights file for the selected layer")
+            && let Some(id) = active_id(app)
+        {
+            app.import_weights(id);
+        }
+        if button(ui, Icon::Export, "Export Weights", weights, false, "Write the latest weights as a GAL or GWT file")
+            && let Some(name) = app.session.map.weights.last().map(|w| w.name.clone())
+        {
+            app.save_to("Export Weights", "stats.exportWeights", &["gal", "gwt"], &format!("{name}.gal"), json!({ "weights": name }));
         }
     });
 }

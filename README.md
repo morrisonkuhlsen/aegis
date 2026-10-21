@@ -47,6 +47,10 @@
 <td width="50%" valign="top"><img src="docs/images/map.png" alt="MK aeGIS with the sample archipelago: cities coloured by population in five quantile classes, islands by unique values, city labels, the attribute table below and the Symbology pane on the right" width="100%"><p align="center"><sub><b>Classification and symbology.</b> Graduated colours by quantile or equal interval, unique values, labels and the attribute table.</sub></p></td>
 <td width="50%" valign="top"><img src="docs/images/dark-analysis.png" alt="MK aeGIS in dark mode with the Analysis tab open: 13 cities selected by attribute and highlighted on the map and in the table, with the Summary Statistics tool open in the Geoprocessing pane" width="100%"><p align="center"><sub><b>Dark mode and analysis.</b> Select By Attributes in SQL, linked selection between map and table, Summary Statistics.</sub></p></td>
 </tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/images/weights.png" alt="The Statistics tab with Spatial Weights, Neighbors, Import Weights and Export Weights; the Spatial Weights tool open with K nearest neighbors, k 4 and row standardization; the four nearest neighbours of Porto Celeste highlighted on the map" width="100%"><p align="center"><sub><b>Spatial weights.</b> Contiguity, k nearest neighbours, distance bands and kernels; select a feature's neighbours on the map; GAL/GWT in and out.</sub></p></td>
+<td width="50%" valign="top"></td>
+</tr>
 </table>
 
 ## Why MK aeGIS
@@ -73,21 +77,21 @@
 
 Tracked as GitHub issues labelled `statistics`:
 
-| Area                     | What                                                                     | Issue |
-|--------------------------|--------------------------------------------------------------------------|-------|
-| Spatial weights          | Contiguity (queen/rook, order k), k-NN, distance band, kernel; GAL/GWT   | #22   |
-| Global autocorrelation   | Moran's I, Geary's C, General G, permutation inference                   | #23   |
-| Local statistics         | LISA cluster maps, Getis-Ord Gi* hot spots, FDR/Bonferroni               | #24   |
-| Linked exploratory views | Histogram, box plot, scatter, Moran scatter plot, brushing to the map    | #25   |
-| Classification           | Natural breaks, standard deviation, box map, percentile map, GVF         | #26   |
-| Tabular data             | CSV import with types, join by key with a join report                    | #27   |
-| Descriptive statistics   | Many fields, group by, weights, quantiles, crosstabs, correlation        | #28   |
-| Rates                    | Excess risk, Empirical Bayes and spatial EB smoothing, standardisation   | #29   |
-| Spatial regression       | OLS with LM diagnostics, spatial lag and error models                    | #30   |
-| Point patterns           | Kernel density, nearest neighbour, Ripley's K/L, centrography            | #31   |
-| Reproducibility          | History as a script, recorded seeds, analysis report                     | #32   |
-| GWR                      | Geographically weighted regression, AICc/CV bandwidth                    | #33   |
-| Geostatistics            | IDW, variogram fitting, ordinary/universal kriging, cross-validation     | #34   |
+| Area                     | What                                                                   | Issue |
+|--------------------------|------------------------------------------------------------------------|-------|
+| Spatial weights ✓        | Contiguity (queen/rook, order k), k-NN, distance band, kernel; GAL/GWT | #22   |
+| Global autocorrelation   | Moran's I, Geary's C, General G, permutation inference                 | #23   |
+| Local statistics         | LISA cluster maps, Getis-Ord Gi* hot spots, FDR/Bonferroni             | #24   |
+| Linked exploratory views | Histogram, box plot, scatter, Moran scatter plot, brushing to the map  | #25   |
+| Classification           | Natural breaks, standard deviation, box map, percentile map, GVF       | #26   |
+| Tabular data             | CSV import with types, join by key with a join report                  | #27   |
+| Descriptive statistics   | Many fields, group by, weights, quantiles, crosstabs, correlation      | #28   |
+| Rates                    | Excess risk, Empirical Bayes and spatial EB smoothing, standardisation | #29   |
+| Spatial regression       | OLS with LM diagnostics, spatial lag and error models                  | #30   |
+| Point patterns           | Kernel density, nearest neighbour, Ripley's K/L, centrography          | #31   |
+| Reproducibility          | History as a script, recorded seeds, analysis report                   | #32   |
+| GWR                      | Geographically weighted regression, AICc/CV bandwidth                  | #33   |
+| Geostatistics            | IDW, variogram fitting, ordinary/universal kriging, cross-validation   | #34   |
 
 ## Quick start
 
@@ -131,10 +135,10 @@ frontend is a separate crate, so the UI can be swapped without touching the engi
 | L0    | `core` (values, errors) · `geom` (geometry, algorithms, WKT) · `crs` (projections, geodesics) |
 | L1    | `model` (feature classes, layers, the map, symbology, SQL queries, spatial weights)           |
 | L2    | `geojson` · `shp` (shapefile + dBASE) · `render` (map rendering, PNG export)                  |
-| L3    | `analysis` (geoprocessing tools) · `stats` (spatial statistics, in progress: #22)             |
+| L3    | `analysis` (geoprocessing tools) · `stats` (spatial weights; statistics next)                 |
 | L4    | `engine` (session, command registry, undo/redo, history, file I/O)                            |
 | L5    | `ui-egui` (desktop UI, control channel) · `mcp` (MCP server)                                  |
-| L6    | `apps/aegis`, `apps/aegis-cli`                                                            |
+| L6    | `apps/aegis`, `apps/aegis-cli`                                                                |
 
 - **Contributor and agent rules** (clean-room, asset policy, never-crash, quality gates): [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md)
 - **Bundled assets:** each one is listed with its licence in [`ATTRIBUTION.md`](ATTRIBUTION.md)

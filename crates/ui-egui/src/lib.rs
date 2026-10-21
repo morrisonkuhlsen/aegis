@@ -324,6 +324,25 @@ impl MapApp {
         }
     }
 
+    /// Statistics › Import Weights: a GAL or GWT file for `layer`.
+    pub fn import_weights(&mut self, layer: u32) {
+        match &self.services.open_file {
+            Some(pick) => {
+                if let Some(path) = pick("Import Weights", &["gal", "gwt"]) {
+                    self.run("stats.importWeights", json!({ "layer": layer, "path": path.display().to_string() }));
+                }
+            }
+            None => {
+                self.dialog = Some(Dialog::SavePath {
+                    title: "Import Weights",
+                    command: "stats.importWeights",
+                    path: String::new(),
+                    params: json!({ "layer": layer }),
+                })
+            }
+        }
+    }
+
     /// Asks where to write, then runs `command` with `params` plus that `path`.
     pub fn save_to(&mut self, title: &'static str, command: &'static str, extensions: &[&str], suggested: &str, params: Json) {
         match &self.services.save_file {
@@ -717,7 +736,7 @@ mod tests {
         harness.state_mut().invoke("analysis.buffer");
         harness.run_steps(2);
         assert_eq!(harness.state().pane, Some(Pane::Geoprocessing));
-        for tab in [Tab::Map, Tab::Analysis, Tab::Edit, Tab::View, Tab::Share] {
+        for tab in [Tab::Map, Tab::Analysis, Tab::Statistics, Tab::Edit, Tab::View, Tab::Share] {
             harness.state_mut().tab = tab;
             harness.run_steps(2);
         }
@@ -741,6 +760,26 @@ mod tests {
         harness.get_by_label("Don't Save").click();
         harness.run_steps(2);
         assert!(harness.state().close_confirmed);
+    }
+
+    #[test]
+    fn the_spatial_weights_form_builds_weights_and_neighbors_selects_them() {
+        let mut harness = harness(MapApp::new(Session::sample()));
+        harness.state_mut().tab = Tab::Statistics;
+        harness.state_mut().active = harness.state().session.map.layer("Cidades").ok().map(|l| l.id);
+        harness.run_steps(2);
+        harness.get_by_label("Spatial Weights").click();
+        harness.run_steps(2);
+        assert_eq!(harness.state().pane, Some(Pane::Geoprocessing));
+        harness.get_by_label("Run").click();
+        harness.run_steps(2);
+        let names: Vec<String> = harness.state().session.map.weights.iter().map(|w| w.name.clone()).collect();
+        assert_eq!(names, vec!["Cidades_knn".to_string()]);
+        harness.state_mut().run("feature.select", json!({ "layer": "Cidades", "rows": [0] }));
+        harness.run_steps(1);
+        harness.get_by_label("Neighbors").click();
+        harness.run_steps(2);
+        assert_eq!(harness.state().session.map.layer("Cidades").map(|l| l.selection.len()).unwrap_or(0), 4);
     }
 
     #[test]

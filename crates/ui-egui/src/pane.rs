@@ -25,11 +25,19 @@ pub enum Tool {
     SelectByAttributes,
     SelectByLocation,
     SummaryStatistics,
+    SpatialWeights,
 }
 
 impl Tool {
-    const ALL: [Tool; 6] =
-        [Tool::Buffer, Tool::Project, Tool::CalculateGeometry, Tool::SelectByAttributes, Tool::SelectByLocation, Tool::SummaryStatistics];
+    const ALL: [Tool; 7] = [
+        Tool::Buffer,
+        Tool::Project,
+        Tool::CalculateGeometry,
+        Tool::SelectByAttributes,
+        Tool::SelectByLocation,
+        Tool::SummaryStatistics,
+        Tool::SpatialWeights,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -39,6 +47,7 @@ impl Tool {
             Tool::SelectByAttributes => "Select Layer By Attribute (Data Management Tools)",
             Tool::SelectByLocation => "Select Layer By Location (Data Management Tools)",
             Tool::SummaryStatistics => "Summary Statistics (Analysis Tools)",
+            Tool::SpatialWeights => "Spatial Weights (Spatial Statistics Tools)",
         }
     }
 
@@ -50,6 +59,7 @@ impl Tool {
             Tool::SelectByAttributes => "Selects features with a SQL clause.",
             Tool::SelectByLocation => "Selects features by their spatial relation to another layer's.",
             Tool::SummaryStatistics => "Count, sum, mean, minimum, maximum and standard deviation of a field.",
+            Tool::SpatialWeights => "Who neighbours whom: contiguity, nearest neighbours, distance bands or kernels, for the spatial statistics.",
         }
     }
 }
@@ -69,6 +79,12 @@ pub struct GpState {
     clause: String,
     relation: &'static str,
     output: String,
+    /// Spatial Weights: method, k, contiguity order, distance threshold (metres), standardisation.
+    method: &'static str,
+    k: String,
+    order: String,
+    threshold: String,
+    standardize: &'static str,
     selected_only: bool,
     result: Option<Json>,
 }
@@ -85,6 +101,10 @@ impl GpState {
             epsg: "31983".into(),
             property: "areaHectares",
             relation: "intersect",
+            method: "queen",
+            k: "4".into(),
+            order: "1".into(),
+            standardize: "row",
             ..GpState::default()
         };
     }
@@ -220,10 +240,92 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             ui.checkbox(&mut g.selected_only, "Selected records only");
             ("analysis.summaryStatistics", json!({ "layer": g.layer, "field": g.field, "selectedOnly": g.selected_only }))
         }
+        Tool::SpatialWeights => {
+            layer_combo(ui, app, "Input Features", "gp-in", &mut g.layer, |_| true);
+            let polygons = g
+                .layer
+                .and_then(|id| app.session.map.layers.iter().find(|l| l.id == id))
+                .is_some_and(|l| l.data.geometry_type == GeometryType::Polygon);
+            if !polygons && matches!(g.method, "queen" | "rook") {
+                g.method = "knn";
+            }
+            ui.label("Conceptualization");
+            egui::ComboBox::from_id_salt("gp-method").width(ui.available_width()).selected_text(method_label(g.method)).show_ui(ui, |ui| {
+                for m in ["queen", "rook", "knn", "distance", "kernel"] {
+                    if polygons || !matches!(m, "queen" | "rook") {
+                        ui.selectable_value(&mut g.method, m, method_label(m));
+                    }
+                }
+            });
+            match g.method {
+                "queen" | "rook" => {
+                    ui.label("Order of contiguity");
+                    ui.add(egui::TextEdit::singleline(&mut g.order).desired_width(f32::INFINITY));
+                }
+                "knn" | "kernel" => {
+                    ui.label(if g.method == "knn" { "Number of neighbors (k)" } else { "Neighbors for the adaptive bandwidth (k)" });
+                    ui.add(egui::TextEdit::singleline(&mut g.k).desired_width(f32::INFINITY));
+                }
+                _ => {
+                    ui.label("Distance band (meters)");
+                    ui.add(egui::TextEdit::singleline(&mut g.threshold).hint_text("the smallest with no feature alone").desired_width(f32::INFINITY));
+                }
+            }
+            ui.label("Standardization");
+            egui::ComboBox::from_id_salt("gp-std").width(ui.available_width()).selected_text(g.standardize).show_ui(ui, |ui| {
+                for s in ["row", "binary", "variance", "none"] {
+                    ui.selectable_value(&mut g.standardize, s, s);
+                }
+            });
+            ui.label("Weights name");
+            ui.add(egui::TextEdit::singleline(&mut g.output).hint_text("<input>_<method>").desired_width(f32::INFINITY));
+            let number = |t: &str| t.trim().replace(',', ".");
+            (
+                "stats.weights",
+                json!({
+                    "layer": g.layer,
+                    "method": g.method,
+                    "k": (matches!(g.method, "knn" | "kernel")).then(|| number(&g.k)),
+                    "order": (matches!(g.method, "queen" | "rook")).then(|| number(&g.order)),
+                    "threshold": (g.method == "distance" && !g.threshold.trim().is_empty()).then(|| number(&g.threshold)),
+                    "standardize": g.standardize,
+                    "name": (!g.output.is_empty()).then_some(&g.output),
+                }),
+            )
+        }
     };
     ui.add_space(8.0);
     if ui.add(egui::Button::new(egui::RichText::new("Run").strong()).min_size(egui::vec2(80.0, 26.0))).clicked() {
         g.result = app.run(command, params);
+    }
+    if let Some(r) = &g.result
+        && tool == Tool::SpatialWeights
+    {
+        ui.separator();
+        ui.label(egui::RichText::new(r.get("name").and_then(Json::as_str).unwrap_or("")).strong());
+        egui::Grid::new("weights").striped(true).num_columns(2).show(ui, |ui| {
+            let summary = |k: &str| r.pointer(&format!("/summary/{k}")).cloned().unwrap_or(Json::Null);
+            let number = |v: Json| v.as_f64().map_or(v.to_string(), |x| aegis_core::Value::Float(x).to_string());
+            for (label, key) in [
+                ("Features", "n"),
+                ("Links", "links"),
+                ("% non-zero", "percent_nonzero"),
+                ("Mean neighbors", "mean_neighbours"),
+                ("Min neighbors", "min_neighbours"),
+                ("Max neighbors", "max_neighbours"),
+            ] {
+                ui.label(egui::RichText::new(label).strong());
+                ui.label(number(summary(key)));
+                ui.end_row();
+            }
+            ui.label(egui::RichText::new("Without neighbors").strong());
+            ui.label(summary("islands").as_array().map_or(0, Vec::len).to_string());
+            ui.end_row();
+            ui.label(egui::RichText::new("Symmetric").strong());
+            ui.label(if summary("symmetric").as_bool().unwrap_or(false) { "yes" } else { "no" });
+            ui.end_row();
+        });
+        ui.label(egui::RichText::new("Select a feature, then Statistics › Neighbors, to see its neighbours on the map.").size(11.0).color(t.muted));
     }
     if let Some(r) = &g.result
         && tool == Tool::SummaryStatistics
@@ -439,4 +541,16 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
         Some(Pane::History) => history(app, ui),
         None => {}
     });
+}
+
+/// A conceptualization's name in the Spatial Weights form.
+fn method_label(method: &str) -> &'static str {
+    match method {
+        "queen" => "Contiguity: queen (shared vertex)",
+        "rook" => "Contiguity: rook (shared edge)",
+        "knn" => "K nearest neighbors",
+        "distance" => "Distance band",
+        "kernel" => "Kernel (adaptive bisquare)",
+        _ => "",
+    }
 }

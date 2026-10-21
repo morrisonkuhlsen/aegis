@@ -39,6 +39,8 @@ pub enum Icon {
     Plus,
     Minus,
     History,
+    /// Spatial weights: features joined to their neighbours.
+    Weights,
 }
 
 /// Paints `icon` in `rect` with `color` (the accent marks the icon's key part).
@@ -139,6 +141,17 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32, accent: Color3
             p.rect_filled(Rect::from_two_pos(at(0.3, 0.2), at(0.7, 0.35)), 1.0, accent.gamma_multiply(0.6));
             for (x, y) in [(0.35, 0.52), (0.5, 0.52), (0.65, 0.52), (0.35, 0.72), (0.5, 0.72), (0.65, 0.72)] {
                 p.circle_filled(at(x, y), 0.04 * s, color);
+            }
+        }
+        Icon::Weights => {
+            let nodes = [(0.22, 0.3), (0.72, 0.22), (0.5, 0.55), (0.2, 0.78), (0.8, 0.75)];
+            for (a, b) in [(0, 2), (1, 2), (3, 2), (4, 2), (0, 1), (3, 4)] {
+                if let (Some(&(ax, ay)), Some(&(bx, by))) = (nodes.get(a), nodes.get(b)) {
+                    poly(&[(ax, ay), (bx, by)], line, false);
+                }
+            }
+            for (i, (x, y)) in nodes.iter().enumerate() {
+                p.circle_filled(at(*x, *y), 0.08 * s, if i == 2 { accent } else { color });
             }
         }
         Icon::Statistics => {

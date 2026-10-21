@@ -1,7 +1,10 @@
 //! SQL `WHERE` clauses over a feature class's fields, as Select By Attributes and Definition
 //! Queries write them: `POP > 1000 AND NAME LIKE 'São%'`, `"TYPE" IN ('a', 'b')`,
 //! `AREA BETWEEN 10 AND 20`, `NAME IS NOT NULL`, arithmetic, `UPPER()`/`LOWER()`.
-//! A comparison with Null is false, as in SQL.
+//!
+//! Logic has three values, as in SQL: a comparison with Null is unknown (Null), `NOT` of unknown
+//! is unknown, `FALSE AND NULL` is false and `TRUE OR NULL` true. A clause selects only the rows
+//! where it is true (#47).
 
 use mkaegis_core::{Error, Result, Value};
 
@@ -78,9 +81,9 @@ impl Query {
         Ok(Query { expr })
     }
 
-    /// Whether row `row` matches.
+    /// Whether row `row` matches: the clause is true there, not false or unknown.
     pub fn matches(&self, fc: &FeatureClass, row: usize) -> bool {
-        truthy(&eval(&self.expr, fc, row))
+        truth(&eval(&self.expr, fc, row)) == Some(true)
     }
 
     /// The clause's value for row `row`, as Calculate Field uses an expression (`POP / 1000`).
@@ -395,12 +398,19 @@ impl Parser<'_> {
     }
 }
 
-fn truthy(v: &Value) -> bool {
+/// A value as a truth value: Null is unknown (`None`); a number is true when not zero; text that
+/// isn't a number is false.
+fn truth(v: &Value) -> Option<bool> {
     match v {
-        Value::Bool(b) => *b,
-        Value::Null => false,
-        other => other.as_f64().is_some_and(|x| x != 0.0),
+        Value::Bool(b) => Some(*b),
+        Value::Null => None,
+        other => Some(other.as_f64().is_some_and(|x| x != 0.0)),
     }
+}
+
+/// A truth value as a value: unknown is Null.
+fn logical(t: Option<bool>) -> Value {
+    t.map_or(Value::Null, Value::Bool)
 }
 
 /// Compares two non-null values: numerically when both read as numbers, else as text
@@ -450,11 +460,32 @@ fn eval(e: &Expr, fc: &FeatureClass, row: usize) -> Value {
         Expr::Field(i) => fc.value(row, *i).cloned().unwrap_or_default(),
         Expr::Lit(v) => v.clone(),
         Expr::Neg(x) => eval(x, fc, row).as_f64().map_or(Value::Null, |v| Value::Float(-v)),
-        Expr::Not(x) => b(!truthy(&eval(x, fc, row))),
-        Expr::And(terms) => b(terms.iter().all(|t| truthy(&eval(t, fc, row)))),
-        Expr::Or(terms) => b(terms.iter().any(|t| truthy(&eval(t, fc, row)))),
+        Expr::Not(x) => logical(truth(&eval(x, fc, row)).map(|t| !t)),
+        // False wins over unknown in AND, true in OR; otherwise unknown stays unknown.
+        Expr::And(terms) => {
+            let mut unknown = false;
+            for t in terms {
+                match truth(&eval(t, fc, row)) {
+                    Some(false) => return b(false),
+                    None => unknown = true,
+                    Some(true) => {}
+                }
+            }
+            if unknown { Value::Null } else { b(true) }
+        }
+        Expr::Or(terms) => {
+            let mut unknown = false;
+            for t in terms {
+                match truth(&eval(t, fc, row)) {
+                    Some(true) => return b(true),
+                    None => unknown = true,
+                    Some(false) => {}
+                }
+            }
+            if unknown { Value::Null } else { b(false) }
+        }
         Expr::Cmp(x, op, y) => {
-            let Some(ord) = compare(&eval(x, fc, row), &eval(y, fc, row)) else { return b(false) };
+            let Some(ord) = compare(&eval(x, fc, row), &eval(y, fc, row)) else { return Value::Null };
             use std::cmp::Ordering::*;
             b(match op {
                 Op::Eq => ord == Equal,
@@ -486,21 +517,37 @@ fn eval(e: &Expr, fc: &FeatureClass, row: usize) -> Value {
         Expr::Like(x, pat, negated) => {
             let (v, p) = (eval(x, fc, row), eval(pat, fc, row));
             if v.is_null() || p.is_null() {
-                return b(false);
+                return Value::Null;
             }
             b(like(&v.to_string(), &p.to_string()) != *negated)
         }
         Expr::In(x, items, negated) => {
+            // `x IN (a, b)` is `x = a OR x = b`: true on a match, else unknown when x or an item
+            // is Null, else false. NOT IN negates that, so it is never true with a Null item.
             let v = eval(x, fc, row);
-            if v.is_null() {
-                return b(false);
+            let mut unknown = v.is_null();
+            let mut found = false;
+            for item in items {
+                match compare(&v, &eval(item, fc, row)) {
+                    Some(std::cmp::Ordering::Equal) => {
+                        found = true;
+                        break;
+                    }
+                    Some(_) => {}
+                    None => unknown = true,
+                }
             }
-            let found = items.iter().any(|i| compare(&v, &eval(i, fc, row)) == Some(std::cmp::Ordering::Equal));
-            b(found != *negated)
+            if found {
+                b(!*negated)
+            } else if unknown {
+                Value::Null
+            } else {
+                b(*negated)
+            }
         }
         Expr::Between(x, lo, hi, negated) => {
             let v = eval(x, fc, row);
-            let (Some(a), Some(c)) = (compare(&v, &eval(lo, fc, row)), compare(&v, &eval(hi, fc, row))) else { return b(false) };
+            let (Some(a), Some(c)) = (compare(&v, &eval(lo, fc, row)), compare(&v, &eval(hi, fc, row))) else { return Value::Null };
             b((a != std::cmp::Ordering::Less && c != std::cmp::Ordering::Greater) != *negated)
         }
         Expr::Upper(x) => match eval(x, fc, row) {
@@ -546,7 +593,7 @@ mod tests {
         assert_eq!(sel("pop >= 430000 and name like 'S%'"), vec![0, 1]);
         assert_eq!(sel("NAME LIKE 'S_ntos'"), vec![1]);
         assert_eq!(sel("POP IS NULL"), vec![2]);
-        assert_eq!(sel("NOT POP > 1000000"), vec![1, 2]);
+        assert_eq!(sel("NOT POP > 1000000"), vec![1], "row 2's POP is NULL: unknown, not selected");
         assert_eq!(sel("\"Tipo Area\" IN ('porto', 'x')"), vec![1]);
         assert_eq!(sel("\"Tipo Area\" NOT IN ('porto')"), vec![0, 2]);
         assert_eq!(sel("POP BETWEEN 1 AND 500000"), vec![1]);
@@ -559,6 +606,32 @@ mod tests {
         let fc = table();
         assert_eq!(Query::parse("POP / 1000", &fc).unwrap().evaluate(&fc, 1), Value::Float(430.0));
         assert_eq!(Query::parse("UPPER(NAME)", &fc).unwrap().evaluate(&fc, 1), Value::Text("SANTOS".into()));
+    }
+
+    /// SQL's three-valued logic (#47). Row 2 has POP NULL; its NAME is 'Ilha'.
+    #[test]
+    fn null_is_unknown() {
+        // NOT of unknown is unknown, whichever way it is written.
+        assert_eq!(sel("NOT (POP > 1000000)"), vec![1]);
+        assert_eq!(sel("NOT POP <= 1000000"), vec![0]);
+        assert_eq!(sel("NOT (NAME LIKE 'S%')"), sel("NAME NOT LIKE 'S%'"));
+        // FALSE AND NULL is false, TRUE OR NULL true; NOT turns them around.
+        assert_eq!(sel("NOT (POP > 1 AND NAME = 'x')"), vec![0, 1, 2]);
+        assert_eq!(sel("NOT (POP > 1 OR NAME = 'Ilha')"), Vec::<usize>::new());
+        assert_eq!(sel("POP > 1 OR NAME = 'Ilha'"), vec![0, 1, 2]);
+        // x NOT IN (…, NULL) is never true; x IN (…, NULL) is true on a match.
+        assert_eq!(sel("NAME NOT IN ('Santos', NULL)"), Vec::<usize>::new());
+        assert_eq!(sel("NAME IN ('Santos', NULL)"), vec![1]);
+        assert_eq!(sel("POP NOT BETWEEN 1 AND 500000"), vec![0]);
+        assert_eq!(sel("POP IS NULL OR POP IS NOT NULL"), vec![0, 1, 2]);
+        // Calculate Field writes Null where the answer is unknown.
+        let fc = table();
+        let value = |q: &str, row: usize| Query::parse(q, &fc).unwrap().evaluate(&fc, row);
+        assert_eq!(value("POP > 5", 2), Value::Null);
+        assert_eq!(value("NOT POP > 5", 2), Value::Null);
+        assert_eq!(value("POP > 5 AND 1 = 0", 2), Value::Bool(false));
+        assert_eq!(value("POP > 5 OR 1 = 1", 2), Value::Bool(true));
+        assert_eq!(value("POP > 5", 1), Value::Bool(true));
     }
 
     #[test]

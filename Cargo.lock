@@ -183,6 +183,7 @@ dependencies = [
  "aegis-model",
  "aegis-render",
  "aegis-shp",
+ "aegis-stats",
  "log",
  "serde",
  "serde_json",

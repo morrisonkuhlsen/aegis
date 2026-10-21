@@ -17,6 +17,7 @@ aegis-geojson = { workspace = true }
 aegis-shp = { workspace = true }
 aegis-render = { workspace = true }
 aegis-analysis = { workspace = true }
+aegis-stats = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }

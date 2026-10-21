@@ -42,7 +42,7 @@ People trust MK aeGIS with their data and their maps; a crash loses their work. 
 - **Test data is built in code.** Real ArcGIS-authored data and large binary fixtures never enter the repository (`/corpus` is gitignored); a test corpus, when needed, lives in a separate repo, fetched pinned and sha256-verified (craftrules `standards/test-corpora.md`).
 - **Everything is a command.** User-visible behaviour = a command in `crates/engine/src/cmd/*` (`CommandSpec`: id, label, ribbon path, shortcut, params doc, kind, `enabled`, `run`) + tests. Ids follow ArcGIS Pro's ribbon and geoprocessing toolboxes (`map.selectByAttributes`, `analysis.buffer`, `management.project`) plus primitives (`feature.select`, `layer.setVisible`, `map.setExtent`). The ribbon, panes, dialogs, shortcuts, control channel, CLI and MCP all reach the same commands.
 - **Programmatic calls never open dialogs**: a command with empty params runs with defaults or returns an error; only the ribbon and menus open a dialog or a pane, and a dialog only gathers parameters (OK runs the command).
-- **Layering** is enforced by `cargo xtask layers`: `core`/`geom`/`crs` (L0) → `model` (L1) → `geojson`/`shp`/`render` (L2) → `analysis` (L3) → `engine` (L4) → `ui-egui`/`mcp` (L5) → `apps/*` (L6). Nothing below L5 depends on egui/eframe/winit/wgpu/rfd. **The UI crate is swappable.**
+- **Layering** is enforced by `cargo xtask layers`: `core`/`geom`/`crs` (L0) → `model` (L1) → `geojson`/`shp`/`render` (L2) → `analysis`/`stats` (L3) → `engine` (L4) → `ui-egui`/`mcp` (L5) → `apps/*` (L6). Nothing below L5 depends on egui/eframe/winit/wgpu/rfd. **The UI crate is swappable.**
 - **The UI is thin**: panels read `Session` state and act through `app.run(id, params)`. Colours come from `theme::Tokens`. Platform services (file dialogs) come in through `Services`. The map view paints `aegis-render`'s output: what you see is what Export Map writes.
 - **Rust only** (no handwritten JS/TS). **Never break wasm** (`cargo xtask wasm`).
 - **Quality gates** before every commit: `cargo xtask ci` (fmt, clippy -D warnings, tests, assets, layers, panics, wasm). One task id per commit (`M1.2: polyline buffer`). Push only when the user asks.
@@ -61,7 +61,7 @@ People trust MK aeGIS with their data and their maps; a crash loses their work. 
 - Never use `println!` or `eprintln!` outside tests, the CLI's own output and `xtask`; use the `log` crate's macros.
 - When two crates export the same type name, alias the import with a suffix: `use serde_json::Value as Json;`, `use foo::Bar as BarFoo;`.
 - Prefer `use` imports over inline fully-qualified paths; qualify inline only for true one-offs or std collisions.
-- Each command is a `CommandSpec` constant in the `cmd` module of its ribbon tab (`project`, `map`, `layer`, `feature`, `analysis`), listed in `COMMANDS` in ribbon order; shared parameter helpers live in `cmd/mod.rs`.
+- Each command is a `CommandSpec` constant in the `cmd` module of its ribbon tab (`project`, `map`, `layer`, `feature`, `analysis`, `stats`), listed in `COMMANDS` in ribbon order; shared parameter helpers live in `cmd/mod.rs`.
 
 ### File layout
 Organize for top-to-bottom reading. Important things first, details later.

@@ -8,6 +8,7 @@ mod feature;
 mod layer;
 mod map;
 mod project;
+mod stats;
 
 use aegis_core::{Error, Result};
 use serde_json::Value as Json;
@@ -89,6 +90,12 @@ pub static COMMANDS: &[CommandSpec] = &[
     analysis::CALCULATE_GEOMETRY,
     analysis::SUMMARY_STATISTICS,
     analysis::EXPORT_MAP,
+    stats::WEIGHTS,
+    stats::WEIGHTS_INFO,
+    stats::SELECT_NEIGHBORS,
+    stats::REMOVE_WEIGHTS,
+    stats::EXPORT_WEIGHTS,
+    stats::IMPORT_WEIGHTS,
     project::UNDO,
     project::REDO,
 ];

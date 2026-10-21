@@ -248,6 +248,46 @@ fn calculate_field_refuses_values_that_do_not_fit() {
 }
 
 #[test]
+fn spatial_weights_are_built_inspected_saved_and_exchanged() {
+    let mut s = Session::sample();
+    // Points default to 4 nearest neighbours, row-standardised.
+    let r = s.execute("stats.weights", &json!({ "layer": "Cidades" })).unwrap();
+    assert_eq!(r["name"], "Cidades_knn");
+    assert_eq!(r["summary"]["n"], 23);
+    assert_eq!(r["summary"]["min_neighbours"], 4);
+    let info = s.execute("stats.weightsInfo", &json!({ "weights": "Cidades_knn", "row": 0 })).unwrap();
+    let total: f64 = info["neighbours"].as_array().unwrap().iter().map(|n| n["weight"].as_f64().unwrap()).sum();
+    assert!((total - 1.0).abs() < 1e-12);
+    let picked = s.execute("stats.selectNeighbors", &json!({ "weights": "Cidades_knn", "row": 0 })).unwrap();
+    assert_eq!(picked["selected"], 4);
+    // Polygons default to queen contiguity: the islands are apart, so each is alone.
+    let q = s.execute("stats.weights", &json!({ "layer": "Ilhas" })).unwrap();
+    assert_eq!(q["summary"]["islands"].as_array().unwrap().len(), 3);
+    // The smallest distance band leaves no city alone.
+    let d = s.execute("stats.weights", &json!({ "layer": "Cidades", "method": "distance" })).unwrap();
+    assert!(d["summary"]["islands"].as_array().unwrap().is_empty());
+    // GAL out and back in, by an id field.
+    let dir = scratch("weights");
+    let gal = dir.join("cidades.gal");
+    s.execute("stats.exportWeights", &json!({ "weights": "Cidades_knn", "path": gal.display().to_string(), "idField": "NOME" })).unwrap();
+    assert!(std::fs::read_to_string(&gal).unwrap().starts_with("0 23 Cidades NOME\n"));
+    let back = s.execute("stats.importWeights", &json!({ "layer": "Cidades", "path": gal.display().to_string(), "idField": "NOME" })).unwrap();
+    assert_eq!(back["name"], "cidades");
+    assert_eq!(s.map.weights.iter().find(|w| w.name == "cidades").unwrap().neighbours, s.map.weights[0].neighbours);
+    // Saved with the project; stale after deleting a feature.
+    let project = dir.join("w.aegis");
+    s.execute("project.saveAs", &json!({ "path": project.display().to_string() })).unwrap();
+    let mut t = Session::default();
+    t.execute("project.open", &json!({ "path": project.display().to_string() })).unwrap();
+    assert_eq!(t.map.weights.len(), 4);
+    t.execute("feature.delete", &json!({ "layer": "Cidades", "rows": [0] })).unwrap();
+    assert!(t.execute("stats.selectNeighbors", &json!({ "weights": "Cidades_knn", "row": 1 })).unwrap_err().to_string().contains("build it again"));
+    t.execute("stats.removeWeights", &json!({ "weights": "Cidades_knn" })).unwrap();
+    assert_eq!(t.map.weights.len(), 3);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn data_and_projects_round_trip_through_files() {
     let dir = scratch("files");
     let mut s = Session::sample();

@@ -64,8 +64,8 @@
   independently computed values: published reference values, hand calculation, numerical
   integration. Geodesic distances use Vincenty's formula on the datum's ellipsoid. UTM is held
   to within 1 mm of the integrated meridian arc.
-- **Clean-room and open.** File formats and math come from public specifications (the ESRI
-  Shapefile Technical Description, GeoJSON RFC 7946, OGC Simple Features, EPSG). Statistics come
+- **Clean-room and open.** File formats and math come from public specifications (the
+  Shapefile technical description, GeoJSON RFC 7946, OGC Simple Features, EPSG). Statistics come
   from the published literature, never from GPL code. Licensed MIT OR Apache-2.0.
 - **Agent-native.** Every ribbon button, dialog and shortcut is a command. Agents can run it
   over a JSON control channel, an **MCP server**, or the CLI, and so can scripts. That also makes
@@ -149,12 +149,8 @@ frontend is a separate crate, so the UI can be swapped without touching the engi
 
 MK aeGIS is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
 All artwork is original or openly licensed (see [`ATTRIBUTION.md`](ATTRIBUTION.md)). MK aeGIS
-contains no Esri, Google or other vendor iconography, styles, basemaps or data. Feature names
-that follow ArcGIS Pro's (Buffer, Select By Location, Contents) refer to behaviour only.
+contains no third-party iconography, styles, basemaps or data.
 
-Esri, ArcGIS, ArcGIS Pro and ArcGIS Online are trademarks, service marks or registered marks of Esri
-in the United States, the European Community or certain other jurisdictions; QGIS is a trademark of
-the QGIS project and RustGIS of its authors. MK aeGIS is not affiliated with or endorsed by any of
-them. A Morrison Kühlsen project.
+A Morrison Kühlsen project.
 
 Contributors are listed in **About MK aeGIS**, generated from the git history.

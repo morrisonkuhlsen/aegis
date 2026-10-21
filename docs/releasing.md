@@ -70,5 +70,3 @@ under *Artifacts*.
 - **Installers:** `.msi`, `.dmg`, `.deb`/`.rpm`, AppImage, Flatpak.
 - **More platforms:** Linux aarch64, Windows arm64.
 - **The web app** ([#38](https://github.com/morrisonkuhlsen/aegis/issues/38)).
-- **A console window opens beside the app on Windows**
-  ([#78](https://github.com/morrisonkuhlsen/aegis/issues/78)).

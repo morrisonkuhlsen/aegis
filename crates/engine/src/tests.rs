@@ -287,6 +287,24 @@ fn spatial_weights_are_built_inspected_saved_and_exchanged() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// #7: `POP / 0` wiped the column to NULL and reported success.
+#[test]
+fn calculate_field_never_silently_wipes_a_column() {
+    let mut s = Session::sample();
+    let before = s.map.clone();
+    let err = s.execute("layer.calculateField", &json!({ "layer": "Cidades", "field": "POP", "expression": "POP / 0" })).unwrap_err();
+    assert!(err.to_string().contains("NULL on every row"), "{err}");
+    assert_eq!(s.map, before, "nothing written");
+    // Some NULLs are reported, not refused.
+    s.execute("feature.setValue", &json!({ "layer": "Cidades", "row": 0, "field": "POP", "value": null })).unwrap();
+    let r = s.execute("layer.calculateField", &json!({ "layer": "Cidades", "field": "POP", "expression": "POP * 2" })).unwrap();
+    assert_eq!((r["calculated"].as_u64(), r["nulls"].as_u64()), (Some(23), Some(1)));
+    assert!(r["message"].as_str().unwrap().ends_with("1 set to NULL"), "{r}");
+    // Emptying a field on purpose still works.
+    let r = s.execute("layer.calculateField", &json!({ "layer": "Cidades", "field": "POP", "expression": "null" })).unwrap();
+    assert_eq!(r["nulls"].as_u64(), Some(23));
+}
+
 #[test]
 fn data_and_projects_round_trip_through_files() {
     let dir = scratch("files");

@@ -152,7 +152,9 @@ All artwork is original or openly licensed (see [`ATTRIBUTION.md`](ATTRIBUTION.m
 contains no Esri, Google or other vendor iconography, styles, basemaps or data. Feature names
 that follow ArcGIS Pro's (Buffer, Select By Location, Contents) refer to behaviour only.
 
-ArcGIS is a trademark of Esri, QGIS of the QGIS project, and RustGIS of its authors; MK aeGIS is not
-affiliated with or endorsed by any of them. A Morrison Kühlsen project.
+Esri, ArcGIS, ArcGIS Pro and ArcGIS Online are trademarks, service marks or registered marks of Esri
+in the United States, the European Community or certain other jurisdictions; QGIS is a trademark of
+the QGIS project and RustGIS of its authors. MK aeGIS is not affiliated with or endorsed by any of
+them. A Morrison Kühlsen project.
 
 Contributors are listed in **About MK aeGIS**, generated from the git history.

@@ -236,9 +236,16 @@ pub struct Statistics {
     pub std: Option<f64>,
 }
 
-/// Summary Statistics over `rows` (all when `None`).
+/// Summary Statistics over `rows` (all when `None`), of a numeric field: on a Text field every
+/// value would count as missing (#4), so it is refused.
 pub fn summary_statistics(fc: &FeatureClass, field: &str, rows: Option<&[usize]>) -> Result<Statistics> {
     let i = fc.field_index(field).ok_or_else(|| Error::NotFound(format!("field `{field}`")))?;
+    if let Some(f) = fc.fields.get(i).filter(|f| !f.kind.is_numeric()) {
+        return Err(Error::param(
+            "field",
+            format!("`{}` is a {} field; Summary Statistics needs a numeric one (Short, Long or Double)", f.name, f.kind.name()),
+        ));
+    }
     let pick: Box<dyn Iterator<Item = usize>> = match rows {
         Some(r) => Box::new(r.iter().copied()),
         None => Box::new(0..fc.features.len()),
@@ -251,7 +258,8 @@ pub fn summary_statistics(fc: &FeatureClass, field: &str, rows: Option<&[usize]>
         }
     }
     let n = values.len();
-    let sum: f64 = values.iter().sum();
+    // From +0: an empty f64 sum is -0, which would print as `-0.0`.
+    let sum = values.iter().fold(0.0, |a, x| a + x);
     let mean = (n > 0).then(|| sum / n as f64);
     // Two-pass variance: stable for large offsets.
     let std = mean.filter(|_| n > 1).map(|m| (values.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt());
@@ -327,5 +335,22 @@ mod tests {
         // Sample variance of 12, 4, 6: (14²/9 + 10²/9 + 4²/9) / 2 = 52/3.
         assert!((s.std.unwrap() - (52.0f64 / 3.0).sqrt()).abs() < 1e-12);
         assert!(summary_statistics(&c, "nope", None).is_err());
+    }
+
+    /// #4: a Text field reported every value as null and a sum of -0.0.
+    #[test]
+    fn statistics_need_a_numeric_field_and_never_report_negative_zero() {
+        let mut fc =
+            FeatureClass::new("t", GeometryType::Point, Crs::WGS84, vec![Field::new("NAME", FieldType::Text), Field::new("X", FieldType::Double)]);
+        for name in ["a", "b"] {
+            fc.push(None, vec![Value::Text(name.into()), Value::Null]).unwrap();
+        }
+        let err = summary_statistics(&fc, "NAME", None).unwrap_err().to_string();
+        assert!(err.contains("Text") && err.contains("numeric"), "{err}");
+        // A numeric field with only nulls: nothing counted, a sum of +0.
+        let s = summary_statistics(&fc, "X", None).unwrap();
+        assert_eq!((s.count, s.nulls, s.mean, s.min, s.std), (0, 2, None, None, None));
+        assert!(s.sum == 0.0 && s.sum.is_sign_positive(), "{}", s.sum);
+        assert!(summary_statistics(&fc, "X", Some(&[])).unwrap().sum.is_sign_positive());
     }
 }

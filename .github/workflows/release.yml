@@ -45,6 +45,11 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME doesn't match the workspace version $version"
             exit 1
           fi
+          # A release needs its CHANGELOG.md section: it heads the release notes.
+          if [ "$GITHUB_REF_TYPE" = tag ] && ! grep -q "^## \[$version\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [$version]' section"
+            exit 1
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   build:
@@ -143,6 +148,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist
@@ -155,9 +165,12 @@ jobs:
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
-        # A version with a suffix (v0.2.0-rc.1) is a pre-release, never shown as the latest.
+        # A version with a suffix (v0.2.0-rc.1) is a pre-release, never shown as the latest. The
+        # notes are the version's CHANGELOG.md section, then the merged pull requests.
         run: |
           prerelease=()
           case "$GITHUB_REF_NAME" in *-*) prerelease=(--prerelease) ;; esac
+          version="${GITHUB_REF_NAME#v}"
+          notes=$(awk -v head="## [$version]" 'index($0, head) == 1 { on = 1; next } on && /^## \[/ { exit } on' CHANGELOG.md)
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag \
-            "${prerelease[@]}" --title "MK aeGIS $GITHUB_REF_NAME" --generate-notes
+            "${prerelease[@]}" --title "MK aeGIS $GITHUB_REF_NAME" --notes "$notes" --generate-notes

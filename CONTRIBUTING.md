@@ -49,6 +49,9 @@ out.png` renders the window offscreen.
 
 - One issue per commit, named in the subject: `#46: contiguity on large projected coordinates`.
 - Branch from `main` and open a pull request; CI must pass before it merges.
+- Add a line to `CHANGELOG.md` under `## [Unreleased]` for anything a user would notice. A
+  change that gives different numbers or selections for the same data goes under
+  **Changed results**, saying what was computed before and what is computed now.
 - Update the docs your change affects (`ROADMAP.md`, `docs/gaps.md`, `docs/parity-checklist.md`
   via `cargo xtask parity`) in the same pull request.
 - You'll be credited in *Help › About* by your GitHub username; to choose the name shown, see

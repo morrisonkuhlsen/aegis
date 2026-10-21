@@ -180,7 +180,8 @@ More in [`docs/architecture.md`](docs/architecture.md); the dependencies allowed
 
 - **Start here:** [`CONTRIBUTING.md`](CONTRIBUTING.md); the full rules for people and agents
   (clean-room, asset policy, never-crash, quality gates) are in [`AGENTS.md`](AGENTS.md)
-- **Where things stand:** [`ROADMAP.md`](ROADMAP.md); what to work on, ranked: [`docs/gaps.md`](docs/gaps.md)
+- **Where things stand:** [`ROADMAP.md`](ROADMAP.md); what changed in each version: [`CHANGELOG.md`](CHANGELOG.md);
+  what to work on, ranked: [`docs/gaps.md`](docs/gaps.md)
 - **Issues:** bugs and feature requests on GitHub, with `priority:` labels; security problems
   privately, as [`SECURITY.md`](SECURITY.md) says
 - **Bundled assets:** each one is listed with its licence in [`ATTRIBUTION.md`](ATTRIBUTION.md)

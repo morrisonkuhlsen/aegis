@@ -6,7 +6,12 @@ publishes them as a GitHub release, with a checksum for every file.
 
 ## Cutting a release
 
-1. **Bump the version.** It lives in one place, `[workspace.package] version` in the root
+1. **Write the changelog.** In [`CHANGELOG.md`](../CHANGELOG.md), rename `## [Unreleased]` to
+   `## [0.2.0] - YYYY-MM-DD`, add a new empty `## [Unreleased]` above it, and update the
+   comparison links at the bottom. Check that **Changed results** lists every change that gives
+   different numbers or selections for the same data. The tag's run refuses a version without a
+   section, and the section heads the release notes.
+2. **Bump the version.** It lives in one place, `[workspace.package] version` in the root
    `Cargo.toml`, and every crate inherits it:
 
    ```sh
@@ -15,8 +20,8 @@ publishes them as a GitHub release, with a checksum for every file.
    ```
 
    It refuses anything a tag can't name (`v0.2.0`, `0.2`, `0.2.0+build`). Merge the two files
-   through a pull request once CI passes.
-2. **Tag the merge commit and push the tag:**
+   through a pull request once CI passes, together with the changelog.
+3. **Tag the merge commit and push the tag:**
 
    ```sh
    git switch main && git pull
@@ -24,15 +29,15 @@ publishes them as a GitHub release, with a checksum for every file.
    git push origin v0.2.0
    ```
 
-3. **Wait for the workflow** (Actions › Release, about 10 minutes). It runs three jobs:
-   - `version` checks that the tag is `v` + the workspace version. A mismatch stops the run
-     before anything is built.
+4. **Wait for the workflow** (Actions › Release, about 10 minutes). It runs three jobs:
+   - `version` checks that the tag is `v` + the workspace version and that `CHANGELOG.md` has
+     its section. Either problem stops the run before anything is built.
    - `build` builds each platform, checks that `mkaegis --version` and `mkaegis-cli --version`
      report the version, and packages it.
    - `publish` runs only when every build passed. It creates the release `MK aeGIS v0.2.0`, with
      notes generated from the pull requests merged since the previous tag, the archives and
      `SHA256SUMS.txt`.
-4. **Check it.** Download the archive for your system, run `mkaegis-cli --version`, open
+5. **Check it.** Download the archive for your system, run `mkaegis-cli --version`, open
    `mkaegis --sample` and run
    `mkaegis-cli run --sample --cmd 'analysis.summaryStatistics={"layer":"Cidades","field":"POP"}'`.
    Then edit the release on GitHub to put the highlights above the generated notes.

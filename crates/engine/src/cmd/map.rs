@@ -82,7 +82,7 @@ pub const SELECT_BY_LOCATION: CommandSpec = CommandSpec {
     label: "Select By Location",
     ribbon: "Map ▸ Selection",
     shortcut: None,
-    params: "{layer, selecting, relation?, distance?, mode?} — relation intersect|withinDistance|within|contains; distance in metres; the selecting layer's selection is used if it has one",
+    params: "{layer, selecting, relation?, distance?, mode?} — relation intersect|withinDistance|within|contains|haveTheirCenterIn; distance in metres; the selecting layer's selection is used if it has one",
     kind: Kind::View,
     enabled: has_layers,
     run: |s, p| {

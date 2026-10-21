@@ -220,7 +220,7 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             layer_combo(ui, app, "Input Features", "gp-in", &mut g.layer, |_| true);
             ui.label("Relationship");
             egui::ComboBox::from_id_salt("gp-rel").width(ui.available_width()).selected_text(g.relation).show_ui(ui, |ui| {
-                for r in ["intersect", "withinDistance", "within", "contains"] {
+                for r in ["intersect", "withinDistance", "within", "contains", "haveTheirCenterIn"] {
                     ui.selectable_value(&mut g.relation, r, r);
                 }
             });

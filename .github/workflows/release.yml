@@ -1,0 +1,148 @@
+# Release builds. A pushed tag vX.Y.Z (the [workspace.package] version in Cargo.toml) builds the
+# desktop app and the CLI for Linux, Windows and macOS and publishes them as a GitHub release with
+# SHA256SUMS.txt. Run by hand, it builds the same archives as workflow artifacts and publishes
+# nothing: a dry run, as is a pull request that changes this file.
+#
+# To release: set the version in Cargo.toml, merge to main, then
+#   git tag v0.2.0 && git push origin v0.2.0
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: [.github/workflows/release.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  version:
+    name: version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the workspace version (a tag must match it)
+        id: version
+        run: |
+          version=$(sed -n '/^\[workspace\.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          if [ -z "$version" ]; then
+            echo "::error::no version in [workspace.package]"
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME doesn't match the workspace version $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: build (${{ matrix.platform }})
+    needs: version
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux-x86_64, os: ubuntu-24.04 }
+          - { platform: windows-x64, os: windows-2025 }
+          - { platform: macos-universal, os: macos-15 }
+    defaults:
+      run:
+        shell: bash
+    env:
+      NAME: aegis-${{ needs.version.outputs.version }}-${{ matrix.platform }}
+      BINS: aegis aegis-cli
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Linux build dependencies (winit, wgpu, rfd)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev \
+            libxi-dev libgtk-3-dev libfontconfig1-dev libfreetype-dev
+
+      - name: Install Rust (stable)
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          if [ "$RUNNER_OS" = macOS ]; then
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          fi
+
+      - name: Build
+        run: |
+          pkgs=()
+          for b in $BINS; do pkgs+=(-p "$b"); done
+          if [ "$RUNNER_OS" = macOS ]; then
+            for t in aarch64-apple-darwin x86_64-apple-darwin; do
+              cargo build --release --locked --target "$t" "${pkgs[@]}"
+            done
+            mkdir -p target/release
+            for b in $BINS; do
+              lipo -create -output "target/release/$b" \
+                "target/aarch64-apple-darwin/release/$b" "target/x86_64-apple-darwin/release/$b"
+            done
+          else
+            cargo build --release --locked "${pkgs[@]}"
+          fi
+
+      - name: Package
+        run: |
+          exe=
+          if [ "$RUNNER_OS" = Windows ]; then exe=.exe; fi
+          mkdir "$NAME"
+          for b in $BINS; do cp "target/release/$b$exe" "$NAME/"; done
+          cp README.md LICENSE-MIT LICENSE-APACHE ATTRIBUTION.md "$NAME/"
+          if [ "$RUNNER_OS" = Windows ]; then
+            7z a -tzip "$NAME.zip" "$NAME" > /dev/null
+          else
+            tar -czf "$NAME.tar.gz" "$NAME"
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.NAME }}
+          path: |
+            ${{ env.NAME }}.tar.gz
+            ${{ env.NAME }}.zip
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: [version, build]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum -- * > SHA256SUMS.txt
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "MK aeGIS $GITHUB_REF_NAME" --generate-notes

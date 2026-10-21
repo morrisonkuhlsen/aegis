@@ -6,10 +6,9 @@ is, who made it, where it came from, and its licence. `cargo xtask assets` fails
 
 mkaeGIS draws its art in code, so this table is short:
 
-| Asset                     | Author                | Source                                           | Licence           |
-|---------------------------|-----------------------|--------------------------------------------------|-------------------|
-| UI icons                  | mkaeGIS contributors | drawn in code, `crates/ui-egui/src/icons.rs`     | MIT OR Apache-2.0 |
-| Colour ramps and palettes | mkaeGIS contributors | defined in code, `crates/model/src/symbology.rs` | MIT OR Apache-2.0 |
-| Sample map                | mkaeGIS contributors | generated in code, `crates/engine/src/sample.rs` | MIT OR Apache-2.0 |
-
-No asset files yet.
+| Asset                     | Author               | Source                                                                                                                                                     | Licence           |
+|---------------------------|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
+| UI icons                  | mkaeGIS contributors | drawn in code, `crates/ui-egui/src/icons.rs`                                                                                                               | MIT OR Apache-2.0 |
+| Colour ramps and palettes | mkaeGIS contributors | defined in code, `crates/model/src/symbology.rs`                                                                                                           | MIT OR Apache-2.0 |
+| Sample map                | mkaeGIS contributors | generated in code, `crates/engine/src/sample.rs`                                                                                                           | MIT OR Apache-2.0 |
+| Splash artwork            | Dante Bertuzzi       | `crates/ui-egui/assets/splash.jpg`; made by the contributor with an AI image generator, cropped to remove the generator's watermark and scaled to 1280×720 | MIT OR Apache-2.0 |

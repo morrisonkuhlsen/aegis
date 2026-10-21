@@ -31,6 +31,9 @@ serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 log = "0.4"
 # PNG encoding for map exports and offscreen snapshots. MIT/Apache, pure Rust.
 png = "0.18"
+# JPEG decoding for the splash artwork. MIT/Apache/Zlib, pure Rust, builds for wasm.
+zune-jpeg = "0.5"
+zune-core = "0.5"
 
 # ui
 egui = "0.36"

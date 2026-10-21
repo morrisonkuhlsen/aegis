@@ -4,7 +4,7 @@
 //! `cargo run -p mkaegis-ui-egui --example snapshot -- [--sample] [--in file.geojson|.shp|.mkaegis]
 //!  [--cmd 'id={json}']... [--tab map|analysis|edit|view|share] [--pane geoprocessing|symbology|history]
 //!  [--tool buffer|project|calculate|attributes|location|statistics] [--table] [--select] [--dark]
-//!  [--size 1280x800] out.png`
+//!  [--splash] [--size 1280x800] out.png`
 
 use mkaegis_engine::Session;
 use mkaegis_ui_egui::{MapApp, Pane, Tab, Tool};
@@ -16,6 +16,7 @@ fn main() -> Result<(), String> {
     let mut size = (1280.0f32, 800.0f32);
     let mut out = "snapshot.png".to_string();
     let (mut tab, mut pane, mut table, mut dark, mut select, mut gp) = (Tab::Map, None, false, false, false, None);
+    let mut splash = false;
     let mut cmds = Vec::new();
     let mut i = 0;
     while let Some(arg) = args.get(i) {
@@ -51,6 +52,7 @@ fn main() -> Result<(), String> {
             "--table" => table = true,
             "--select" => select = true,
             "--dark" => dark = true,
+            "--splash" => splash = true,
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size WxH")?;
@@ -85,6 +87,9 @@ fn main() -> Result<(), String> {
         let active = app.active;
         app.gp.open(tool, active);
         app.pane = Some(Pane::Geoprocessing);
+    }
+    if splash {
+        app.splash = Some(mkaegis_ui_egui::splash::Splash::new(Vec::new()).held());
     }
     let mut harness = egui_kittest::Harness::builder()
         .with_size(egui::vec2(size.0, size.1))

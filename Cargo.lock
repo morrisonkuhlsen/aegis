@@ -1856,6 +1856,8 @@ dependencies = [
  "mkaegis-render",
  "png",
  "serde_json",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]

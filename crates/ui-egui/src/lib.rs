@@ -15,6 +15,7 @@ pub mod icons;
 mod mapview;
 mod pane;
 mod ribbon;
+pub mod splash;
 mod table;
 pub mod theme;
 
@@ -79,6 +80,8 @@ pub struct MapApp {
     pub show_contents: bool,
     /// The command search, open with its query.
     pub search: Option<String>,
+    /// The splash screen, while the app loads (`None` once it is done, and in tests).
+    pub splash: Option<splash::Splash>,
     /// Closing the window was confirmed (saved or discarded): the next close request goes through.
     pub close_confirmed: bool,
     view: mapview::State,
@@ -115,6 +118,7 @@ impl MapApp {
             zoom: 100,
             show_contents: true,
             search: None,
+            splash: None,
             close_confirmed: false,
             view: mapview::State::default(),
             themed: false,
@@ -236,7 +240,7 @@ impl MapApp {
     }
 
     /// The active layer still exists, or the top one is active.
-    fn fix_active(&mut self) {
+    pub(crate) fn fix_active(&mut self) {
         let layers = &self.session.map.layers;
         if !self.active.is_some_and(|a| layers.iter().any(|l| l.id == a)) {
             self.active = layers.first().map(|l| l.id);
@@ -387,6 +391,9 @@ impl MapApp {
         if !self.themed {
             theme::apply(&ctx);
             self.themed = true;
+        }
+        if self.splash.is_some() && !splash::show(self, ui) {
+            return;
         }
         #[cfg(not(target_arch = "wasm32"))]
         control::poll(self, &ctx);

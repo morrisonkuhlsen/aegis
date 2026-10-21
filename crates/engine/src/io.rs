@@ -289,7 +289,7 @@ mod tests {
             let mut flipped = bytes.to_vec();
             for i in (0..flipped.len()).step_by(97) {
                 let original = flipped[i];
-                for b in [b'0', b'9', b'-', b'e', b'"', b'[', b'{', b'1'] {
+                for b in *b"09-e\"[{1" {
                     flipped[i] = b;
                     let _ = read_project(&String::from_utf8_lossy(&flipped));
                 }

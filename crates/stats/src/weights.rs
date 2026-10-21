@@ -27,6 +27,11 @@ pub const MAX_ORDER: u32 = 10;
 pub const MAX_K: u32 = 1_000;
 /// Nearest-neighbour candidates fetched by chord distance before ranking by geodesic distance.
 const CANDIDATE_SLACK: usize = 4;
+/// An adaptive bandwidth is the k-th nearest neighbour's distance times this, so that neighbour
+/// sits just inside it and every one of the k nearest gets a positive weight, even with kernels
+/// that reach 0 at the bandwidth (triangular, bisquare) (#48). Small enough that, even 20,000 km
+/// away, it reaches only 20 µm past the k-th: ties aside, exactly k neighbours.
+const ADAPTIVE_MARGIN: f64 = 1.0 + 1e-12;
 
 /// What to build.
 #[derive(Debug, Clone, PartialEq)]
@@ -357,31 +362,10 @@ impl Points {
 
     /// For every row, the rows within `metres` (geodesic), excluding itself: (row, metres).
     fn within_all(&self, metres: f64) -> Result<Vec<Vec<(u32, f64)>>> {
-        // A geodesic of length d spans at most d / b radians (b: the semi-minor axis, the
-        // smallest radius of curvature bound used here); the chord of that angle bounds it.
-        let e = self.crs.ellipsoid();
-        let b = e.a * (1.0 - 1.0 / e.inv_f);
-        let angle = (metres / b * 1.01).min(std::f64::consts::PI);
-        let chord = 2.0 * (angle / 2.0).sin();
         let mut out = Vec::with_capacity(self.lonlat.len());
         let mut links = 0usize;
         for row in 0..self.lonlat.len() {
-            let Some(q) = self.xyz(row) else {
-                out.push(Vec::new());
-                continue;
-            };
-            let mut found = Vec::new();
-            for (_, at) in self.tree.within(q, chord) {
-                let Some(&other) = self.rows.get(at) else { continue };
-                if other == row {
-                    continue;
-                }
-                let d = self.distance(row, other)?;
-                if d <= metres {
-                    found.push((u32::try_from(other).map_err(|_| too_many_links())?, d));
-                }
-            }
-            found.sort_by_key(|w| w.0);
+            let found = self.within(row, metres)?;
             links = links.saturating_add(found.len());
             if links > MAX_LINKS {
                 return Err(too_many_links());
@@ -389,6 +373,30 @@ impl Points {
             out.push(found);
         }
         Ok(out)
+    }
+
+    /// The rows within `metres` (geodesic) of `row`, excluding itself, in row order: (row, metres).
+    fn within(&self, row: usize, metres: f64) -> Result<Vec<(u32, f64)>> {
+        let Some(q) = self.xyz(row) else { return Ok(Vec::new()) };
+        // A geodesic of length d spans at most d / b radians (b: the semi-minor axis, the
+        // smallest radius of curvature bound used here); the chord of that angle bounds it.
+        let e = self.crs.ellipsoid();
+        let b = e.a * (1.0 - 1.0 / e.inv_f);
+        let angle = (metres / b * 1.01).min(std::f64::consts::PI);
+        let chord = 2.0 * (angle / 2.0).sin();
+        let mut found = Vec::new();
+        for (_, at) in self.tree.within(q, chord) {
+            let Some(&other) = self.rows.get(at) else { continue };
+            if other == row {
+                continue;
+            }
+            let d = self.distance(row, other)?;
+            if d <= metres {
+                found.push((u32::try_from(other).map_err(|_| too_many_links())?, d));
+            }
+        }
+        found.sort_by_key(|w| w.0);
+        Ok(found)
     }
 }
 
@@ -424,7 +432,7 @@ fn distance_band(pts: &Points, threshold: f64, power: Option<f64>) -> Result<Vec
 
 fn kernel_weights(pts: &Points, kernel: Kernel, bandwidth: Bandwidth, diagonal: bool) -> Result<Vec<Vec<(u32, f64)>>> {
     let n = pts.lonlat.len();
-    // Each row's bandwidth, in metres.
+    // Each row's bandwidth, in metres; `None` for a row without a location.
     let widths: Vec<Option<f64>> = match bandwidth {
         Bandwidth::Fixed(h) => {
             if !h.is_finite() || h <= 0.0 || h > 2.1e7 {
@@ -436,25 +444,42 @@ fn kernel_weights(pts: &Points, kernel: Kernel, bandwidth: Bandwidth, diagonal: 
             if !(1..=MAX_K).contains(&k) {
                 return Err(Error::param("k", format!("from 1 to {MAX_K}")));
             }
-            pts.nearest_all(k as usize)?.iter().map(|row| row.iter().map(|w| w.1).reduce(f64::max).filter(|d| *d > 0.0)).collect()
+            let mut widths = Vec::with_capacity(n);
+            for (row, near) in pts.nearest_all(k as usize)?.iter().enumerate() {
+                let kth = near.iter().map(|w| w.1).reduce(f64::max);
+                if kth == Some(0.0) {
+                    // Its k nearest are all at its own location: a bandwidth of 0 weighs nothing.
+                    return Err(Error::param(
+                        "k",
+                        format!(
+                            "row {}: its {k} nearest neighbours are at the same place, so its bandwidth would be 0; use a larger k or a fixed bandwidth",
+                            row + 1
+                        ),
+                    ));
+                }
+                widths.push(kth.map(|d| d * ADAPTIVE_MARGIN));
+            }
+            widths
         }
     };
-    let widest = widths.iter().flatten().copied().fold(0.0, f64::max);
-    if widest <= 0.0 {
-        return Ok(vec![Vec::new(); n]);
-    }
-    let candidates = pts.within_all(widest)?;
+    // Each row searches its own bandwidth: one far-off point's wide bandwidth doesn't make every
+    // row search that far.
     let mut out = Vec::with_capacity(n);
-    for (row, near) in candidates.into_iter().enumerate() {
-        let Some(h) = widths.get(row).copied().flatten() else {
+    let mut links = 0usize;
+    for (row, h) in widths.into_iter().enumerate() {
+        let Some(h) = h else {
             out.push(Vec::new());
             continue;
         };
         let mut list: Vec<(u32, f64)> =
-            near.into_iter().filter(|w| w.1 <= h).map(|(j, d)| (j, kernel_value(kernel, d / h))).filter(|w| w.1 > 0.0).collect();
+            pts.within(row, h)?.into_iter().map(|(j, d)| (j, kernel_value(kernel, d / h))).filter(|w| w.1 > 0.0).collect();
         if diagonal && let Ok(me) = u32::try_from(row) {
             list.push((me, kernel_value(kernel, 0.0)));
             list.sort_by_key(|w| w.0);
+        }
+        links = links.saturating_add(list.len());
+        if links > MAX_LINKS {
+            return Err(too_many_links());
         }
         out.push(list);
     }
@@ -627,10 +652,63 @@ mod tests {
             assert!((row[0].1 - 1.0).abs() < 1e-12 && (row[1].1 - 0.5).abs() < 1e-3, "{row:?}");
             let adaptive = Method::Kernel { kernel: Kernel::Gaussian, bandwidth: Bandwidth::Adaptive(1), diagonal: false };
             let a = build(&pts, 1, "a", &spec(adaptive)).unwrap();
-            // Each point's bandwidth is its nearest neighbour's distance: that neighbour sits at z = 1.
+            // Each point's bandwidth is just past its nearest neighbour's distance: that neighbour
+            // sits at z = 1 − 1e-12.
             assert!((a.of(2)[0].1 - (-0.5f64).exp() / (2.0 * std::f64::consts::PI).sqrt()).abs() < 1e-9);
             assert_eq!(kernel_value(Kernel::Bisquare, 0.0), 15.0 / 16.0);
             assert_eq!(kernel_value(Kernel::Bisquare, 1.5), 0.0);
+        }
+
+        /// #48: with the bandwidth at the k-th neighbour's distance, that neighbour got K(1) = 0
+        /// from triangular and bisquare kernels and was dropped: k = 1 made every row an island.
+        #[test]
+        fn adaptive_kernels_weigh_all_k_nearest() {
+            // On a line at 0, 1000, 3000 and 3500 m.
+            let pts = points(&[(0.0, 0.0), (1000.0, 0.0), (3000.0, 0.0), (3500.0, 0.0)]);
+            for kernel in [Kernel::Uniform, Kernel::Triangular, Kernel::Bisquare, Kernel::Gaussian] {
+                for k in [1u32, 2, 3] {
+                    let method = Method::Kernel { kernel, bandwidth: Bandwidth::Adaptive(k), diagonal: false };
+                    let w = build(&pts, 1, "a", &spec(method)).unwrap();
+                    for row in 0..4 {
+                        assert_eq!(w.of(row).len(), k as usize, "{kernel:?}, k = {k}, row {row}");
+                    }
+                    assert!(w.summary().islands.is_empty());
+                }
+            }
+            // By hand, k = 2, bisquare, raw weights: row 0's bandwidth is 3000 m (its 2nd nearest),
+            // so row 1 at 1000 m weighs 15/16 (1 − 1/9)² = 0.7407…, row 2 just inside: ~0.
+            let mut raw = spec(Method::Kernel { kernel: Kernel::Bisquare, bandwidth: Bandwidth::Adaptive(2), diagonal: false });
+            raw.standardization = Standardization::None;
+            let w = build(&pts, 1, "b", &raw).unwrap();
+            assert_eq!(rows(&w, 0), vec![1, 2]);
+            assert!((w.of(0)[0].1 - 15.0 / 16.0 * (8.0f64 / 9.0).powi(2)).abs() < 1e-3, "{:?}", w.of(0));
+            assert!(w.of(0)[1].1 > 0.0 && w.of(0)[1].1 < 1e-9);
+            // Row 3's bandwidth is 2500 m (to row 1): row 2 at 500 m weighs 15/16 (1 − 0.04)².
+            assert!((w.of(3)[1].1 - 15.0 / 16.0 * 0.96f64.powi(2)).abs() < 1e-3, "{:?}", w.of(3));
+        }
+
+        #[test]
+        fn a_zero_adaptive_bandwidth_is_an_error_not_an_island() {
+            let pts = points(&[(0.0, 0.0), (0.0, 0.0), (0.0, 0.0), (900.0, 0.0)]);
+            let method = |k| Method::Kernel { kernel: Kernel::Bisquare, bandwidth: Bandwidth::Adaptive(k), diagonal: true };
+            let err = build(&pts, 1, "z", &spec(method(2))).unwrap_err().to_string();
+            assert!(err.contains("row 1") && err.contains("same place"), "{err}");
+            // With k past the duplicates every row has a bandwidth.
+            assert!(build(&pts, 1, "z", &spec(method(3))).unwrap().summary().islands.is_empty());
+        }
+
+        /// #48: every row used to search the widest bandwidth of any row.
+        #[test]
+        fn an_outlier_does_not_widen_every_row_search() {
+            // A 100 × 100 cluster 10 m apart and one point 1000 km away; k = 8. Searching every
+            // row 1000 km wide gathered ~1e8 links and failed with "use fewer neighbours".
+            let mut offsets: Vec<(f64, f64)> = (0..10_000).map(|i| ((i % 100) as f64 * 10.0, (i / 100) as f64 * 10.0)).collect();
+            offsets.push((0.0, 1_000_000.0));
+            let pts = points(&offsets);
+            let method = Method::Kernel { kernel: Kernel::Bisquare, bandwidth: Bandwidth::Adaptive(8), diagonal: false };
+            let w = build(&pts, 1, "o", &spec(method)).unwrap();
+            assert!(w.summary().links <= 10_001 * 12, "{}", w.summary().links);
+            assert_eq!(w.of(10_000).len(), 8);
         }
 
         #[test]

@@ -4,6 +4,9 @@
 
 use crate::{Coord, Envelope, Geometry};
 
+/// The most cells along each side of the grid `ring_containers` sorts rings into.
+const GRID_SIDE: usize = 1024;
+
 /// Twice the signed area of a ring (positive when counter-clockwise), by the shoelace formula.
 fn ring_area2(ring: &[Coord]) -> f64 {
     ring.windows(2)
@@ -31,14 +34,65 @@ pub fn ring_contains(ring: &[Coord], p: Coord) -> bool {
 
 /// How many of the other rings contain each ring: even depth is a shell, odd a hole.
 fn ring_depths(rings: &[Vec<Coord>]) -> Vec<usize> {
+    ring_containers(rings).iter().map(Vec::len).collect()
+}
+
+/// For each ring, the other rings that contain it. Rings of a valid polygon never cross, only
+/// touch at points, so one vertex decides: the first that isn't on the other ring's boundary.
+/// The first vertex alone went wrong when parts touched at it or a hole touched its shell there
+/// (#52). Candidates come from a grid of envelopes, so a polygon with many rings isn't a
+/// rings × rings comparison.
+pub fn ring_containers(rings: &[Vec<Coord>]) -> Vec<Vec<usize>> {
+    let envelopes: Vec<Option<Envelope>> = rings.iter().map(|r| Envelope::of(r.iter().copied())).collect();
+    let Some(all) = envelopes.iter().flatten().copied().reduce(Envelope::union) else { return vec![Vec::new(); rings.len()] };
+    // About one ring per cell; a ring is listed in every cell its envelope covers.
+    let side = ((rings.len() as f64).sqrt().ceil() as usize).clamp(1, GRID_SIDE);
+    let cell =
+        |c: f64, min: f64, extent: f64| -> usize { if extent > 0.0 { (((c - min) / extent * side as f64) as usize).min(side - 1) } else { 0 } };
+    let (cx, cy) = (|x: f64| cell(x, all.min_x, all.width()), |y: f64| cell(y, all.min_y, all.height()));
+    let mut grid: Vec<Vec<usize>> = vec![Vec::new(); side * side];
+    for (j, env) in envelopes.iter().enumerate() {
+        let Some(e) = env else { continue };
+        for gx in cx(e.min_x)..=cx(e.max_x) {
+            for gy in cy(e.min_y)..=cy(e.max_y) {
+                if let Some(list) = grid.get_mut(gy * side + gx) {
+                    list.push(j);
+                }
+            }
+        }
+    }
+    let envelope_inside = |inner: Envelope, outer: Envelope| {
+        inner.min_x >= outer.min_x && inner.max_x <= outer.max_x && inner.min_y >= outer.min_y && inner.max_y <= outer.max_y
+    };
     rings
         .iter()
         .enumerate()
         .map(|(i, ring)| {
-            let Some(probe) = ring.first().copied() else { return 0 };
-            rings.iter().enumerate().filter(|(j, other)| *j != i && ring_contains(other, probe)).count()
+            let (Some(Some(inner)), Some(probe)) = (envelopes.get(i).copied(), ring.first().copied()) else { return Vec::new() };
+            // A ring containing this one covers all of it, its first vertex's cell included.
+            let candidates = grid.get(cy(probe.y) * side + cx(probe.x)).map_or(&[][..], Vec::as_slice);
+            candidates
+                .iter()
+                .copied()
+                .filter(|j| *j != i)
+                .filter(|j| envelopes.get(*j).copied().flatten().is_some_and(|outer| envelope_inside(inner, outer)))
+                .filter(|j| rings.get(*j).is_some_and(|other| ring_inside(ring, other)))
+                .collect()
         })
         .collect()
+}
+
+/// Whether `inner` lies inside `outer`, judged at its first vertex off `outer`'s boundary. A ring
+/// on `outer`'s boundary all along (the same ring) is not inside it.
+fn ring_inside(inner: &[Coord], outer: &[Coord]) -> bool {
+    let scale = outer.iter().map(|c| c.x.abs().max(c.y.abs())).fold(1.0, f64::max);
+    let on_boundary = |p: Coord| {
+        outer.windows(2).any(|w| match w {
+            [a, b] => segment_distance(p, *a, *b) <= scale * 1e-12,
+            _ => false,
+        })
+    };
+    inner.iter().copied().find(|p| !on_boundary(*p)).is_some_and(|p| ring_contains(outer, p))
 }
 
 /// The area of a polygon (holes subtracted); 0 for other geometries.
@@ -304,6 +358,36 @@ mod tests {
         hole.reverse();
         assert_eq!(area(&Geometry::Polygon(vec![square(0.0, 0.0, 10.0), hole])), 96.0);
         assert_eq!(length(&Geometry::Polygon(vec![square(0.0, 0.0, 10.0)])), 40.0);
+    }
+
+    /// #52: rings were classified by their first vertex only, which may lie on another ring.
+    #[test]
+    fn rings_that_touch_keep_their_roles() {
+        // Two parts touching at (0, 5), B's first vertex: B used to become a hole of A.
+        let a = square(0.0, 0.0, 10.0);
+        let b = vec![Coord::new(0.0, 5.0), Coord::new(-5.0, 3.0), Coord::new(-5.0, 7.0), Coord::new(0.0, 5.0)];
+        let parts = Geometry::Polygon(vec![a.clone(), b.clone()]);
+        assert_eq!(area(&parts), 110.0);
+        assert_eq!(ring_containers(&[a.clone(), b]), vec![Vec::<usize>::new(), vec![]]);
+        // A hole touching the shell's right edge at its first vertex: it used to count as a part.
+        let hole = vec![Coord::new(10.0, 5.0), Coord::new(8.0, 4.0), Coord::new(8.0, 6.0), Coord::new(10.0, 5.0)];
+        let holed = Geometry::Polygon(vec![a.clone(), hole.clone()]);
+        assert_eq!(area(&holed), 98.0);
+        assert_eq!(ring_containers(&[a.clone(), hole]), vec![vec![], vec![0]]);
+        // An island in a hole, touching the hole at a vertex, is a part again.
+        let lake = square(2.0, 2.0, 6.0);
+        let island = vec![Coord::new(2.0, 5.0), Coord::new(4.0, 4.0), Coord::new(4.0, 6.0), Coord::new(2.0, 5.0)];
+        let depths = ring_depths(&[a, lake, island]);
+        assert_eq!(depths, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn many_rings_are_grouped_quickly() {
+        // 100,000 separate squares and one around them all: the grid leaves few pairs to check.
+        let mut rings: Vec<Vec<Coord>> = (0..100_000).map(|i| square((i % 400) as f64 * 3.0, (i / 400) as f64 * 3.0, 1.0)).collect();
+        rings.push(square(-1.0, -1.0, 1300.0));
+        let depths = ring_depths(&rings);
+        assert!(depths.iter().take(100_000).all(|d| *d == 1) && depths.last() == Some(&0));
     }
 
     #[test]

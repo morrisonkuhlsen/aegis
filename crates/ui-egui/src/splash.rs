@@ -1,218 +1,148 @@
-//! The splash screen: the start-up artwork while the app loads its components, one step per
-//! frame, with the step's name and a progress bar. Clicking or Esc skips the minimum display
-//! time (the steps still all run). Without its artwork (a failed decode) it paints a gradient.
+//! The splash screen: a small window of its own, without decorations, before the main one, as
+//! desktop suites have (the same as MK Sigma's). In two halves: on Morrison Kühlsen's ink,
+//! MK aeGIS's mark, name, motto and version, a bar that fills while it shows with the program's
+//! components named in turn, and the house's logo; beside them, Athena as artwork. It closes by
+//! itself after a moment; a click or Esc closes it sooner.
 
-use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, TextureHandle, TextureOptions, Vec2, pos2, vec2};
-use mkaegis_engine::Session;
+use egui::{Align2, Color32, FontId, Rect, Sense, TextureHandle, TextureOptions, pos2, vec2};
 use zune_core::bytestream::ZCursor;
 use zune_core::colorspace::ColorSpace;
 use zune_core::options::DecoderOptions;
 use zune_jpeg::JpegDecoder;
 
-use crate::{MapApp, theme};
+use crate::icons::{self, Icon};
 
-/// The artwork: see `ATTRIBUTION.md`.
-const ARTWORK: &[u8] = include_bytes!("../assets/splash.jpg");
-/// The largest artwork side decoded, against a corrupt header.
+/// The window's size, in points.
+pub const SIZE: [f32; 2] = [680.0, 400.0];
+/// Seconds it stays.
+const HOLD: f64 = 5.0;
+/// The artwork, the right half: see `ATTRIBUTION.md`.
+const ARTWORK: &[u8] = include_bytes!("../assets/athena.jpg");
+/// The Morrison Kühlsen wordmark, white on clear (a brand asset: `docs/brand/`).
+const MORRISON_KUHLSEN: &[u8] = include_bytes!("../../../docs/brand/morrison-kuhlsen.png");
+/// The largest image side decoded, against a corrupt header.
 const MAX_SIDE: usize = 4096;
-/// How long the splash stays at least, in seconds, so it reads as a screen and not a flicker.
-const MIN_SECONDS: f64 = 1.6;
-const SKY: Color32 = Color32::from_rgb(0x0f, 0x2c, 0x3a);
-const CLOUD: Color32 = Color32::from_rgb(0xe8, 0x5a, 0x5f);
-const BAR: Color32 = Color32::from_rgb(0xf4, 0x8a, 0x7e);
+/// Morrison Kühlsen's ink, and the text on it.
+const INK: Color32 = Color32::from_rgb(0x14, 0x16, 0x1C);
+const ON_INK: Color32 = Color32::from_rgb(0xFF, 0xFF, 0xFF);
+const ON_INK_SOFT: Color32 = Color32::from_rgba_premultiplied(184, 184, 184, 184);
+/// MK aeGIS's colour: the coral of the artwork's clouds.
+const BRAND: Color32 = Color32::from_rgb(0xE8, 0x5A, 0x5F);
+const NAME: &str = "MK aeGIS";
+const MOTTO: &str = "Ex nihilo, ad æternum";
+const TAGLINE: &str = "Spatial statistics, open and auditable: every map with its method.";
+const HOUSE: &str = "A Morrison Kühlsen project";
 
-/// One loading step: what it is called on screen, and the work.
-pub struct Step {
-    pub label: String,
-    pub run: Box<dyn FnOnce(&mut MapApp, &egui::Context) -> Result<(), String>>,
-}
+/// The program's components, named in turn as the bar fills.
+const COMPONENTS: [&str; 12] = [
+    "coordinate systems and geodesics",
+    "the shapefile and dBASE reader",
+    "the GeoJSON reader and writer",
+    "the SQL query engine",
+    "the map renderer",
+    "symbology and classification",
+    "geoprocessing tools",
+    "spatial weights",
+    "spatial statistics",
+    "the attribute table",
+    "the command registry and history",
+    "the control channel and MCP",
+];
 
-/// The splash's progress.
-pub struct Splash {
-    steps: std::collections::VecDeque<Step>,
-    total: usize,
-    current: String,
+#[derive(Debug, Default)]
+pub struct SplashScreen {
+    /// When it first showed, in egui's time.
     started: Option<f64>,
-    skip: bool,
-    /// Stays on screen after loading (offscreen snapshots of the splash).
-    hold: bool,
-    artwork: Option<TextureHandle>,
-    decoded: bool,
-    problems: Vec<String>,
+    closed: bool,
 }
 
-impl Step {
-    pub fn new(label: impl Into<String>, run: impl FnOnce(&mut MapApp, &egui::Context) -> Result<(), String> + 'static) -> Self {
-        Step { label: label.into(), run: Box::new(run) }
+impl SplashScreen {
+    /// Whether it asked its window to close.
+    pub fn closed(&self) -> bool {
+        self.closed
     }
-}
 
-impl Splash {
-    /// The app's own components first, then `steps` (opening files, the control channel…).
-    pub fn new(steps: Vec<Step>) -> Self {
-        let mut all: std::collections::VecDeque<Step> = [
-            Step::new("Theme and icons", |_, ctx| {
-                theme::apply(ctx);
-                Ok(())
-            }),
-            Step::new("Command registry", |_, _| if Session::commands().is_empty() { Err("no commands registered".into()) } else { Ok(()) }),
-            Step::new("Coordinate systems", |_, _| {
-                let known = mkaegis_crs::Crs::known();
-                let p = mkaegis_geom::Coord::new(-46.63, -23.55);
-                for crs in &known {
-                    // Builds each projection once; a point it can't take is fine here.
-                    let _ = crs.from_geographic(p);
-                }
-                if known.is_empty() { Err("no coordinate systems".into()) } else { Ok(()) }
-            }),
-        ]
-        .into();
-        all.extend(steps);
-        all.push_back(Step::new("Map view", |app, _| {
-            app.fix_active();
-            Ok(())
-        }));
-        let total = all.len();
-        Splash {
-            steps: all,
-            total,
-            current: String::new(),
-            started: None,
-            skip: false,
-            hold: false,
-            artwork: None,
-            decoded: false,
-            problems: Vec::new(),
+    /// Draws it over the whole window; asks the window to close when its time is up.
+    pub fn ui(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
+        let now = ctx.input(|i| i.time);
+        let started = *self.started.get_or_insert(now);
+        let progress = ((now - started) / HOLD).clamp(0.0, 1.0) as f32;
+        // The whole window: the root Ui comes inset by a margin.
+        let rect = ctx.content_rect();
+        let response = ui.allocate_rect(ui.max_rect(), Sense::click());
+        paint(&ui.painter().with_clip_rect(rect), &ctx, rect, progress);
+        let done = progress >= 1.0 || response.clicked() || ctx.input(|i| i.key_pressed(egui::Key::Escape));
+        if done && !self.closed {
+            self.closed = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
-    }
-
-    /// Keeps the splash on screen once loaded, for snapshots.
-    pub fn held(mut self) -> Self {
-        self.hold = true;
-        self
-    }
-
-    /// Steps not run yet.
-    pub fn remaining(&self) -> usize {
-        self.steps.len()
-    }
-
-    /// Runs the next step (for loading without the splash on screen).
-    pub fn run_next(&mut self, app: &mut MapApp, ctx: &egui::Context) -> Result<(), String> {
-        match self.steps.pop_front() {
-            Some(step) => {
-                let label = step.label.clone();
-                (step.run)(app, ctx).map_err(|e| format!("{label}: {e}"))
-            }
-            None => Ok(()),
-        }
+        ctx.request_repaint();
     }
 }
 
-/// Runs the next step and paints the splash; returns whether it is finished (and takes it off).
-pub fn show(app: &mut MapApp, ui: &mut egui::Ui) -> bool {
-    let Some(mut splash) = app.splash.take() else { return true };
-    let ctx = ui.ctx().clone();
-    let now = ctx.input(|i| i.time);
-    let started = *splash.started.get_or_insert(now);
-    if let Some(label) = splash.steps.front().map(|s| s.label.clone()) {
-        splash.current = label;
-        if let Err(e) = splash.run_next(app, &ctx) {
-            splash.problems.push(e);
-        }
+fn paint(painter: &egui::Painter, ctx: &egui::Context, rect: Rect, progress: f32) {
+    let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+    // Two halves: the words on Morrison Kühlsen's ink, the artwork beside them.
+    let half = rect.left() + rect.width() / 2.0;
+    let words = Rect::from_min_max(rect.min, pos2(half, rect.bottom()));
+    let art = Rect::from_min_max(pos2(half, rect.top()), rect.max);
+    painter.rect_filled(rect, 0.0, INK);
+    if let Some(texture) = cached(ctx, "splash-athena", ARTWORK, decode_jpeg) {
+        painter.image(texture.id(), art, uv, Color32::WHITE);
     }
-    paint(&mut splash, ui, now - started);
-    let finished = splash.steps.is_empty() && !splash.hold && (splash.skip || now - started >= MIN_SECONDS);
-    if finished {
-        if let Some(p) = splash.problems.first() {
-            app.status = Some((p.clone(), true));
-        }
-    } else {
-        if !splash.hold {
-            ctx.request_repaint();
-        }
-        app.splash = Some(splash);
-    }
-    finished
-}
+    // The brand's stripe along the top of the words.
+    painter.rect_filled(Rect::from_min_size(words.min, vec2(words.width(), 5.0)), 0.0, BRAND);
 
-fn paint(splash: &mut Splash, ui: &mut egui::Ui, elapsed: f64) {
-    let rect = ui.max_rect();
-    let response = ui.interact(rect, ui.id().with("splash"), Sense::click_and_drag());
-    if response.drag_started() {
-        ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
-    }
-    if response.clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        splash.skip = true;
-    }
-    let painter = ui.painter_at(rect);
-    if !splash.decoded {
-        splash.decoded = true;
-        match decode(ARTWORK) {
-            Ok(image) => splash.artwork = Some(ui.ctx().load_texture("splash", image, TextureOptions::LINEAR)),
-            Err(e) => log::warn!("splash artwork: {e}"),
-        }
-    }
-    match &splash.artwork {
-        Some(tex) => {
-            let uv = cover(tex.size_vec2(), rect.size());
-            painter.image(tex.id(), rect, uv, Color32::WHITE);
-        }
-        None => gradient(&painter, rect),
-    }
-    // A shade under the text, darker towards the bottom.
-    let shade = Rect::from_min_max(pos2(rect.left(), rect.bottom() - rect.height() * 0.42), rect.max);
-    let mut mesh = egui::Mesh::default();
-    let clear = Color32::from_black_alpha(0);
-    let dark = Color32::from_black_alpha(200);
-    let base = mesh.vertices.len() as u32;
-    for (p, c) in [(shade.left_top(), clear), (shade.right_top(), clear), (shade.right_bottom(), dark), (shade.left_bottom(), dark)] {
-        mesh.colored_vertex(p, c);
-    }
-    mesh.add_triangle(base, base + 1, base + 2);
-    mesh.add_triangle(base, base + 2, base + 3);
-    painter.add(mesh);
-
-    let margin = (rect.width() * 0.05).clamp(24.0, 64.0);
-    let left = rect.left() + margin;
-    let bottom = rect.bottom() - margin;
-    let white = Color32::from_rgb(0xfa, 0xf6, 0xf2);
-    let soft = Color32::from_rgba_unmultiplied(0xfa, 0xf6, 0xf2, 0xb0);
-    painter.text(pos2(left, bottom - 104.0), Align2::LEFT_BOTTOM, "mkaeGIS", FontId::proportional(46.0), white);
+    let left = words.left() + 36.0;
+    let width = words.width() - 72.0;
+    // The mark and the name.
+    icons::paint(painter, Rect::from_min_size(pos2(left, words.top() + 52.0), vec2(46.0, 46.0)), Icon::Logo, BRAND, BRAND);
+    painter.text(pos2(left + 58.0, words.top() + 75.0), Align2::LEFT_CENTER, NAME, FontId::proportional(34.0), ON_INK);
+    painter.text(pos2(left, words.top() + 128.0), Align2::LEFT_CENTER, MOTTO, FontId::proportional(15.0), ON_INK_SOFT);
+    let tagline = painter.layout(TAGLINE.to_string(), FontId::proportional(12.5), ON_INK_SOFT, width);
+    let below = words.top() + 152.0 + tagline.size().y;
+    painter.galley(pos2(left, words.top() + 152.0), tagline, ON_INK_SOFT);
     painter.text(
-        pos2(left + 2.0, bottom - 80.0),
-        Align2::LEFT_BOTTOM,
-        format!("Statistical GIS · version {}", env!("CARGO_PKG_VERSION")),
-        FontId::proportional(15.0),
-        soft,
+        pos2(left, below + 10.0),
+        Align2::LEFT_TOP,
+        format!("Version {}", env!("CARGO_PKG_VERSION")),
+        FontId::proportional(12.5),
+        ON_INK_SOFT,
     );
 
-    let done = splash.total.saturating_sub(splash.steps.len());
-    let fraction = if splash.total == 0 { 1.0 } else { done as f32 / splash.total as f32 };
-    // The bar fills with the steps but never faster than the minimum time.
-    let fraction = fraction.min((elapsed / MIN_SECONDS) as f32 + 0.15).clamp(0.0, 1.0);
-    let width = (rect.width() - 2.0 * margin).min(520.0);
-    let track = Rect::from_min_size(pos2(left, bottom - 36.0), vec2(width, 4.0));
-    painter.rect_filled(track, 2.0, Color32::from_white_alpha(40));
-    painter.rect_filled(Rect::from_min_size(track.min, vec2(width * fraction, 4.0)), 2.0, BAR);
-    painter.text(
-        pos2(left, bottom - 10.0),
-        Align2::LEFT_BOTTOM,
-        format!("Loading {}…", splash.current.to_lowercase()),
-        FontId::proportional(13.0),
-        soft,
-    );
-    painter.text(
-        pos2(rect.right() - margin, bottom - 10.0),
-        Align2::RIGHT_BOTTOM,
-        "Open source · MIT OR Apache-2.0",
-        FontId::proportional(12.0),
-        Color32::from_rgba_unmultiplied(0xfa, 0xf6, 0xf2, 0x80),
-    );
+    // The component loading, over the progress bar.
+    let bar = Rect::from_min_size(pos2(left, words.bottom() - 96.0), vec2(width, 3.0));
+    let shown = ((progress * COMPONENTS.len() as f32) as usize).min(COMPONENTS.len() - 1);
+    let status = COMPONENTS.get(shown).map_or_else(String::new, |c| format!("Loading {c}…"));
+    painter.text(bar.left_top() - vec2(0.0, 10.0), Align2::LEFT_BOTTOM, status, FontId::proportional(12.0), ON_INK_SOFT);
+    painter.rect_filled(bar, 0.0, Color32::from_white_alpha(28));
+    painter.rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * progress, bar.height())), 0.0, BRAND);
+
+    // The house: its logo and line at the foot.
+    let foot = words.bottom() - 28.0;
+    if let Some(texture) = cached(ctx, "splash-morrison-kuhlsen", MORRISON_KUHLSEN, decode_png) {
+        let logo_width = 104.0;
+        let size = vec2(logo_width, logo_width * texture.size_vec2().y / texture.size_vec2().x.max(1.0));
+        painter.image(texture.id(), Rect::from_min_size(pos2(left, foot - size.y), size), uv, ON_INK);
+    }
+    painter.text(pos2(left + width, foot - 4.0), Align2::RIGHT_BOTTOM, HOUSE, FontId::proportional(11.0), ON_INK_SOFT);
 }
 
-/// The artwork as an egui image (RGBA), refusing absurd sizes.
-fn decode(bytes: &[u8]) -> Result<egui::ColorImage, String> {
+/// A decoded image as a texture, loaded once per context.
+fn cached(ctx: &egui::Context, name: &str, bytes: &[u8], decode: fn(&[u8]) -> Result<egui::ColorImage, String>) -> Option<TextureHandle> {
+    let id = egui::Id::new(name);
+    if let Some(texture) = ctx.data(|d| d.get_temp::<TextureHandle>(id)) {
+        return Some(texture);
+    }
+    let image = decode(bytes).map_err(|e| log::warn!("{name}: {e}")).ok()?;
+    let texture = ctx.load_texture(name, image, TextureOptions::LINEAR);
+    ctx.data_mut(|d| d.insert_temp(id, texture.clone()));
+    Some(texture)
+}
+
+/// A JPEG as an egui image (RGBA), refusing absurd sizes.
+fn decode_jpeg(bytes: &[u8]) -> Result<egui::ColorImage, String> {
     let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGBA).set_max_width(MAX_SIDE).set_max_height(MAX_SIDE);
     let mut decoder = JpegDecoder::new_with_options(ZCursor::new(bytes), options);
     let pixels = decoder.decode().map_err(|e| format!("{e:?}"))?;
@@ -223,30 +153,29 @@ fn decode(bytes: &[u8]) -> Result<egui::ColorImage, String> {
     Ok(egui::ColorImage::from_rgba_unmultiplied([w, h], &pixels))
 }
 
-/// The texture coordinates that fill `area` with an image of `size`, cropping its overflow.
-fn cover(size: Vec2, area: Vec2) -> Rect {
-    if size.x <= 0.0 || size.y <= 0.0 || area.x <= 0.0 || area.y <= 0.0 {
-        return Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0));
+/// A PNG as an egui image (RGBA), refusing absurd sizes.
+fn decode_png(bytes: &[u8]) -> Result<egui::ColorImage, String> {
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info().map_err(|e| e.to_string())?;
+    let (w, h) = (reader.info().width as usize, reader.info().height as usize);
+    if w > MAX_SIDE || h > MAX_SIDE {
+        return Err(format!("{w}×{h} is too large"));
     }
-    let (image, view) = (size.x / size.y, area.x / area.y);
-    if view > image {
-        let h = image / view;
-        Rect::from_min_max(pos2(0.0, (1.0 - h) / 2.0), pos2(1.0, (1.0 + h) / 2.0))
-    } else {
-        let w = view / image;
-        Rect::from_min_max(pos2((1.0 - w) / 2.0, 0.0), pos2((1.0 + w) / 2.0, 1.0))
+    let mut pixels = vec![0; reader.output_buffer_size().ok_or("no buffer size")?];
+    let frame = reader.next_frame(&mut pixels).map_err(|e| e.to_string())?;
+    pixels.truncate(frame.buffer_size());
+    let rgba: Vec<u8> = match frame.color_type {
+        png::ColorType::Rgba => pixels,
+        png::ColorType::Rgb => pixels.as_chunks::<3>().0.iter().flat_map(|[r, g, b]| [*r, *g, *b, 255]).collect(),
+        png::ColorType::GrayscaleAlpha => pixels.as_chunks::<2>().0.iter().flat_map(|[g, a]| [*g, *g, *g, *a]).collect(),
+        png::ColorType::Grayscale => pixels.iter().flat_map(|g| [*g, *g, *g, 255]).collect(),
+        png::ColorType::Indexed => return Err("indexed colour".into()),
+    };
+    if rgba.len() != w.saturating_mul(h).saturating_mul(4) {
+        return Err(format!("{} bytes for {w}×{h}", rgba.len()));
     }
-}
-
-/// The fallback background: the artwork's sky over its clouds.
-fn gradient(painter: &egui::Painter, rect: Rect) {
-    let mut mesh = egui::Mesh::default();
-    for (p, c) in [(rect.left_top(), SKY), (rect.right_top(), SKY), (rect.right_bottom(), CLOUD), (rect.left_bottom(), CLOUD)] {
-        mesh.colored_vertex(p, c);
-    }
-    mesh.add_triangle(0, 1, 2);
-    mesh.add_triangle(0, 2, 3);
-    painter.add(mesh);
+    Ok(egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba))
 }
 
 #[cfg(test)]
@@ -254,55 +183,46 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_splash_runs_every_step_then_gives_way_to_the_map() {
-        let mut app = MapApp::new(Session::default());
-        app.splash = Some(Splash::new(vec![
-            Step::new("Sample map", |app, _| {
-                app.session = Session::sample();
-                Ok(())
-            }),
-            Step::new("broken.shp", |_, _| Err("no such file".into())),
-        ]));
-        let mut harness =
-            egui_kittest::Harness::builder().with_size(egui::vec2(1280.0, 800.0)).build_ui_state(|ui, app: &mut MapApp| app.ui(ui), app);
-        harness.key_press(egui::Key::Escape);
-        harness.run_steps(4);
-        let app = harness.state();
-        assert!(app.splash.is_none(), "loaded and skipped");
-        assert_eq!(app.session.map.layers.len(), 4);
-        assert!(app.active.is_some());
-        let (message, error) = app.status.clone().unwrap();
-        assert!(error && message.contains("broken.shp: no such file"), "{message}");
+    fn the_images_decode() {
+        assert_eq!(decode_jpeg(ARTWORK).unwrap().size, [680, 800]);
+        let logo = decode_png(MORRISON_KUHLSEN).unwrap();
+        assert!(logo.size[0] > logo.size[1] * 2, "a wide wordmark");
     }
 
     #[test]
-    fn the_artwork_decodes() {
-        let image = decode(ARTWORK).unwrap();
-        assert_eq!(image.size, [1280, 720]);
-    }
-
-    #[test]
-    fn hostile_artwork_never_panics() {
-        assert!(decode(&[]).is_err());
-        for cut in [2, 100, ARTWORK.len() / 2] {
-            let _ = decode(ARTWORK.get(..cut).unwrap());
-        }
-        let mut flipped = ARTWORK.to_vec();
-        for i in (0..flipped.len()).step_by(997) {
-            if let Some(b) = flipped.get_mut(i) {
-                *b ^= 0xff;
+    fn hostile_images_never_panic() {
+        assert!(decode_jpeg(&[]).is_err() && decode_png(&[]).is_err());
+        for bytes in [ARTWORK, MORRISON_KUHLSEN] {
+            for cut in [2, 60, bytes.len() / 2] {
+                let _ = decode_jpeg(bytes.get(..cut).unwrap());
+                let _ = decode_png(bytes.get(..cut).unwrap());
             }
-            let _ = decode(&flipped);
+            let mut flipped = bytes.to_vec();
+            for i in (0..flipped.len()).step_by(997) {
+                if let Some(b) = flipped.get_mut(i) {
+                    *b ^= 0xff;
+                }
+                let _ = decode_jpeg(&flipped);
+                let _ = decode_png(&flipped);
+            }
         }
     }
 
     #[test]
-    fn cover_crops_the_overflow() {
-        let uv = cover(vec2(1280.0, 720.0), vec2(800.0, 800.0));
-        assert!((uv.width() - 0.5625).abs() < 1e-4);
-        assert!((uv.height() - 1.0).abs() < 1e-6);
-        let uv = cover(vec2(1280.0, 720.0), vec2(1600.0, 400.0));
-        assert!((uv.width() - 1.0).abs() < 1e-6);
-        assert_eq!(cover(Vec2::ZERO, vec2(10.0, 10.0)), Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)));
+    fn it_closes_on_esc_and_after_its_time() {
+        let mut harness = egui_kittest::Harness::builder()
+            .with_size(egui::vec2(SIZE[0], SIZE[1]))
+            .build_ui_state(|ui, s: &mut SplashScreen| s.ui(ui), SplashScreen::default());
+        harness.run_steps(2);
+        assert!(!harness.state().closed());
+        harness.key_press(egui::Key::Escape);
+        harness.run_steps(1);
+        assert!(harness.state().closed());
+        let mut waiting = egui_kittest::Harness::builder()
+            .with_size(egui::vec2(SIZE[0], SIZE[1]))
+            .with_step_dt(1.0)
+            .build_ui_state(|ui, s: &mut SplashScreen| s.ui(ui), SplashScreen::default());
+        waiting.run_steps(7);
+        assert!(waiting.state().closed(), "gone after {HOLD} s");
     }
 }

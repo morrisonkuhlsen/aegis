@@ -89,7 +89,17 @@ fn main() -> Result<(), String> {
         app.pane = Some(Pane::Geoprocessing);
     }
     if splash {
-        app.splash = Some(mkaegis_ui_egui::splash::Splash::new(Vec::new()).held());
+        // The splash screen alone, at its own size.
+        let mut harness = egui_kittest::Harness::builder()
+            .with_size(egui::vec2(mkaegis_ui_egui::splash::SIZE[0], mkaegis_ui_egui::splash::SIZE[1]))
+            .with_pixels_per_point(2.0)
+            .wgpu()
+            .build_ui_state(|ui, s: &mut mkaegis_ui_egui::splash::SplashScreen| s.ui(ui), Default::default());
+        harness.run_steps(3);
+        let image = harness.render().map_err(|e| e.to_string())?;
+        image.save(&out).map_err(|e| e.to_string())?;
+        println!("{out}");
+        return Ok(());
     }
     let mut harness = egui_kittest::Harness::builder()
         .with_size(egui::vec2(size.0, size.1))

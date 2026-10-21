@@ -4,11 +4,18 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 use mkaegis_engine::Session;
-use mkaegis_ui_egui::splash::{Splash, Step};
 use mkaegis_ui_egui::{MapApp, Services};
 use serde_json::json;
 
 struct App(MapApp);
+
+struct SplashWindow(mkaegis_ui_egui::splash::SplashScreen);
+
+impl eframe::App for SplashWindow {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.0.ui(ui);
+    }
+}
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -27,53 +34,55 @@ fn services() -> Services {
     }
 }
 
+/// The splash screen in a small window of its own, centred and undecorated, until it closes.
+fn splash() -> eframe::Result {
+    let viewport = egui::ViewportBuilder::default()
+        .with_title("MK aeGIS")
+        .with_app_id("mkaegis")
+        .with_inner_size(mkaegis_ui_egui::splash::SIZE)
+        .with_decorations(false)
+        .with_resizable(false)
+        .with_taskbar(false);
+    let options = eframe::NativeOptions { viewport, centered: true, ..Default::default() };
+    eframe::run_native("MK aeGIS splash", options, Box::new(|_cc| Ok(Box::new(SplashWindow(Default::default())))))
+}
+
 fn main() -> eframe::Result {
-    let mut steps = Vec::new();
+    let mut session = Session::default();
     let mut control = None;
-    let mut splash = true;
+    let mut show_splash = true;
     let mut args = std::env::args().skip(1);
+    let mut problems = Vec::new();
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--sample" => steps.push(Step::new("Sample map", |app: &mut MapApp, _: &egui::Context| {
-                app.session = Session::sample();
-                Ok(())
-            })),
+            "--sample" => session = Session::sample(),
             "--control" => control = args.next().and_then(|p| p.parse::<u16>().ok()),
-            "--no-splash" => splash = false,
+            "--no-splash" => show_splash = false,
             "--help" | "-h" => {
                 println!("mkaegis [--sample] [--control PORT] [--no-splash] [project.mkaegis | data.geojson | data.shp]…");
                 return Ok(());
             }
             path => {
-                let path = path.to_string();
-                let name = std::path::Path::new(&path).file_name().map_or(path.clone(), |n| n.to_string_lossy().into_owned());
-                steps.push(Step::new(name, move |app: &mut MapApp, _: &egui::Context| {
-                    let cmd = if path.ends_with(".mkaegis") { "project.open" } else { "map.addData" };
-                    app.session.execute(cmd, &json!({ "path": path })).map(|_| ()).map_err(|e| e.to_string())
-                }));
+                let cmd = if path.ends_with(".mkaegis") { "project.open" } else { "map.addData" };
+                if let Err(e) = session.execute(cmd, &json!({ "path": path })) {
+                    problems.push(format!("{path}: {e}"));
+                }
             }
         }
     }
-    if let Some(port) = control {
-        steps.push(Step::new("Control channel", move |app: &mut MapApp, _: &egui::Context| {
-            let server = mkaegis_ui_egui::control::Server::start(port).map_err(|e| format!("port {port}: {e}"))?;
-            app.control = Some(server);
-            Ok(())
-        }));
+    if show_splash {
+        // Without its splash the program still starts.
+        let _ = splash();
     }
-    let mut app = MapApp::new(Session::default());
+    let mut app = MapApp::new(session);
     app.services = services();
-    let mut load = Splash::new(steps);
-    if splash {
-        app.splash = Some(load);
-    } else {
-        // Without the splash the steps run before the window opens.
-        let ctx = egui::Context::default();
-        while load.remaining() > 0 {
-            if let Err(e) = load.run_next(&mut app, &ctx) {
-                log::error!("{e}");
-                app.status = Some((e, true));
-            }
+    if let Some(p) = problems.first() {
+        app.status = Some((p.clone(), true));
+    }
+    if let Some(port) = control {
+        match mkaegis_ui_egui::control::Server::start(port) {
+            Ok(server) => app.control = Some(server),
+            Err(e) => log::error!("control channel on port {port}: {e}"),
         }
     }
     let viewport = egui::ViewportBuilder::default()

@@ -26,8 +26,8 @@
 <br>
 
 <p align="center">
-  <img src="crates/ui-egui/assets/splash.jpg" alt="The mkaeGIS splash screen: a statue of Athena with spear and shield among ruined columns, under a starry teal sky with two moons and coral clouds" width="100%">
-  <br><sub><b>The splash screen</b>, shown while mkaeGIS loads its components.</sub>
+  <img src="docs/images/splash.png" alt="The splash screen: on the left, on dark ink, the mark and name, the motto Ex nihilo, ad æternum, the tagline, the version, a loading bar naming the map renderer, and the Morrison Kühlsen wordmark; on the right, a statue of Athena with spear and shield among ruined columns under a starry teal sky and coral clouds" width="680">
+  <br><sub><b>The splash screen</b>, shown while the program loads.</sub>
 </p>
 
 <p align="center">

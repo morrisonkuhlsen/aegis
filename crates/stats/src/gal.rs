@@ -14,8 +14,10 @@ use mkaegis_core::{Error, Result};
 const MAX_ROWS: usize = 2_000_000;
 const MAX_LINKS: usize = crate::weights::MAX_LINKS;
 
-/// GAL text for `neighbours`, ids by row.
-pub fn write_gal(neighbours: &[Vec<(u32, f64)>], ids: &[String], layer: &str, id_field: &str) -> String {
+/// GAL text for `neighbours`, ids by row. The ids must be unique and without spaces, or the
+/// file couldn't be read back (#49).
+pub fn write_gal(neighbours: &[Vec<(u32, f64)>], ids: &[String], layer: &str, id_field: &str) -> Result<String> {
+    check_ids(ids)?;
     let mut out = format!("0 {} {} {}\n", neighbours.len(), token(layer), token(id_field));
     for (i, row) in neighbours.iter().enumerate() {
         out.push_str(&format!("{} {}\n", id(ids, i), row.len()));
@@ -23,18 +25,19 @@ pub fn write_gal(neighbours: &[Vec<(u32, f64)>], ids: &[String], layer: &str, id
         out.push_str(&list.join(" "));
         out.push('\n');
     }
-    out
+    Ok(out)
 }
 
-/// GWT text for `neighbours`, ids by row.
-pub fn write_gwt(neighbours: &[Vec<(u32, f64)>], ids: &[String], layer: &str, id_field: &str) -> String {
+/// GWT text for `neighbours`, ids by row; the ids as for [`write_gal`].
+pub fn write_gwt(neighbours: &[Vec<(u32, f64)>], ids: &[String], layer: &str, id_field: &str) -> Result<String> {
+    check_ids(ids)?;
     let mut out = format!("0 {} {} {}\n", neighbours.len(), token(layer), token(id_field));
     for (i, row) in neighbours.iter().enumerate() {
         for (j, w) in row {
             out.push_str(&format!("{} {} {}\n", id(ids, i), id(ids, *j as usize), w));
         }
     }
-    out
+    Ok(out)
 }
 
 /// Neighbour lists from GAL text, for features whose ids are `ids` (by row). Every weight is 1.
@@ -43,14 +46,21 @@ pub fn read_gal(text: &str, ids: &[String]) -> Result<Vec<Vec<(u32, f64)>>> {
     let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty());
     let n = header(lines.next(), ids.len())?;
     let mut out = vec![Vec::new(); ids.len()];
+    let mut seen = vec![false; ids.len()];
     let mut links = 0usize;
-    for _ in 0..n {
-        let Some(line) = lines.next() else { break };
+    for done in 0..n {
+        // A short file would leave the missing features as islands without a word.
+        let Some(line) = lines.next() else { return Err(bad(format!("the file ends after {done} of {n} features"))) };
         let mut head = line.split_whitespace();
         let (Some(who), Some(count)) = (head.next(), head.next()) else {
             return Err(bad(format!("`{line}`: expected an id and a neighbour count")));
         };
         let row = row_of(&index, who)?;
+        match seen.get_mut(row as usize) {
+            Some(s) if *s => return Err(bad(format!("`{who}` is listed twice"))),
+            Some(s) => *s = true,
+            None => {}
+        }
         let count: usize = count.parse().map_err(|_| bad(format!("`{count}` is not a neighbour count")))?;
         let list: Vec<&str> = if count == 0 { Vec::new() } else { lines.next().unwrap_or("").split_whitespace().collect() };
         if list.len() != count {
@@ -91,8 +101,10 @@ pub fn read_gwt(text: &str, ids: &[String]) -> Result<Vec<Vec<(u32, f64)>>> {
         if links > MAX_LINKS {
             return Err(bad(format!("more than {MAX_LINKS} links")));
         }
-        if let Some(row) = rows.get_mut(i as usize) {
-            row.insert(j, w);
+        if let Some(row) = rows.get_mut(i as usize)
+            && row.insert(j, w).is_some()
+        {
+            return Err(bad(format!("the pair `{a} {b}` is listed twice")));
         }
     }
     Ok(rows.into_iter().map(|r| r.into_iter().collect()).collect())
@@ -128,6 +140,14 @@ fn id_index(ids: &[String]) -> Result<HashMap<&str, u32>> {
     Ok(index)
 }
 
+/// Ids a weights file can hold: unique, not empty, without spaces (the formats' separator).
+fn check_ids(ids: &[String]) -> Result<()> {
+    if let Some(bad_id) = ids.iter().find(|id| id.is_empty() || id.chars().any(char::is_whitespace)) {
+        return Err(Error::param("idField", format!("the id `{bad_id}` is empty or has spaces, which GAL and GWT can't hold")));
+    }
+    id_index(ids).map(|_| ())
+}
+
 fn row_of(index: &HashMap<&str, u32>, id: &str) -> Result<u32> {
     index.get(id).copied().ok_or_else(|| bad(format!("no feature has the id `{id}`")))
 }
@@ -154,11 +174,11 @@ mod tests {
     fn gal_and_gwt_round_trip() {
         let ids: Vec<String> = ["A1", "B2", "C3"].iter().map(|s| s.to_string()).collect();
         let w = vec![vec![(1, 0.5), (2, 0.5)], vec![(0, 1.0)], vec![]];
-        let gal = write_gal(&w, &ids, "my layer", "CODE");
+        let gal = write_gal(&w, &ids, "my layer", "CODE").unwrap();
         assert!(gal.starts_with("0 3 my_layer CODE\nA1 2\nB2 C3\nB2 1\nA1\nC3 0\n"), "{gal}");
         let back = read_gal(&gal, &ids).unwrap();
         assert_eq!(back, vec![vec![(1, 1.0), (2, 1.0)], vec![(0, 1.0)], vec![]]);
-        let gwt = write_gwt(&w, &ids, "l", "CODE");
+        let gwt = write_gwt(&w, &ids, "l", "CODE").unwrap();
         assert_eq!(read_gwt(&gwt, &ids).unwrap(), w);
         // A plain `n` header works too.
         assert_eq!(read_gal("3\nA1 1\nC3\nB2 0\nC3 1\nA1\n", &ids).unwrap()[0], vec![(2, 1.0)]);
@@ -182,5 +202,23 @@ mod tests {
         assert!(read_gwt("0 3 l id\n1 2 inf\n", &ids).is_err());
         let dup: Vec<String> = vec!["a".into(), "a".into()];
         assert!(read_gal("2\n", &dup).is_err());
+    }
+
+    /// #49: a short file left the missing features as islands; a repeated record overwrote the
+    /// first; ids that can't be read back were written.
+    #[test]
+    fn short_files_repeats_and_unreadable_ids_are_refused() {
+        let ids: Vec<String> = (1..=3).map(|i| i.to_string()).collect();
+        let short = read_gal("0 3 l id\n1 1\n2\n2 1\n1\n", &ids).unwrap_err().to_string();
+        assert!(short.contains("ends after 2 of 3"), "{short}");
+        let twice = read_gal("0 3 l id\n1 1\n2\n1 1\n3\n3 0\n", &ids).unwrap_err().to_string();
+        assert!(twice.contains("`1` is listed twice"), "{twice}");
+        let pair = read_gwt("0 3 l id\n1 2 0.5\n1 2 0.7\n", &ids).unwrap_err().to_string();
+        assert!(pair.contains("listed twice"), "{pair}");
+        let w = vec![vec![], vec![], vec![]];
+        for bad_ids in [vec!["a", "b", "a"], vec!["a", "São Paulo", "c"], vec!["a", "", "c"]] {
+            let bad_ids: Vec<String> = bad_ids.into_iter().map(String::from).collect();
+            assert!(write_gal(&w, &bad_ids, "l", "id").is_err() && write_gwt(&w, &bad_ids, "l", "id").is_err(), "{bad_ids:?}");
+        }
     }
 }

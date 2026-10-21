@@ -1,7 +1,9 @@
 //! Statistics tab: spatial weights (build, inspect, select neighbours, import and export). The
 //! spatial statistics that take them come next.
 
-use mkaegis_core::{Error, Result};
+use std::collections::HashMap;
+
+use mkaegis_core::{Error, Result, Value};
 use mkaegis_geom::GeometryType;
 use mkaegis_model::Layer;
 use mkaegis_model::weights::{Bandwidth, Kernel, Method, Standardization, Weights};
@@ -99,6 +101,8 @@ pub const WEIGHTS_INFO: CommandSpec = CommandSpec {
         if let Some(row) = opt_row(p, w.n())?
             && let Some(o) = out.as_object_mut()
         {
+            // A row's neighbours mean something only while the weights fit their layer.
+            layer_of(s, w)?;
             let list: Vec<Json> = w.of(row).iter().map(|(j, x)| json!({ "row": j, "weight": x })).collect();
             o.insert("row".into(), json!(row));
             o.insert("neighbours".into(), json!(list));
@@ -152,13 +156,12 @@ pub const EXPORT_WEIGHTS: CommandSpec = CommandSpec {
     enabled: has_weights,
     run: |s, p| {
         let w = find(s, req_str(p, "weights")?)?;
-        let layer = s.map.layer(&w.layer.to_string())?;
-        w.check_fits(layer.id, layer.data.features.len())?;
+        let layer = layer_of(s, w)?;
         let (ids, id_field) = ids(layer, opt_str(p, "idField"))?;
         let file = path(p, "path")?;
         let text = match extension(&file).as_str() {
-            "gal" => mkaegis_stats::gal::write_gal(&w.neighbours, &ids, &layer.name, &id_field),
-            "gwt" => mkaegis_stats::gal::write_gwt(&w.neighbours, &ids, &layer.name, &id_field),
+            "gal" => mkaegis_stats::gal::write_gal(&w.neighbours, &ids, &layer.name, &id_field)?,
+            "gwt" => mkaegis_stats::gal::write_gwt(&w.neighbours, &ids, &layer.name, &id_field)?,
             other => return Err(Error::param("path", format!("`.{other}`: weights are written as .gal or .gwt"))),
         };
         crate::io::write_atomic(&file, text.as_bytes())?;
@@ -216,11 +219,13 @@ fn add_weights(s: &mut Session, weights: Weights) -> Json {
     out
 }
 
+/// A weights matrix's summary; `problem` says why it no longer fits its layer, if it doesn't.
 fn describe(s: &Session, w: &Weights) -> Json {
-    let layer = s.map.layer(&w.layer.to_string()).map(|l| l.name.clone()).unwrap_or_default();
+    let layer = s.map.layers.iter().find(|l| l.id == w.layer).map(|l| l.name.clone());
     json!({
         "name": w.name,
         "layer": layer,
+        "problem": layer_of(s, w).err().map(|e| e.to_string()),
         "method": method_json(&w.method),
         "standardize": w.standardization.name(),
         "summary": w.summary(),
@@ -256,17 +261,18 @@ fn find<'a>(s: &'a Session, name: &str) -> Result<&'a Weights> {
     s.map.weights.iter().find(|w| w.name.eq_ignore_ascii_case(name)).ok_or_else(|| not_found(name))
 }
 
-fn layer_of_mut<'a>(s: &'a mut Session, name: &str) -> Result<&'a mut Layer> {
-    let w = find(s, name)?;
-    let (id, n) = (w.layer, w.n());
-    let layer = s.map.layer_mut(&id.to_string())?;
-    if layer.data.features.len() != n {
-        return Err(Error::param(
-            "weights",
-            format!("`{name}` was built for {n} features and the layer has {}: build it again", layer.data.features.len()),
-        ));
-    }
+/// The layer weights were built for, found by id, never by name (a later layer named "3" is not
+/// layer 3), and checked to still have the features the weights name (#49).
+fn layer_of<'a>(s: &'a Session, w: &Weights) -> Result<&'a Layer> {
+    let layer =
+        s.map.layers.iter().find(|l| l.id == w.layer).ok_or_else(|| Error::param("weights", format!("`{}`: its layer was removed", w.name)))?;
+    w.check_fits(layer.id, layer.data.features.len())?;
     Ok(layer)
+}
+
+fn layer_of_mut<'a>(s: &'a mut Session, name: &str) -> Result<&'a mut Layer> {
+    let id = layer_of(s, find(s, name)?)?.id;
+    s.map.layers.iter_mut().find(|l| l.id == id).ok_or_else(|| not_found(name))
 }
 
 fn not_found(name: &str) -> Error {
@@ -286,25 +292,32 @@ fn opt_row(p: &Json, n: usize) -> Result<Option<usize>> {
     }
 }
 
-/// Features' ids for weights files: an id field's values, or 1-based row numbers.
+/// Features' ids for weights files: an id field's values, or 1-based row numbers. GAL and GWT
+/// separate values by spaces, so spaces in an id become `_` ("Porto Celeste" → `Porto_Celeste`);
+/// numbers are written in full, not rounded. Ids must stay unique after that, in export and in
+/// import alike, or a file would name two features the same (#49).
 fn ids(layer: &Layer, field: Option<&str>) -> Result<(Vec<String>, String)> {
-    match field {
-        None => Ok(((1..=layer.data.features.len()).map(|r| r.to_string()).collect(), "ROW".into())),
-        Some(f) => {
-            let i = layer.data.field_index(f).ok_or_else(|| Error::NotFound(format!("field `{f}`")))?;
-            let ids = layer
-                .data
-                .features
-                .iter()
-                .enumerate()
-                .map(|(r, feature)| match feature.values.get(i) {
-                    Some(v) if !v.is_null() => Ok(v.to_string().split_whitespace().collect::<Vec<_>>().join("_")),
-                    _ => Err(Error::param("idField", format!("row {} has no `{f}`", r + 1))),
-                })
-                .collect::<Result<Vec<_>>>()?;
-            Ok((ids, f.to_string()))
+    let Some(f) = field else {
+        return Ok(((1..=layer.data.features.len()).map(|r| r.to_string()).collect(), "ROW".into()));
+    };
+    let i = layer.data.field_index(f).ok_or_else(|| Error::NotFound(format!("field `{f}`")))?;
+    let mut ids = Vec::with_capacity(layer.data.features.len());
+    let mut first: HashMap<String, usize> = HashMap::new();
+    for (r, feature) in layer.data.features.iter().enumerate() {
+        let id = match feature.values.get(i) {
+            Some(Value::Float(x)) => format!("{x}"),
+            Some(v) if !v.is_null() => v.to_string().split_whitespace().collect::<Vec<_>>().join("_"),
+            _ => return Err(Error::param("idField", format!("row {} has no `{f}`", r + 1))),
+        };
+        if let Some(earlier) = first.insert(id.clone(), r) {
+            return Err(Error::param(
+                "idField",
+                format!("rows {} and {} have the same id `{id}`: use a field with unique values", earlier + 1, r + 1),
+            ));
         }
+        ids.push(id);
     }
+    Ok((ids, f.to_string()))
 }
 
 fn unique_weights_name(s: &Session, base: &str) -> String {

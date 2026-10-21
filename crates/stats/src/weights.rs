@@ -143,37 +143,62 @@ fn contiguity(fc: &FeatureClass, queen: bool, tolerance: f64) -> Result<Vec<Vec<
     }
     // Tolerance in the layer's units: degrees on geographic data (a metre is ~1/111 320 degree).
     let tol = if fc.crs.is_geographic() { tolerance / 111_320.0 } else { tolerance };
-    let cell = if tol > 0.0 { tol } else { 1e-9 };
-    let key = |c: Coord| -> Option<(i64, i64)> {
-        let (x, y) = ((c.x / cell).floor(), (c.y / cell).floor());
-        (x.abs() < 9.0e15 && y.abs() < 9.0e15).then_some((x as i64, y as i64))
-    };
-    // Every vertex, in a grid of tolerance-sized cells: (row, ring, index, coordinate).
-    let mut grid: HashMap<(i64, i64), Vec<(u32, u32, u32, Coord)>> = HashMap::new();
-    let mut total = 0usize;
+    // Every vertex: (row, ring, index, coordinate).
+    let mut vertices: Vec<(u32, u32, u32, Coord)> = Vec::new();
+    let mut largest = 0.0f64;
     for (row, f) in fc.features.iter().enumerate() {
         let Some(Geometry::Polygon(rings)) = &f.geometry else { continue };
         for (r, ring) in rings.iter().enumerate() {
             // A closed ring repeats its first vertex last.
             for (v, c) in ring.iter().enumerate().take(ring.len().saturating_sub(1)) {
-                total += 1;
-                if total > crate::MAX_VERTICES {
+                if vertices.len() >= crate::MAX_VERTICES {
                     return Err(Error::param("layer", format!("more than {} vertices", crate::MAX_VERTICES)));
                 }
-                let k = key(*c).ok_or_else(|| Error::Geometry(format!("row {}: coordinate out of range", row + 1)))?;
-                grid.entry(k).or_default().push((index(row)?, index(r)?, index(v)?, *c));
+                if !c.x.is_finite() || !c.y.is_finite() {
+                    return Err(Error::Geometry(format!("row {}: a coordinate is not a finite number", row + 1)));
+                }
+                largest = largest.max(c.x.abs()).max(c.y.abs());
+                vertices.push((index(row)?, index(r)?, index(v)?, *c));
             }
         }
     }
-    // Matching vertices between distinct polygons: (row, ring, index) ↔ (row, ring, index).
+    // Vertices in grid cells. Without a tolerance, a cell is one exact coordinate (its bits, with
+    // -0 as 0), so any finite coordinate works (#46). With one, cells are at least the tolerance
+    // wide, so a vertex's matches are in its own and the eight cells around; never narrower than
+    // 1e-12 of the largest coordinate, so cell numbers stay far inside i64.
+    let exact = tol == 0.0;
+    let cell = tol.max(largest * 1e-12);
+    let key = |c: Coord| -> (i64, i64) {
+        if exact {
+            let bits = |v: f64| (if v == 0.0 { 0.0f64 } else { v }).to_bits() as i64;
+            (bits(c.x), bits(c.y))
+        } else {
+            ((c.x / cell).floor() as i64, (c.y / cell).floor() as i64)
+        }
+    };
+    let mut grid: HashMap<(i64, i64), Vec<(u32, u32, u32, Coord)>> = HashMap::new();
+    for v in vertices {
+        grid.entry(key(v.3)).or_default().push(v);
+    }
+    // Matching vertices between distinct polygons: (row, ring, index) ↔ (row, ring, index). A
+    // tolerance wide enough to put most vertices in a few cells would compare every pair, in time
+    // and memory: past a budget well above what real coverages need, it is refused.
+    let total: usize = grid.values().map(Vec::len).sum();
+    let budget = total.saturating_mul(16).saturating_add(1_000_000);
+    let mut compared = 0usize;
+    let around: &[i64] = if exact { &[0] } else { &[-1, 0, 1] };
     let mut matches: HashMap<(u32, u32), Vec<((u32, u32), (u32, u32))>> = HashMap::new();
     for (k, here) in &grid {
-        for dx in -1..=1 {
-            for dy in -1..=1 {
-                let Some(there) = grid.get(&(k.0.saturating_add(dx), k.1.saturating_add(dy))) else { continue };
+        for dx in around {
+            for dy in around {
+                let Some(there) = grid.get(&(k.0.saturating_add(*dx), k.1.saturating_add(*dy))) else { continue };
+                compared = compared.saturating_add(here.len().saturating_mul(there.len()));
+                if compared > budget {
+                    return Err(Error::param("tolerance", "too large for this layer: it makes most vertices match each other"));
+                }
                 for a in here {
                     for b in there.iter().filter(|b| b.0 > a.0) {
-                        let same = if tol > 0.0 { a.3.distance(b.3) <= tol } else { a.3 == b.3 };
+                        let same = if exact { true } else { a.3.distance(b.3) <= tol };
                         if same {
                             matches.entry((a.0, b.0)).or_default().push(((a.1, a.2), (b.1, b.2)));
                         }
@@ -516,6 +541,35 @@ mod tests {
             assert_eq!(rows(&build(&fc, 1, "t", &tolerant).unwrap(), 0), vec![1, 2]);
         }
 
+        /// The default tolerance (0) on coordinates past 9,000,000 used to fail with "coordinate
+        /// out of range" (#46): northern Brazil's UTM northings, Web Mercator far from the equator.
+        #[test]
+        fn any_finite_coordinates_work() {
+            let reference = build(&lattice(3), 1, "r", &spec(Method::Contiguity { queen: false, order: 1, cumulative: false })).unwrap();
+            for (dx, dy) in [(0.0, 9_800_000.0 - ORIGIN.1), (-ORIGIN.0 - 20_000_000.0, 0.0), (1e12, 1e12)] {
+                let fc = shifted(lattice(3), dx, dy);
+                for tolerance in [0.0, 0.05] {
+                    let mut rook = spec(Method::Contiguity { queen: false, order: 1, cumulative: false });
+                    rook.tolerance = tolerance;
+                    let w = build(&fc, 1, "r", &rook).unwrap();
+                    for cell in 0..9 {
+                        assert_eq!(rows(&w, cell), rows(&reference, cell), "cell {cell} shifted by ({dx}, {dy}), tolerance {tolerance}");
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn a_tolerance_that_matches_everything_is_refused() {
+            let mut huge = spec(Method::Contiguity { queen: true, order: 1, cumulative: false });
+            huge.tolerance = 1e9;
+            let err = build(&lattice(40), 1, "h", &huge).unwrap_err();
+            assert!(err.to_string().contains("too large"), "{err}");
+            // A wide but reasonable one still works.
+            huge.tolerance = 10.0;
+            assert_eq!(build(&lattice(40), 1, "w", &huge).unwrap().of(0).len(), 3);
+        }
+
         #[test]
         fn contiguity_needs_polygons() {
             let pts = points(&[(0.0, 0.0), (1.0, 0.0)]);
@@ -652,6 +706,19 @@ mod tests {
                 let (x, y) = (ORIGIN.0 + c as f64 * SIDE, ORIGIN.1 + r as f64 * SIDE);
                 let ring = vec![Coord::new(x, y), Coord::new(x + SIDE, y), Coord::new(x + SIDE, y + SIDE), Coord::new(x, y + SIDE)];
                 fc.push(Some(Geometry::polygon(vec![ring]).unwrap()), vec![Value::Int((r * n + c) as i64)]).unwrap();
+            }
+        }
+        fc
+    }
+
+    /// The feature class moved by (dx, dy).
+    fn shifted(mut fc: FeatureClass, dx: f64, dy: f64) -> FeatureClass {
+        for f in &mut fc.features {
+            if let Some(Geometry::Polygon(rings)) = f.geometry.as_mut() {
+                for c in rings.iter_mut().flatten() {
+                    c.x += dx;
+                    c.y += dy;
+                }
             }
         }
         fc

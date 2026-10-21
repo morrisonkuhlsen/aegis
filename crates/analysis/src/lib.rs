@@ -8,7 +8,7 @@
 
 use mkaegis_core::{Error, Result, Value};
 use mkaegis_crs::{Crs, Kind};
-use mkaegis_geom::{Coord, Geometry, GeometryType, algo};
+use mkaegis_geom::{Coord, Envelope, Geometry, GeometryType, algo};
 use mkaegis_model::{FeatureClass, Field, FieldType};
 use serde::{Deserialize, Serialize};
 
@@ -158,16 +158,22 @@ pub fn calculate_geometry(fc: &mut FeatureClass, field: &str, property: Property
 #[serde(rename_all = "camelCase")]
 pub enum Relation {
     Intersect,
+    /// Within this many metres, measured on the ground.
     WithinDistance(f64),
+    /// Completely within, the boundary included.
     Within,
     Contains,
+    /// The target feature's centre (its centroid, or a point inside a polygon whose centroid
+    /// falls outside it) is in or on a selecting shape.
+    HaveTheirCenterIn,
 }
 
 impl Relation {
     pub fn parse(text: &str, distance: Option<f64>) -> Result<Relation> {
         match text.to_ascii_lowercase().replace(['_', ' '], "").as_str() {
             "" | "intersect" | "intersects" => Ok(Relation::Intersect),
-            "within" | "completelywithin" | "havetheircenterin" => Ok(Relation::Within),
+            "within" | "completelywithin" => Ok(Relation::Within),
+            "havetheircenterin" | "havetheircentrein" | "centerin" | "centrein" => Ok(Relation::HaveTheirCenterIn),
             "contains" | "completelycontains" => Ok(Relation::Contains),
             "withinadistance" | "withindistance" => {
                 let d = distance.filter(|d| d.is_finite() && *d >= 0.0 && *d <= MAX_DISTANCE);
@@ -197,11 +203,23 @@ pub fn select_by_location(target: &FeatureClass, selecting: &FeatureClass, rows:
         }
     }
     let envelopes: Vec<_> = shapes.iter().map(Geometry::envelope).collect();
-    // Within a distance: in metres, converted to the target's units near its middle.
-    let tolerance = match relation {
+    // Within a distance: shapes farther apart than this in the target's units can't qualify. A
+    // unit is never shorter on the ground than near the extremest latitude of either layer (with
+    // 1 % to spare: a degree of latitude is shorter than one of longitude at the equator).
+    let reach = match relation {
         Relation::WithinDistance(d) => {
-            let lat = target.extent().and_then(|e| target.crs.to_geographic(e.center()).ok()).map_or(0.0, |g| g.y);
-            d / target.crs.metres_per_unit(lat)
+            let lat = |crs: Crs, e: Option<Envelope>| {
+                e.into_iter()
+                    .flat_map(|e| {
+                        [Coord::new(e.min_x, e.min_y), Coord::new(e.max_x, e.max_y), Coord::new(e.min_x, e.max_y), Coord::new(e.max_x, e.min_y)]
+                    })
+                    .filter_map(|c| crs.to_geographic(c).ok())
+                    .map(|g| g.y.abs())
+                    .fold(0.0, f64::max)
+            };
+            let selecting_extent = envelopes.iter().flatten().copied().reduce(Envelope::union);
+            let extreme = lat(target.crs, target.extent()).max(lat(target.crs, selecting_extent)).min(89.0);
+            d / (0.99 * target.crs.metres_per_unit(extreme))
         }
         _ => 0.0,
     };
@@ -209,22 +227,46 @@ pub fn select_by_location(target: &FeatureClass, selecting: &FeatureClass, rows:
     for (row, f) in target.features.iter().enumerate() {
         let Some(g) = &f.geometry else { continue };
         let Some(env) = g.envelope() else { continue };
-        let hit = shapes.iter().zip(&envelopes).any(|(s, se)| {
-            if !se.is_some_and(|se| se.buffer(tolerance).intersects(&env)) {
-                return false;
+        let mut hit = false;
+        for (s, se) in shapes.iter().zip(&envelopes) {
+            if !se.is_some_and(|se| se.buffer(reach).intersects(&env)) {
+                continue;
             }
-            match relation {
+            hit = match relation {
                 Relation::Intersect => algo::intersects(g, s, 0.0),
-                Relation::WithinDistance(_) => algo::intersects(g, s, tolerance),
+                Relation::WithinDistance(d) => ground_distance(g, s, target.crs)? <= d,
                 Relation::Within => algo::within(g, s),
                 Relation::Contains => algo::within(s, g),
+                Relation::HaveTheirCenterIn => centre(g).is_some_and(|c| algo::covers_point(s, c)),
+            };
+            if hit {
+                break;
             }
-        });
+        }
         if hit {
             out.push(row);
         }
     }
     Ok(out)
+}
+
+/// The distance in ground metres between two shapes in `crs`: measured in the UTM zone of the
+/// first, as areas and lengths are (#51: a radius in degrees reached 8.6 % too far north–south
+/// at 23°S, 2× at 60°).
+fn ground_distance(a: &Geometry, b: &Geometry, crs: Crs) -> Result<f64> {
+    let (am, utm) = metric(a, crs)?;
+    let bm = b.try_map(|p| crs.transform(utm, p))?;
+    Ok(algo::distance(&am, &bm))
+}
+
+/// A feature's centre for Have Their Center In: its centroid, unless that falls outside a
+/// polygon (a crescent, a ring), then a point inside it.
+fn centre(g: &Geometry) -> Option<Coord> {
+    let c = algo::centroid(g);
+    match g {
+        Geometry::Polygon(_) if !c.is_some_and(|c| algo::covers_point(g, c)) => algo::interior_point(g),
+        _ => c,
+    }
 }
 
 /// Summary Statistics of a numeric field.
@@ -332,6 +374,71 @@ mod tests {
         // Sample variance of 12, 4, 6: (14²/9 + 10²/9 + 4²/9) / 2 = 52/3.
         assert!((s.std.unwrap() - (52.0f64 / 3.0).sqrt()).abs() < 1e-12);
         assert!(summary_statistics(&c, "nope", None).is_err());
+    }
+
+    /// #51: Select By Location's distance and centre relations.
+    mod select_by_location {
+        use super::*;
+
+        fn layer(crs: Crs, kind: GeometryType, shapes: Vec<Geometry>) -> FeatureClass {
+            let mut fc = FeatureClass::new("l", kind, crs, vec![]);
+            for g in shapes {
+                fc.push(Some(g), vec![]).unwrap();
+            }
+            fc
+        }
+
+        fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Geometry {
+            Geometry::polygon(vec![vec![Coord::new(x0, y0), Coord::new(x1, y0), Coord::new(x1, y1), Coord::new(x0, y1)]]).unwrap()
+        }
+
+        #[test]
+        fn within_a_distance_measures_lines_and_polygons() {
+            let utm = Crs::from_epsg(31983).unwrap();
+            let park = layer(utm, GeometryType::Polygon, vec![rect(300_000.0, 7_400_000.0, 301_000.0, 7_401_000.0)]);
+            // Roads 500 m and 1500 m east of the park, parallel to it.
+            let road = |x: f64| Geometry::Polyline(vec![vec![Coord::new(x, 7_399_000.0), Coord::new(x, 7_402_000.0)]]);
+            let roads = layer(utm, GeometryType::Polyline, vec![road(301_500.0), road(302_500.0)]);
+            assert_eq!(select_by_location(&roads, &park, None, Relation::WithinDistance(1000.0)).unwrap(), vec![0]);
+            assert_eq!(select_by_location(&roads, &park, None, Relation::Intersect).unwrap(), Vec::<usize>::new());
+        }
+
+        #[test]
+        fn within_a_distance_is_on_the_ground_in_every_direction() {
+            // At 23.5°S, points 950 m and 1050 m north of a point (a degree of latitude: ~110.8 km).
+            let origin = Coord::new(-46.6, -23.5);
+            let north = |m: f64| Geometry::Point(Coord::new(origin.x, origin.y + m / 110_786.0));
+            let from = layer(Crs::WGS84, GeometryType::Point, vec![Geometry::Point(origin)]);
+            let targets = layer(Crs::WGS84, GeometryType::Point, vec![north(950.0), north(1050.0)]);
+            for (i, m) in [950.0, 1050.0].iter().enumerate() {
+                let g = targets.features[i].geometry.as_ref().unwrap();
+                let d = Crs::WGS84.distance(origin, g.coords().next().unwrap()).unwrap();
+                assert!((d - m).abs() < 2.0, "the fixture: {d} m");
+            }
+            assert_eq!(select_by_location(&targets, &from, None, Relation::WithinDistance(1000.0)).unwrap(), vec![0]);
+        }
+
+        #[test]
+        fn have_their_center_in_tests_the_centre_only() {
+            let utm = Crs::from_epsg(31983).unwrap();
+            let zone = layer(utm, GeometryType::Polygon, vec![rect(0.0, 0.0, 10.0, 10.0)]);
+            // Half in, centre in; mostly out, centre out; a crescent whose centroid is outside it.
+            let half = rect(5.0, 2.0, 13.0, 4.0);
+            let out = rect(8.0, 2.0, 20.0, 4.0);
+            let crescent = Geometry::polygon(vec![vec![
+                Coord::new(1.0, 1.0),
+                Coord::new(9.0, 1.0),
+                Coord::new(9.0, 9.0),
+                Coord::new(8.0, 9.0),
+                Coord::new(8.0, 2.0),
+                Coord::new(1.0, 2.0),
+            ]])
+            .unwrap();
+            let targets = layer(utm, GeometryType::Polygon, vec![half, out, crescent]);
+            assert_eq!(select_by_location(&targets, &zone, None, Relation::HaveTheirCenterIn).unwrap(), vec![0, 2]);
+            assert_eq!(select_by_location(&targets, &zone, None, Relation::Within).unwrap(), vec![2]);
+            assert_eq!(Relation::parse("HAVE_THEIR_CENTER_IN", None).unwrap(), Relation::HaveTheirCenterIn);
+        }
     }
 
     /// #50: Web Mercator's units were taken for ground metres. The same features measured in

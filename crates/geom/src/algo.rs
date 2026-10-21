@@ -213,22 +213,97 @@ pub fn intersects(a: &Geometry, b: &Geometry, tolerance: f64) -> bool {
     first(a).is_some_and(|p| contains_point(b, p)) || first(b).is_some_and(|p| contains_point(a, p))
 }
 
-/// Whether `inner` lies within polygon `outer` (every vertex inside, no edge crossing out).
+/// Whether `inner` lies within polygon `outer`, its boundary included (OGC *within* as the
+/// closure: a municipality on its state's border is within the state). Every vertex and every
+/// edge's midpoint of `inner` is in or on `outer`, no edge crosses `outer`'s boundary, a polygon
+/// `inner` has an interior point in `outer`, and no hole of `outer` lies inside it (#51).
 pub fn within(inner: &Geometry, outer: &Geometry) -> bool {
-    if !matches!(outer, Geometry::Polygon(_)) {
+    let Geometry::Polygon(outer_rings) = outer else { return false };
+    let covered = |p: Coord| covers_point(outer, p);
+    if !inner.coords().all(covered) {
         return false;
     }
-    if !inner.coords().all(|p| contains_point(outer, p)) {
+    let inner_edges = segments(inner);
+    if !inner_edges.iter().all(|(p, q)| covered(Coord::new((p.x + q.x) / 2.0, (p.y + q.y) / 2.0))) {
         return false;
     }
     let edges = segments(outer);
-    !segments(inner).iter().any(|(p, q)| {
+    let crosses = inner_edges.iter().any(|(p, q)| {
         edges.iter().any(|(r, s)| {
             // A proper crossing (not merely touching at a shared vertex) leaves the polygon.
             let (d1, d2, d3, d4) = (orient(*r, *s, *p), orient(*r, *s, *q), orient(*p, *q, *r), orient(*p, *q, *s));
             d1 * d2 < 0.0 && d3 * d4 < 0.0
         })
-    })
+    });
+    if crosses {
+        return false;
+    }
+    if let Geometry::Polygon(_) = inner {
+        // Its inside must be the outer polygon's too: not one of its holes, and no hole within it.
+        if !interior_point(inner).is_some_and(covered) {
+            return false;
+        }
+        let depths = ring_depths(outer_rings);
+        let holes = outer_rings.iter().zip(depths).filter(|(_, d)| d % 2 == 1).map(|(r, _)| r);
+        for hole in holes {
+            if hole.iter().any(|v| contains_point(inner, *v) && !on_boundary(inner, *v)) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Whether `p` is in a polygon or on its boundary.
+pub fn covers_point(g: &Geometry, p: Coord) -> bool {
+    contains_point(g, p) || on_boundary(g, p)
+}
+
+/// Whether `p` lies on one of the geometry's edges, to within 1e-12 of its coordinates' size.
+pub fn on_boundary(g: &Geometry, p: Coord) -> bool {
+    let scale = g.coords().map(|c| c.x.abs().max(c.y.abs())).fold(1.0, f64::max);
+    segments(g).iter().any(|(a, b)| segment_distance(p, *a, *b) <= scale * 1e-12)
+}
+
+/// A point strictly inside a polygon (on a horizontal line through its envelope's middle, midway
+/// across the first stretch inside); the centroid may lie outside a concave or holed polygon.
+/// `None` for other geometries or a degenerate polygon.
+pub fn interior_point(g: &Geometry) -> Option<Coord> {
+    let Geometry::Polygon(rings) = g else { return None };
+    let env = g.envelope()?;
+    // A line through vertices would make crossings ambiguous: nudge it between vertex heights.
+    let mut ys: Vec<f64> = rings.iter().flatten().map(|c| c.y).collect();
+    ys.sort_by(f64::total_cmp);
+    ys.dedup();
+    let middle = env.center().y;
+    let y = ys
+        .windows(2)
+        .filter_map(|w| if let [a, b] = w { Some((a + b) / 2.0) } else { None })
+        .min_by(|a, b| (a - middle).abs().total_cmp(&(b - middle).abs()))?;
+    let mut xs: Vec<f64> = rings
+        .iter()
+        .flat_map(|r| r.windows(2))
+        .filter_map(|w| match w {
+            [a, b] if (a.y > y) != (b.y > y) => Some(a.x + (y - a.y) / (b.y - a.y) * (b.x - a.x)),
+            _ => None,
+        })
+        .collect();
+    xs.sort_by(f64::total_cmp);
+    // Even-odd: between the first and second crossing is inside.
+    match xs.as_slice() {
+        [x0, x1, ..] => Some(Coord::new((x0 + x1) / 2.0, y)),
+        _ => None,
+    }
+}
+
+/// The shortest distance between two geometries (0 when they intersect). Two shapes that don't
+/// meet are closest at a vertex of one, so vertex-to-shape distances both ways give it.
+pub fn distance(a: &Geometry, b: &Geometry) -> f64 {
+    if intersects(a, b, 0.0) {
+        return 0.0;
+    }
+    let one_way = |from: &Geometry, to: &Geometry| from.coords().map(|p| distance_to(to, p)).fold(f64::INFINITY, f64::min);
+    one_way(a, b).min(one_way(b, a))
 }
 
 /// Douglas–Peucker: the vertices of `path` that keep it within `tolerance`. Iterative.
@@ -337,6 +412,45 @@ mod tests {
         assert!(intersects(&big, &crossing, 0.0));
         assert!(within(&small, &big) && !within(&crossing, &big) && !within(&big, &small));
         assert!(intersects(&Geometry::Point(Coord::new(10.5, 5.0)), &big, 0.5));
+    }
+
+    /// #51: within() ignored holes and shared borders.
+    #[test]
+    fn within_respects_holes_and_shared_borders() {
+        let holed = Geometry::Polygon(vec![square(0.0, 0.0, 10.0), square(4.0, 4.0, 2.0)]);
+        let over_the_hole = Geometry::Polygon(vec![square(2.0, 2.0, 6.0)]);
+        assert!(!within(&over_the_hole, &holed), "covers the hole");
+        let beside_the_hole = Geometry::Polygon(vec![square(1.0, 1.0, 2.0)]);
+        assert!(within(&beside_the_hole, &holed));
+        let the_hole = Geometry::Polygon(vec![square(4.0, 4.0, 2.0)]);
+        assert!(!within(&the_hole, &holed), "the hole itself is outside");
+        // On the right and top edges: a corner municipality of its state.
+        let state = Geometry::Polygon(vec![square(0.0, 0.0, 10.0)]);
+        let corner = Geometry::Polygon(vec![square(5.0, 5.0, 5.0)]);
+        assert!(within(&corner, &state) && within(&Geometry::Polygon(vec![square(0.0, 0.0, 10.0)]), &state));
+        assert!(within(&Geometry::Point(Coord::new(10.0, 3.0)), &state), "a point on the border");
+        // A chord across a notch goes outside, though both ends are on the boundary.
+        let notched = Geometry::Polygon(vec![vec![
+            Coord::new(0.0, 0.0),
+            Coord::new(10.0, 0.0),
+            Coord::new(10.0, 10.0),
+            Coord::new(5.0, 5.0),
+            Coord::new(0.0, 10.0),
+            Coord::new(0.0, 0.0),
+        ]]);
+        let chord = Geometry::Polyline(vec![vec![Coord::new(0.0, 10.0), Coord::new(10.0, 10.0)]]);
+        assert!(!within(&chord, &notched));
+    }
+
+    #[test]
+    fn distances_between_shapes() {
+        let a = Geometry::Polyline(vec![vec![Coord::new(0.0, 0.0), Coord::new(10.0, 0.0)]]);
+        let b = Geometry::Polygon(vec![square(3.0, 2.0, 4.0)]);
+        assert_eq!(distance(&a, &b), 2.0);
+        let crossing = Geometry::Polyline(vec![vec![Coord::new(5.0, -1.0), Coord::new(5.0, 1.0)]]);
+        assert_eq!(distance(&a, &crossing), 0.0);
+        let c = interior_point(&Geometry::Polygon(vec![square(0.0, 0.0, 10.0), square(2.0, 2.0, 6.0)])).unwrap();
+        assert!(c.x < 2.0 && c.y > 0.0 && c.y < 10.0, "{c:?} is in the frame, not the hole");
     }
 
     #[test]

@@ -4,7 +4,7 @@
 //! `cargo run -p aegis-ui-egui --example snapshot -- [--sample] [--in file.geojson|.shp|.aegis]
 //!  [--cmd 'id={json}']... [--tab map|analysis|edit|view|share] [--pane geoprocessing|symbology|history]
 //!  [--tool buffer|project|calculate|attributes|location|statistics] [--table] [--select] [--dark]
-//!  [--splash] [--size 1280x800] out.png`
+//!  [--splash] [--icon] [--size 1280x800] out.png`
 
 use aegis_engine::Session;
 use aegis_ui_egui::{MapApp, Pane, Tab, Tool};
@@ -17,6 +17,7 @@ fn main() -> Result<(), String> {
     let mut out = "snapshot.png".to_string();
     let (mut tab, mut pane, mut table, mut dark, mut select, mut gp) = (Tab::Map, None, false, false, false, None);
     let mut splash = false;
+    let mut icon = false;
     let mut cmds = Vec::new();
     let mut i = 0;
     while let Some(arg) = args.get(i) {
@@ -53,6 +54,7 @@ fn main() -> Result<(), String> {
             "--select" => select = true,
             "--dark" => dark = true,
             "--splash" => splash = true,
+            "--icon" => icon = true,
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size WxH")?;
@@ -87,6 +89,20 @@ fn main() -> Result<(), String> {
         let active = app.active;
         app.gp.open(tool, active);
         app.pane = Some(Pane::Geoprocessing);
+    }
+    if icon {
+        // The app's icon, 256 px: the mark in coral on Morrison Kühlsen's ink.
+        let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(128.0, 128.0)).with_pixels_per_point(2.0).wgpu().build_ui(|ui| {
+            let rect = ui.ctx().content_rect();
+            ui.painter().rect_filled(rect, 26.0, egui::Color32::from_rgb(0x14, 0x16, 0x1C));
+            let coral = egui::Color32::from_rgb(0xE8, 0x5A, 0x5F);
+            aegis_ui_egui::icons::paint(ui.painter(), rect.shrink(22.0), aegis_ui_egui::icons::Icon::Logo, coral, coral);
+        });
+        harness.run_steps(2);
+        let image = harness.render().map_err(|e| e.to_string())?;
+        image.save(&out).map_err(|e| e.to_string())?;
+        println!("{out}");
+        return Ok(());
     }
     if splash {
         // The splash screen alone, at its own size.

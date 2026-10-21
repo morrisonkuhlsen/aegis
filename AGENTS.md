@@ -5,11 +5,11 @@ MK aeGIS is a clean-room, open-source, Rust-native **statistical GIS: a geograph
 Standards and learnings shared across the crafting apps live in `craftrules` (`../../craftrules` when checked out, or `storytold/craftrules`). When it is available, read its `AGENTS.md` at the start of a session, follow its standards, and contribute reusable learnings back there. Never code: repos don't share code.
 
 ## Start every session here
-1. Read `plan/STATUS.md` (current milestone, next task), then the task in `plan/execution-plan.md` and the relevant `plan/architecture.md` section. Behaviour reference: `plan/arcgis/*.md` (`observed-ui.md` holds measured observations of the running app).
-2. Library decisions: `plan/adr/0001-libraries.md` (what we may depend on, what is rejected for licence reasons).
-3. Follow the autonomous operation protocol (`plan/execution-plan.md` §7). Don't stop to ask unless §7 lists the decision as the user's.
+1. Read `ROADMAP.md` (stage, headline numbers), then `docs/gaps.md` (the ranked work list: pick from the top), the issue you pick, and the relevant `docs/architecture.md` section.
+2. Library decisions: `docs/adr/0001-libraries.md` (what we may depend on, what is rejected for licence reasons).
+3. Work autonomously through the list. Stop to ask only for decisions that are the user's: a new dependency, a licence or clean-room question, a change of scope or of these rules, and anything outward-facing (pushing, releasing, commenting on issues).
 
-`plan/` is gitignored (local only).
+`plan/` is gitignored (local only): private notes, and behaviour references from observing ArcGIS Pro (`plan/arcgis/*.md`, where `observed-ui.md` holds measured observations of the running app; screenshots in `plan/arcgis/screenshots/`). Nothing a contributor needs lives only there.
 
 ## Assets and iconography — absolute rule
 **No Esri, Microsoft, Google, Adobe, Autodesk, QGIS, RustGIS (or any other vendor's or project's) iconography, images, artwork, fonts, basemaps, styles, symbol sets, colour ramps, templates, themes or sample data — ever.** This is the most important rule in this repository; breaking it is a serious failure.
@@ -84,7 +84,7 @@ Organize for top-to-bottom reading. Important things first, details later.
   Not: `| Tool | Toolbox | Status |` packed tight with varying widths per row.
 
 ## Roadmap
-`ROADMAP.md` (committed) is the one-page summary: stage, headline numbers, dimensions, progress log. It follows craftrules `standards/progress-docs.md` and points at the detail in `docs/`: `target-app-parity.md` (authoritative assessment), `gaps.md` (ranked work list: pick from it), `roadmap.md` (current focus, beta gates, milestones), `architecture.md`, and the area checklists `geoprocessing-parity.md`, `projection-parity.md`, `file-format-parity.md`, `ui-parity.md`, `hardware-parity.md`, `localization-parity.md`. Update the affected docs (and their timestamp lines and revision history) whenever work lands. `cargo xtask parity` regenerates `docs/parity-checklist.md` from the command registry (`crates/engine/src/cmd`).
+`ROADMAP.md` (committed) is the one-page summary: stage, headline numbers (`cargo xtask stats`), dimensions, progress log. It follows craftrules `standards/progress-docs.md` and points at the detail in `docs/`: `gaps.md` (ranked work list: pick from it), `architecture.md`, `control-protocol.md`, `adr/` (decisions), `releasing.md` and `parity-checklist.md`. Area assessments (`target-app-parity.md`, and checklists such as `geoprocessing-parity.md`, `projection-parity.md`, `file-format-parity.md`, `ui-parity.md`) are added as each area is assessed; don't link one before it exists. Update the affected docs (and their timestamp lines and revision history) whenever work lands. `cargo xtask parity` regenerates `docs/parity-checklist.md` from the command registry (`crates/engine/src/cmd`).
 
 ## Contributor credits (About window)
 

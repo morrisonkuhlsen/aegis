@@ -33,7 +33,6 @@ data and parameters. Read it before re-running an analysis with a new version.
   restores the map too (#59).
 - Undoing back to the saved state no longer marks the project unsaved (#59).
 
-
 ## [0.1.2] - 2026-10-21
 
 ### Changed results

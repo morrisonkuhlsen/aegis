@@ -3,8 +3,7 @@
 # SHA256SUMS.txt. Run by hand, it builds the same archives as workflow artifacts and publishes
 # nothing: a dry run, as is a pull request that changes this file.
 #
-# To release: set the version in Cargo.toml, merge to main, then
-#   git tag v0.2.0 && git push origin v0.2.0
+# How to release, and what to do when a run fails: docs/releasing.md.
 name: Release
 
 on:
@@ -143,6 +142,9 @@ jobs:
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
+        # A version with a suffix (v0.2.0-rc.1) is a pre-release, never shown as the latest.
         run: |
+          prerelease=()
+          case "$GITHUB_REF_NAME" in *-*) prerelease=(--prerelease) ;; esac
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag \
-            --title "MK aeGIS $GITHUB_REF_NAME" --generate-notes
+            "${prerelease[@]}" --title "MK aeGIS $GITHUB_REF_NAME" --generate-notes

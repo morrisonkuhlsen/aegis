@@ -288,6 +288,23 @@ mod tests {
         fc
     }
 
+    /// #4: a Text field reported every value as null and a sum of -0.0.
+    #[test]
+    fn statistics_need_a_numeric_field_and_never_report_negative_zero() {
+        let mut fc =
+            FeatureClass::new("t", GeometryType::Point, Crs::WGS84, vec![Field::new("NAME", FieldType::Text), Field::new("X", FieldType::Double)]);
+        for name in ["a", "b"] {
+            fc.push(None, vec![Value::Text(name.into()), Value::Null]).unwrap();
+        }
+        let err = summary_statistics(&fc, "NAME", None).unwrap_err().to_string();
+        assert!(err.contains("Text") && err.contains("numeric"), "{err}");
+        // A numeric field with only nulls: nothing counted, a sum of +0.
+        let s = summary_statistics(&fc, "X", None).unwrap();
+        assert_eq!((s.count, s.nulls, s.mean, s.min, s.std), (0, 2, None, None, None));
+        assert!(s.sum == 0.0 && s.sum.is_sign_positive(), "{}", s.sum);
+        assert!(summary_statistics(&fc, "X", Some(&[])).unwrap().sum.is_sign_positive());
+    }
+
     #[test]
     fn buffer_is_a_circle_of_the_right_area() {
         let b = buffer(&cities(), 1000.0, "b").unwrap();
@@ -335,22 +352,5 @@ mod tests {
         // Sample variance of 12, 4, 6: (14²/9 + 10²/9 + 4²/9) / 2 = 52/3.
         assert!((s.std.unwrap() - (52.0f64 / 3.0).sqrt()).abs() < 1e-12);
         assert!(summary_statistics(&c, "nope", None).is_err());
-    }
-
-    /// #4: a Text field reported every value as null and a sum of -0.0.
-    #[test]
-    fn statistics_need_a_numeric_field_and_never_report_negative_zero() {
-        let mut fc =
-            FeatureClass::new("t", GeometryType::Point, Crs::WGS84, vec![Field::new("NAME", FieldType::Text), Field::new("X", FieldType::Double)]);
-        for name in ["a", "b"] {
-            fc.push(None, vec![Value::Text(name.into()), Value::Null]).unwrap();
-        }
-        let err = summary_statistics(&fc, "NAME", None).unwrap_err().to_string();
-        assert!(err.contains("Text") && err.contains("numeric"), "{err}");
-        // A numeric field with only nulls: nothing counted, a sum of +0.
-        let s = summary_statistics(&fc, "X", None).unwrap();
-        assert_eq!((s.count, s.nulls, s.mean, s.min, s.std), (0, 2, None, None, None));
-        assert!(s.sum == 0.0 && s.sum.is_sign_positive(), "{}", s.sum);
-        assert!(summary_statistics(&fc, "X", Some(&[])).unwrap().sum.is_sign_positive());
     }
 }

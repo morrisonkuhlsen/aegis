@@ -1,9 +1,9 @@
 //! The Contents pane: the map and its layers in drawing order, each with its visibility, its
 //! symbol (and legend classes) and a context menu.
 
-use aegis_geom::GeometryType;
-use aegis_model::{Layer, Symbol};
 use egui::{Sense, Ui, vec2};
+use mkaegis_geom::GeometryType;
+use mkaegis_model::{Layer, Symbol};
 use serde_json::json;
 
 use crate::theme::{Tokens, color};
@@ -27,7 +27,7 @@ fn swatch(ui: &mut Ui, kind: GeometryType, s: &Symbol) {
             ));
         }
         GeometryType::Point | GeometryType::Multipoint => {
-            let outline = aegis_render::raster::marker_outline(s.marker, [rect.center().x, rect.center().y], s.size.clamp(4.0, 12.0));
+            let outline = mkaegis_render::raster::marker_outline(s.marker, [rect.center().x, rect.center().y], s.size.clamp(4.0, 12.0));
             let pts: Vec<egui::Pos2> = outline.iter().map(|q| egui::pos2(q[0], q[1])).collect();
             p.add(egui::Shape::convex_polygon(pts, color(s.fill), egui::Stroke::new(s.width.clamp(0.5, 1.5), color(s.outline))));
         }

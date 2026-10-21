@@ -1,17 +1,17 @@
 //! MK aeGIS desktop app.
 //!
-//! `aegis [--sample] [--control PORT] [file.aegis | data.geojson | data.shp]…`
+//! `mkaegis [--sample] [--control PORT] [file.aegis | data.geojson | data.shp]…`
 // A GUI program on Windows: no console window beside the app. Debug builds keep theirs.
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
-use aegis_engine::Session;
-use aegis_ui_egui::{MapApp, Services};
+use mkaegis_engine::Session;
+use mkaegis_ui_egui::{MapApp, Services};
 use serde_json::json;
 
 struct App(MapApp);
 
-struct SplashWindow(aegis_ui_egui::splash::SplashScreen);
+struct SplashWindow(mkaegis_ui_egui::splash::SplashScreen);
 
 impl eframe::App for SplashWindow {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -40,8 +40,8 @@ fn services() -> Services {
 fn splash() -> eframe::Result {
     let viewport = egui::ViewportBuilder::default()
         .with_title("MK aeGIS")
-        .with_app_id("aegis")
-        .with_inner_size(aegis_ui_egui::splash::SIZE)
+        .with_app_id("mkaegis")
+        .with_inner_size(mkaegis_ui_egui::splash::SIZE)
         .with_decorations(false)
         .with_resizable(false)
         .with_taskbar(false);
@@ -61,7 +61,7 @@ fn main() -> eframe::Result {
             "--control" => control = args.next().and_then(|p| p.parse::<u16>().ok()),
             "--no-splash" => show_splash = false,
             "--help" | "-h" => {
-                println!("aegis [--sample] [--control PORT] [--no-splash] [project.aegis | data.geojson | data.shp]…");
+                println!("mkaegis [--sample] [--control PORT] [--no-splash] [project.aegis | data.geojson | data.shp]…");
                 return Ok(());
             }
             path => {
@@ -82,7 +82,7 @@ fn main() -> eframe::Result {
         app.status = Some((p.clone(), true));
     }
     if let Some(port) = control {
-        match aegis_ui_egui::control::Server::start(port) {
+        match mkaegis_ui_egui::control::Server::start(port) {
             Ok(server) => app.control = Some(server),
             Err(e) => log::error!("control channel on port {port}: {e}"),
         }
@@ -90,7 +90,7 @@ fn main() -> eframe::Result {
     let viewport = egui::ViewportBuilder::default()
         .with_title("MK aeGIS")
         .with_decorations(false)
-        .with_app_id("aegis")
+        .with_app_id("mkaegis")
         .with_inner_size([1360.0, 860.0])
         .with_min_inner_size([800.0, 520.0]);
     let options = eframe::NativeOptions { viewport, ..Default::default() };

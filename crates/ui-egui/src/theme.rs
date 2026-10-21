@@ -69,6 +69,6 @@ pub fn apply(ctx: &egui::Context) {
     }
 }
 
-pub fn color(c: aegis_core::Color) -> Color32 {
+pub fn color(c: mkaegis_core::Color) -> Color32 {
     Color32::from_rgba_unmultiplied(c.r, c.g, c.b, c.a)
 }

@@ -1,20 +1,20 @@
 //! MK aeGIS's headless command line.
 //!
-//! - `aegis-cli info FILE` — a data file's geometry type, CRS, fields and extent.
-//! - `aegis-cli run [--sample] [--in FILE]… [--cmd 'id={json}']… [--out FILE] [--png FILE]`
+//! - `mkaegis-cli info FILE` — a data file's geometry type, CRS, fields and extent.
+//! - `mkaegis-cli run [--sample] [--in FILE]… [--cmd 'id={json}']… [--out FILE] [--png FILE]`
 //!   — runs commands in order; `--out` saves a project (`.aegis`) or the top layer
 //!   (`.geojson`, `.shp`); `--png` exports the map.
-//! - `aegis-cli commands` — every command with its parameters.
-//! - `aegis-cli mcp [--sample]` — a Model Context Protocol server on stdio.
+//! - `mkaegis-cli commands` — every command with its parameters.
+//! - `mkaegis-cli mcp [--sample]` — a Model Context Protocol server on stdio.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 use std::process::ExitCode;
 
-use aegis_engine::Session;
+use mkaegis_engine::Session;
 use serde_json::{Value as Json, json};
 
 const USAGE: &str =
-    "usage: aegis-cli info FILE | run [--sample] [--in FILE]… [--cmd 'id={json}']… [--out FILE] [--png FILE] | commands | mcp [--sample]";
+    "usage: mkaegis-cli info FILE | run [--sample] [--in FILE]… [--cmd 'id={json}']… [--out FILE] [--png FILE] | commands | mcp [--sample]";
 
 fn info(path: &str) -> Result<(), String> {
     let mut s = Session::default();
@@ -91,7 +91,7 @@ fn main() -> ExitCode {
         }
         Some("mcp") => {
             let session = if args.iter().any(|a| a == "--sample") { Session::sample() } else { Session::default() };
-            aegis_mcp::serve(session).map_err(|e| e.to_string())
+            mkaegis_mcp::serve(session).map_err(|e| e.to_string())
         }
         _ => Err(USAGE.to_string()),
     };

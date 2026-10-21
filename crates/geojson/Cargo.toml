@@ -1,5 +1,5 @@
 [package]
-name = "aegis-geojson"
+name = "mkaegis-geojson"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,8 +9,8 @@ description = "MK aeGIS L2: GeoJSON (RFC 7946) reader and writer"
 workspace = true
 
 [dependencies]
-aegis-core = { workspace = true }
-aegis-geom = { workspace = true }
-aegis-crs = { workspace = true }
-aegis-model = { workspace = true }
+mkaegis-core = { workspace = true }
+mkaegis-geom = { workspace = true }
+mkaegis-crs = { workspace = true }
+mkaegis-model = { workspace = true }
 serde_json = { workspace = true }

@@ -37,10 +37,10 @@ impl Server {
     pub fn start(port: u16) -> std::io::Result<Server> {
         let listener = TcpListener::bind(("127.0.0.1", port))?;
         let (tx, rx) = channel();
-        std::thread::Builder::new().name("aegis-control".into()).spawn(move || {
+        std::thread::Builder::new().name("mkaegis-control".into()).spawn(move || {
             for stream in listener.incoming().flatten() {
                 let tx = tx.clone();
-                let _ = std::thread::Builder::new().name("aegis-control-conn".into()).spawn(move || serve(stream, tx));
+                let _ = std::thread::Builder::new().name("mkaegis-control-conn".into()).spawn(move || serve(stream, tx));
             }
         })?;
         Ok(Server { requests: rx, pending: Vec::new(), port })
@@ -124,7 +124,7 @@ pub fn poll(app: &mut MapApp, ctx: &egui::Context) {
                 }
             }
             "engine.commands" => Ok(Json::Array(
-                aegis_engine::Session::commands()
+                mkaegis_engine::Session::commands()
                     .iter()
                     .map(|c| json!({ "id": c.id, "label": c.label, "ribbon": c.ribbon, "shortcut": c.shortcut, "params": c.params }))
                     .collect(),
@@ -201,7 +201,7 @@ fn render(app: &MapApp, p: &Json) -> Result<Json, String> {
     let path = p.get("path").and_then(Json::as_str).ok_or("path required")?;
     let dim = |k: &str, d: u64| p.get(k).and_then(Json::as_u64).unwrap_or(d).clamp(1, 8192) as u32;
     let extent = app.view.viewport().map(|v| v.extent());
-    let png = aegis_render::export_png(&app.session.map, dim("width", 1280), dim("height", 800), extent).map_err(|e| e.to_string())?;
+    let png = mkaegis_render::export_png(&app.session.map, dim("width", 1280), dim("height", 800), extent).map_err(|e| e.to_string())?;
     std::fs::write(path, png).map_err(|e| e.to_string())?;
     Ok(json!({ "path": path }))
 }

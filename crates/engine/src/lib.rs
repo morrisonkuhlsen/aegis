@@ -10,8 +10,8 @@ pub mod sample;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 
-pub use aegis_core::{Error, Result};
-pub use aegis_model::Map;
+pub use mkaegis_core::{Error, Result};
+pub use mkaegis_model::Map;
 use serde_json::Value as Json;
 
 pub use cmd::{COMMANDS, CommandSpec, Kind};

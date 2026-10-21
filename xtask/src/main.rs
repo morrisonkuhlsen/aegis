@@ -20,20 +20,20 @@ use std::process::{Command, ExitCode};
 /// Each internal crate's layer: L0 `core`/`geom`/`crs` → L1 `model` → L2 `geojson`/`shp`/`render`
 /// → L3 `analysis` → L4 `engine` → L5 `ui-egui`/`mcp` → L6 `apps/*`.
 const LAYERS: [(&str, u8); 14] = [
-    ("aegis-core", 0),
-    ("aegis-geom", 0),
-    ("aegis-crs", 0),
-    ("aegis-model", 1),
-    ("aegis-geojson", 2),
-    ("aegis-shp", 2),
-    ("aegis-render", 2),
-    ("aegis-analysis", 3),
-    ("aegis-stats", 3),
-    ("aegis-engine", 4),
-    ("aegis-ui-egui", 5),
-    ("aegis-mcp", 5),
-    ("aegis", 6),
-    ("aegis-cli", 6),
+    ("mkaegis-core", 0),
+    ("mkaegis-geom", 0),
+    ("mkaegis-crs", 0),
+    ("mkaegis-model", 1),
+    ("mkaegis-geojson", 2),
+    ("mkaegis-shp", 2),
+    ("mkaegis-render", 2),
+    ("mkaegis-analysis", 3),
+    ("mkaegis-stats", 3),
+    ("mkaegis-engine", 4),
+    ("mkaegis-ui-egui", 5),
+    ("mkaegis-mcp", 5),
+    ("mkaegis", 6),
+    ("mkaegis-cli", 6),
 ];
 
 /// The first layer allowed to use the UI toolkit.
@@ -149,13 +149,13 @@ fn cargo(args: &[&str]) -> Result<(), String> {
 }
 
 fn wasm() -> Result<(), String> {
-    cargo(&["build", "--quiet", "--package", "aegis-engine", "--package", "aegis-ui-egui", "--target", "wasm32-unknown-unknown"])
+    cargo(&["build", "--quiet", "--package", "mkaegis-engine", "--package", "mkaegis-ui-egui", "--target", "wasm32-unknown-unknown"])
 }
 
 /// docs/parity-checklist.md: every command by ribbon tab.
 fn parity() -> Result<(), String> {
     let mut rows: Vec<(&str, &str, &str, &str)> =
-        aegis_engine::Session::commands().iter().map(|c| (c.ribbon, c.label, c.id, c.shortcut.unwrap_or(""))).collect();
+        mkaegis_engine::Session::commands().iter().map(|c| (c.ribbon, c.label, c.id, c.shortcut.unwrap_or(""))).collect();
     rows.sort_by(|a, b| a.0.cmp(b.0).then(a.1.cmp(b.1)));
     let width = |col: usize, head: &str| {
         rows.iter().map(|r| [r.0, r.1, r.2, r.3].get(col).map_or(0, |s| s.chars().count())).max().unwrap_or(0).max(head.chars().count())

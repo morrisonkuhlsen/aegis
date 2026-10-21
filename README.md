@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/morrisonkuhlsen/aegis/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/morrisonkuhlsen/aegis/ci.yml?branch=main&style=flat-square&label=CI"></a>
+  <a href="https://github.com/morrisonkuhlsen/mkaegis/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/morrisonkuhlsen/mkaegis/ci.yml?branch=main&style=flat-square&label=CI"></a>
   <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-b7410e?style=flat-square&logo=rust&logoColor=white">
   <img alt="Runs on Linux, Windows, macOS and the web" src="https://img.shields.io/badge/runs%20on-Linux%20%C2%B7%20Windows%20%C2%B7%20macOS%20%C2%B7%20Web-1f6f78?style=flat-square">
   <img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-1f6f78?style=flat-square">
@@ -97,30 +97,30 @@ Tracked as GitHub issues labelled `statistics`:
 ## Downloads
 
 Builds for Linux, Windows and macOS are on the
-[Releases](https://github.com/morrisonkuhlsen/aegis/releases) page
-([latest](https://github.com/morrisonkuhlsen/aegis/releases/latest)). `<ver>` in the file names is
+[Releases](https://github.com/morrisonkuhlsen/mkaegis/releases) page
+([latest](https://github.com/morrisonkuhlsen/mkaegis/releases/latest)). `<ver>` in the file names is
 the version, and `SHA256SUMS.txt` has a checksum for every file. Each archive holds the desktop app
-`aegis` and the command line `aegis-cli` (`aegis-cli mcp` is the MCP server).
+`mkaegis` and the command line `mkaegis-cli` (`mkaegis-cli mcp` is the MCP server).
 
-| System                                 | File                                 | Needs               |
-|----------------------------------------|--------------------------------------|---------------------|
-| Windows 10 or 11, x64                  | `aegis-<ver>-windows-x64.zip`        | nothing else        |
-| macOS 11 or later, Apple silicon/Intel | `aegis-<ver>-macos-universal.tar.gz` | nothing else        |
-| Linux x86_64                           | `aegis-<ver>-linux-x86_64.tar.gz`    | glibc 2.39 or later |
+| System                                 | File                                   | Needs               |
+|----------------------------------------|----------------------------------------|---------------------|
+| Windows 10 or 11, x64                  | `mkaegis-<ver>-windows-x64.zip`        | nothing else        |
+| macOS 11 or later, Apple silicon/Intel | `mkaegis-<ver>-macos-universal.tar.gz` | nothing else        |
+| Linux x86_64                           | `mkaegis-<ver>-linux-x86_64.tar.gz`    | glibc 2.39 or later |
 
 The builds aren't code-signed yet, so the first launch asks for confirmation:
 
-- **Windows:** unzip and run `aegis.exe`. If SmartScreen says *Windows protected your PC*, choose
+- **Windows:** unzip and run `mkaegis.exe`. If SmartScreen says *Windows protected your PC*, choose
   **More info › Run anyway**.
 - **macOS:** unpack, lift the download quarantine, and run:
 
   ```sh
-  tar -xzf aegis-<ver>-macos-universal.tar.gz
-  xattr -dr com.apple.quarantine aegis-<ver>-macos-universal
-  ./aegis-<ver>-macos-universal/aegis
+  tar -xzf mkaegis-<ver>-macos-universal.tar.gz
+  xattr -dr com.apple.quarantine mkaegis-<ver>-macos-universal
+  ./mkaegis-<ver>-macos-universal/mkaegis
   ```
 
-- **Linux:** `tar -xzf aegis-<ver>-linux-x86_64.tar.gz` and run `./aegis-<ver>-linux-x86_64/aegis`.
+- **Linux:** `tar -xzf mkaegis-<ver>-linux-x86_64.tar.gz` and run `./mkaegis-<ver>-linux-x86_64/mkaegis`.
   The app needs X11 or Wayland and a Vulkan or OpenGL driver.
 
 How releases are made: [`docs/releasing.md`](docs/releasing.md).
@@ -128,28 +128,28 @@ How releases are made: [`docs/releasing.md`](docs/releasing.md).
 ## Quick start
 
 ```sh
-cargo run --release -p aegis -- --sample                       # desktop app with the sample map
-cargo run --release -p aegis -- data.shp                       # open a shapefile (or .geojson, .aegis)
-cargo run --release -p aegis -- --sample --control 7979        # + JSON control channel
-cargo run --release -p aegis -- --no-splash                    # skip the splash screen
+cargo run --release -p mkaegis -- --sample                       # desktop app with the sample map
+cargo run --release -p mkaegis -- data.shp                       # open a shapefile (or .geojson, .aegis)
+cargo run --release -p mkaegis -- --sample --control 7979        # + JSON control channel
+cargo run --release -p mkaegis -- --no-splash                    # skip the splash screen
 cargo xtask ci                                                    # fmt, clippy, tests, assets, layering, panics, wasm
 ```
 
 Offscreen screenshots, with no window and nothing captured from the desktop:
 
 ```sh
-cargo run -p aegis-ui-egui --example snapshot -- --sample --table --pane symbology out.png
+cargo run -p mkaegis-ui-egui --example snapshot -- --sample --table --pane symbology out.png
 ```
 
 ## For agents: MCP, CLI and the control channel
 
 ```sh
-claude mcp add aegis -- aegis-cli mcp                         # headless MCP server
-aegis-cli info data.shp                                         # layer, CRS, fields, extent
-aegis-cli commands                                              # every command and its params
-aegis-cli run --sample --cmd 'map.selectByAttributes={"layer":"Cidades","where":"POP > 100000"}'
-aegis-cli run --sample --cmd 'analysis.summaryStatistics={"layer":"Cidades","field":"POP"}'
-aegis-cli run --sample --cmd 'management.project={"layer":"Cidades","epsg":31983}' --png map.png
+claude mcp add mkaegis -- mkaegis-cli mcp                         # headless MCP server
+mkaegis-cli info data.shp                                         # layer, CRS, fields, extent
+mkaegis-cli commands                                              # every command and its params
+mkaegis-cli run --sample --cmd 'map.selectByAttributes={"layer":"Cidades","where":"POP > 100000"}'
+mkaegis-cli run --sample --cmd 'analysis.summaryStatistics={"layer":"Cidades","field":"POP"}'
+mkaegis-cli run --sample --cmd 'management.project={"layer":"Cidades","epsg":31983}' --png map.png
 ```
 
 The desktop app's control channel takes JSON lines on `127.0.0.1:PORT`:
@@ -170,7 +170,7 @@ frontend is a separate crate, so the UI can be swapped without touching the engi
 | L3    | `analysis` (geoprocessing tools) · `stats` (spatial weights; statistics next)                 |
 | L4    | `engine` (session, command registry, undo/redo, history, file I/O)                            |
 | L5    | `ui-egui` (desktop UI, control channel) · `mcp` (MCP server)                                  |
-| L6    | `apps/aegis`, `apps/aegis-cli`                                                                |
+| L6    | `apps/mkaegis`, `apps/mkaegis-cli`                                                            |
 
 - **Contributor and agent rules** (clean-room, asset policy, never-crash, quality gates): [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md)
 - **Bundled assets:** each one is listed with its licence in [`ATTRIBUTION.md`](ATTRIBUTION.md)

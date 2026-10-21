@@ -1,5 +1,5 @@
 [package]
-name = "aegis-crs"
+name = "mkaegis-crs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,6 +9,6 @@ description = "MK aeGIS L0: coordinate reference systems and map projections"
 workspace = true
 
 [dependencies]
-aegis-core = { workspace = true }
-aegis-geom = { workspace = true }
+mkaegis-core = { workspace = true }
+mkaegis-geom = { workspace = true }
 serde = { workspace = true }

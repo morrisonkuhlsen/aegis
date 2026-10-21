@@ -1,11 +1,11 @@
 //! Statistics tab: spatial weights (build, inspect, select neighbours, import and export). The
 //! spatial statistics that take them come next.
 
-use aegis_core::{Error, Result};
-use aegis_geom::GeometryType;
-use aegis_model::Layer;
-use aegis_model::weights::{Bandwidth, Kernel, Method, Standardization, Weights};
-use aegis_stats::Spec;
+use mkaegis_core::{Error, Result};
+use mkaegis_geom::GeometryType;
+use mkaegis_model::Layer;
+use mkaegis_model::weights::{Bandwidth, Kernel, Method, Standardization, Weights};
+use mkaegis_stats::Spec;
 use serde_json::{Value as Json, json};
 
 use super::{CommandSpec, Kind, has_layers, layer_key, mode, opt_bool, opt_f64, opt_str, path, req_str};
@@ -50,7 +50,7 @@ pub const WEIGHTS: CommandSpec = CommandSpec {
             "distance" | "distanceband" | "band" => {
                 let threshold = match opt_f64(p, "threshold")? {
                     Some(t) => t,
-                    None => aegis_stats::min_threshold(&layer.data)?
+                    None => mkaegis_stats::min_threshold(&layer.data)?
                         .map(|t| t * (1.0 + 1e-9))
                         .ok_or_else(|| Error::param("threshold", "needs two located features"))?,
                 };
@@ -76,7 +76,7 @@ pub const WEIGHTS: CommandSpec = CommandSpec {
         let tolerance = opt_f64(p, "tolerance")?.unwrap_or(0.0);
         let default = format!("{}_{}", layer.name, method_name);
         let name = unique_weights_name(s, opt_str(p, "name").unwrap_or(&default));
-        let weights = aegis_stats::build(&layer.data, layer.id, &name, &Spec { method, standardization, tolerance })?;
+        let weights = mkaegis_stats::build(&layer.data, layer.id, &name, &Spec { method, standardization, tolerance })?;
         Ok(add_weights(s, weights))
     },
 };
@@ -157,8 +157,8 @@ pub const EXPORT_WEIGHTS: CommandSpec = CommandSpec {
         let (ids, id_field) = ids(layer, opt_str(p, "idField"))?;
         let file = path(p, "path")?;
         let text = match extension(&file).as_str() {
-            "gal" => aegis_stats::gal::write_gal(&w.neighbours, &ids, &layer.name, &id_field),
-            "gwt" => aegis_stats::gal::write_gwt(&w.neighbours, &ids, &layer.name, &id_field),
+            "gal" => mkaegis_stats::gal::write_gal(&w.neighbours, &ids, &layer.name, &id_field),
+            "gwt" => mkaegis_stats::gal::write_gwt(&w.neighbours, &ids, &layer.name, &id_field),
             other => return Err(Error::param("path", format!("`.{other}`: weights are written as .gal or .gwt"))),
         };
         std::fs::write(&file, text)?;
@@ -184,8 +184,8 @@ pub const IMPORT_WEIGHTS: CommandSpec = CommandSpec {
         let (ids, _) = ids(layer, opt_str(p, "idField"))?;
         let ext = extension(&file);
         let raw = match ext.as_str() {
-            "gal" => aegis_stats::gal::read_gal(&text, &ids)?,
-            "gwt" => aegis_stats::gal::read_gwt(&text, &ids)?,
+            "gal" => mkaegis_stats::gal::read_gal(&text, &ids)?,
+            "gwt" => mkaegis_stats::gal::read_gwt(&text, &ids)?,
             other => return Err(Error::param("path", format!("`.{other}`: weights are read from .gal or .gwt"))),
         };
         // GAL holds no weights: row-standardise by default; GWT's are kept as they are.
@@ -197,7 +197,7 @@ pub const IMPORT_WEIGHTS: CommandSpec = CommandSpec {
             layer: layer.id,
             method: Method::File { path: file.display().to_string() },
             standardization: how,
-            neighbours: aegis_stats::standardize(raw, how),
+            neighbours: mkaegis_stats::standardize(raw, how),
         };
         Ok(add_weights(s, weights))
     },

@@ -217,7 +217,7 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
             Dialog::CoordinateSystem { epsg } => {
                 ui.label("EPSG code");
                 ui.add(egui::TextEdit::singleline(epsg).desired_width(f32::INFINITY));
-                let known = epsg.trim().parse::<u32>().ok().and_then(|c| aegis_crs::Crs::from_epsg(c).ok());
+                let known = epsg.trim().parse::<u32>().ok().and_then(|c| mkaegis_crs::Crs::from_epsg(c).ok());
                 ui.label(egui::RichText::new(known.map_or("Unknown or unsupported code".to_string(), |c| c.name())).color(if known.is_some() {
                     t.text
                 } else {

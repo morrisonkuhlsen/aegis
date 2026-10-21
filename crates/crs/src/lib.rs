@@ -9,8 +9,8 @@
 
 use std::f64::consts::{FRAC_PI_4, PI};
 
-use aegis_core::{Error, Result};
-use aegis_geom::Coord;
+use mkaegis_core::{Error, Result};
+use mkaegis_geom::Coord;
 use serde::{Deserialize, Serialize};
 
 /// Web Mercator's sphere radius: WGS 84's semi-major axis.

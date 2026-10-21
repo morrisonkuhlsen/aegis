@@ -10,9 +10,9 @@ pub mod weights;
 
 use std::collections::BTreeSet;
 
-use aegis_core::{Color, Error, Result, Value};
-use aegis_crs::Crs;
-use aegis_geom::{Envelope, Geometry, GeometryType};
+use mkaegis_core::{Color, Error, Result, Value};
+use mkaegis_crs::Crs;
+use mkaegis_geom::{Envelope, Geometry, GeometryType};
 use serde::{Deserialize, Serialize};
 
 pub use symbology::{Labels, Marker, Renderer, Symbol};
@@ -115,7 +115,7 @@ impl FeatureClass {
                 return Err(Error::Geometry(format!("a {} in a {} feature class", g.geometry_type().name(), self.geometry_type.name())));
             }
         }
-        if self.features.len() >= aegis_core::MAX_ITEMS {
+        if self.features.len() >= mkaegis_core::MAX_ITEMS {
             return Err(Error::param("features", "too many features"));
         }
         values.resize(self.fields.len(), Value::Null);
@@ -310,10 +310,10 @@ pub fn project_envelope(e: Envelope, from: Crs, to: Crs) -> Option<Envelope> {
         let x = e.min_x + t * e.width();
         let y = e.min_y + t * e.height();
         pts.extend([
-            aegis_geom::Coord::new(x, e.min_y),
-            aegis_geom::Coord::new(x, e.max_y),
-            aegis_geom::Coord::new(e.min_x, y),
-            aegis_geom::Coord::new(e.max_x, y),
+            mkaegis_geom::Coord::new(x, e.min_y),
+            mkaegis_geom::Coord::new(x, e.max_y),
+            mkaegis_geom::Coord::new(e.min_x, y),
+            mkaegis_geom::Coord::new(e.max_x, y),
         ]);
     }
     Envelope::of(pts.into_iter().filter_map(|p| from.transform(to, p).ok()))
@@ -322,7 +322,7 @@ pub fn project_envelope(e: Envelope, from: Crs, to: Crs) -> Option<Envelope> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aegis_geom::Coord;
+    use mkaegis_geom::Coord;
 
     fn points() -> FeatureClass {
         let mut fc = FeatureClass::new("cities", GeometryType::Point, Crs::WGS84, vec![Field::new("NAME", FieldType::Text)]);

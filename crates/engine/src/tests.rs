@@ -8,7 +8,7 @@ fn panicked(r: &Result<Json>) -> bool {
 }
 
 fn scratch(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("aegis-test-{}-{name}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("mkaegis-test-{}-{name}", std::process::id()));
     let _ = std::fs::create_dir_all(&dir);
     dir
 }
@@ -38,7 +38,7 @@ fn every_command_survives_empty_params() {
 
 #[test]
 fn hostile_params_never_panic() {
-    let missing = std::env::temp_dir().join("aegis-no-such-dir").join("x");
+    let missing = std::env::temp_dir().join("mkaegis-no-such-dir").join("x");
     let paths = [
         json!(""),
         json!(missing.with_extension("geojson").display().to_string()),

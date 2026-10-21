@@ -2,8 +2,8 @@
 //! values, graduated colours), classification (equal interval, quantile) and labels. Every
 //! colour and ramp here is MK aeGIS's own.
 
-use aegis_core::{Color, Error, Result, Value};
-use aegis_geom::GeometryType;
+use mkaegis_core::{Color, Error, Result, Value};
+use mkaegis_geom::GeometryType;
 use serde::{Deserialize, Serialize};
 
 use crate::FeatureClass;
@@ -320,7 +320,7 @@ pub struct Labels {
 mod tests {
     use super::*;
     use crate::{Field, FieldType};
-    use aegis_crs::Crs;
+    use mkaegis_crs::Crs;
 
     fn table() -> FeatureClass {
         let mut fc =

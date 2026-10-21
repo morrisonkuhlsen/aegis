@@ -25,12 +25,12 @@ Standards and learnings shared across the crafting apps live in `craftrules` (`.
 ## Never crash
 People trust MK aeGIS with their data and their maps; a crash loses their work. **This outranks feature work.** Standard: [`craftrules/standards/never-crash.md`](https://github.com/storytold/craftrules/blob/main/standards/never-crash.md).
 - **No panics in non-test code:** no `unwrap()`, `expect()`, `panic!`, `unreachable!`, `todo!`, `unimplemented!`; no `unsafe` (`unsafe_code = "forbid"`).
-- **Errors are `Result<T, E>`** through `aegis_core::Error` and `?`. An unfinished feature returns `Error::NotAvailable`; it never panics.
+- **Errors are `Result<T, E>`** through `mkaegis_core::Error` and `?`. An unfinished feature returns `Error::NotAvailable`; it never panics.
 - **Input-derived numbers are hostile** (shapefiles, GeoJSON, project files, `WHERE` clauses, command, MCP and control params): `get()` instead of indexing, checked/saturating arithmetic, no NaN casts, cap input-sized allocations (a shapefile's declared counts, a dBASE header, an image size, a buffer distance; `MAX_ITEMS`).
 - **Coordinates are hostile too:** non-finite values are rejected at the format boundary; a projection that cannot take a point (Web Mercator at the poles, UTM far from its zone) returns an error, never a NaN that travels on.
 - **Bound recursion** (`WHERE` clause nesting: `MAX_DEPTH`; JSON depth: serde's limit) and prefer iterative algorithms (Douglas–Peucker, point-in-polygon, ring grouping).
 - **Last-resort guard:** `Session::execute` catches escaped panics and restores the map. It's a safety net, not a licence.
-- **Prove it:** every crash fix lands with a regression test (`tests::every_command_survives_empty_params` and `tests::hostile_params_never_panic` fuzz every command; `aegis-shp`'s `hostile_files_never_panic` truncates and flips every byte of a shapefile).
+- **Prove it:** every crash fix lands with a regression test (`tests::every_command_survives_empty_params` and `tests::hostile_params_never_panic` fuzz every command; `mkaegis-shp`'s `hostile_files_never_panic` truncates and flips every byte of a shapefile).
 - Crates carry `#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]`; `cargo xtask panics` enforces it.
 
 ## Non-negotiables
@@ -43,15 +43,15 @@ People trust MK aeGIS with their data and their maps; a crash loses their work. 
 - **Everything is a command.** User-visible behaviour = a command in `crates/engine/src/cmd/*` (`CommandSpec`: id, label, ribbon path, shortcut, params doc, kind, `enabled`, `run`) + tests. Ids follow ArcGIS Pro's ribbon and geoprocessing toolboxes (`map.selectByAttributes`, `analysis.buffer`, `management.project`) plus primitives (`feature.select`, `layer.setVisible`, `map.setExtent`). The ribbon, panes, dialogs, shortcuts, control channel, CLI and MCP all reach the same commands.
 - **Programmatic calls never open dialogs**: a command with empty params runs with defaults or returns an error; only the ribbon and menus open a dialog or a pane, and a dialog only gathers parameters (OK runs the command).
 - **Layering** is enforced by `cargo xtask layers`: `core`/`geom`/`crs` (L0) → `model` (L1) → `geojson`/`shp`/`render` (L2) → `analysis`/`stats` (L3) → `engine` (L4) → `ui-egui`/`mcp` (L5) → `apps/*` (L6). Nothing below L5 depends on egui/eframe/winit/wgpu/rfd. **The UI crate is swappable.**
-- **The UI is thin**: panels read `Session` state and act through `app.run(id, params)`. Colours come from `theme::Tokens`. Platform services (file dialogs) come in through `Services`. The map view paints `aegis-render`'s output: what you see is what Export Map writes.
+- **The UI is thin**: panels read `Session` state and act through `app.run(id, params)`. Colours come from `theme::Tokens`. Platform services (file dialogs) come in through `Services`. The map view paints `mkaegis-render`'s output: what you see is what Export Map writes.
 - **Rust only** (no handwritten JS/TS). **Never break wasm** (`cargo xtask wasm`).
 - **Quality gates** before every commit: `cargo xtask ci` (fmt, clippy -D warnings, tests, assets, layers, panics, wasm). One task id per commit (`M1.2: polyline buffer`). Push only when the user asks.
 
 ## Running and looking at the app
-- `cargo run --release -p aegis -- --sample --control 7979` (sample map + control channel). Pick a free port; other crafting apps use control ports too.
+- `cargo run --release -p mkaegis -- --sample --control 7979` (sample map + control channel). Pick a free port; other crafting apps use control ports too.
 - Drive it: JSON lines on `127.0.0.1:7979`, e.g. `{"id":1,"method":"engine.execute","params":{"command":"map.selectByAttributes","params":{"layer":"Cidades","where":"POP > 100000"}}}` then `{"id":2,"method":"ui.screenshot","params":{"path":"/tmp/shot.png"}}` (or `ui.render` for the map alone, no presented frame needed). Methods: `crates/ui-egui/src/control.rs`, docs: `docs/control-protocol.md`.
-- **Offscreen UI render** (no window, from a source checkout): `cargo run -p aegis-ui-egui --example snapshot -- --sample [--table] [--pane symbology] [--tab analysis] [--tool buffer] [--cmd 'id={json}']… [--dark] out.png`. **Never screenshot the desktop**: it captures whatever else the person has open.
-- Headless: `aegis-cli info data.shp`, `aegis-cli run --sample --cmd 'analysis.buffer={"layer":"Cidades","distance":10,"unit":"km"}' --out buffers.geojson --png map.png`, `aegis-cli commands`, `aegis-cli mcp` (`claude mcp add aegis -- aegis-cli mcp`).
+- **Offscreen UI render** (no window, from a source checkout): `cargo run -p mkaegis-ui-egui --example snapshot -- --sample [--table] [--pane symbology] [--tab analysis] [--tool buffer] [--cmd 'id={json}']… [--dark] out.png`. **Never screenshot the desktop**: it captures whatever else the person has open.
+- Headless: `mkaegis-cli info data.shp`, `mkaegis-cli run --sample --cmd 'analysis.buffer={"layer":"Cidades","distance":10,"unit":"km"}' --out buffers.geojson --png map.png`, `mkaegis-cli commands`, `mkaegis-cli mcp` (`claude mcp add mkaegis -- mkaegis-cli mcp`).
 - **For UI work, look at the result** (snapshot PNG) and compare with `plan/arcgis/observed-ui.md`.
 - UI behaviour is tested headless with `egui_kittest` (`crates/ui-egui/src/lib.rs` tests).
 - Shell gotchas: `cargo fmt` reformats code, so re-read a file before an exact-text edit of what it touched; a gate run chained with `;` doesn't stop on a failure — use `cargo xtask ci && git commit …`.

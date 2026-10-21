@@ -10,11 +10,11 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use aegis_core::{Error, Result};
-use aegis_crs::Crs;
-use aegis_geom::{Coord, Geometry, GeometryType, algo};
-use aegis_model::FeatureClass;
-use aegis_model::weights::{Bandwidth, Kernel, Method, Standardization, Weights};
+use mkaegis_core::{Error, Result};
+use mkaegis_crs::Crs;
+use mkaegis_geom::{Coord, Geometry, GeometryType, algo};
+use mkaegis_model::FeatureClass;
+use mkaegis_model::weights::{Bandwidth, Kernel, Method, Standardization, Weights};
 
 use crate::kdtree::KdTree;
 
@@ -461,8 +461,8 @@ fn too_many_links() -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aegis_core::Value;
-    use aegis_model::{Field, FieldType};
+    use mkaegis_core::Value;
+    use mkaegis_model::{Field, FieldType};
 
     /// A UTM zone, so the lattice is in metres.
     const UTM: u32 = 31983;

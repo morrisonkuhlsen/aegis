@@ -111,8 +111,7 @@ the version, and `SHA256SUMS.txt` has a checksum for every file. Each archive ho
 The builds aren't code-signed yet, so the first launch asks for confirmation:
 
 - **Windows:** unzip and run `aegis.exe`. If SmartScreen says *Windows protected your PC*, choose
-  **More info › Run anyway**. A console window opens beside the app for now
-  ([#78](https://github.com/morrisonkuhlsen/aegis/issues/78)); closing it closes the app.
+  **More info › Run anyway**.
 - **macOS:** unpack, lift the download quarantine, and run:
 
   ```sh

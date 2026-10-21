@@ -63,8 +63,8 @@ jobs:
       run:
         shell: bash
     env:
-      NAME: aegis-${{ needs.version.outputs.version }}-${{ matrix.platform }}
-      BINS: aegis aegis-cli
+      NAME: mkaegis-${{ needs.version.outputs.version }}-${{ matrix.platform }}
+      BINS: mkaegis mkaegis-cli
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

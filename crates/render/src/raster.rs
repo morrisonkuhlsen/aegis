@@ -2,8 +2,8 @@
 //! non-zero for strokes) by sub-scanline coverage, strokes as quads with round joins, and
 //! markers. Straight-alpha sRGB, blended "over". Labels are not drawn yet (no font here).
 
-use aegis_core::{Color, Error, Result};
-use aegis_model::Marker;
+use mkaegis_core::{Color, Error, Result};
+use mkaegis_model::Marker;
 
 use crate::Shape;
 
@@ -26,7 +26,7 @@ pub struct Canvas {
 impl Canvas {
     pub fn new(width: u32, height: u32, background: Color) -> Result<Canvas> {
         let (w, h) = (width as usize, height as usize);
-        let n = w.checked_mul(h).filter(|n| *n <= aegis_core::MAX_ITEMS).ok_or_else(|| Error::param("size", "image too large"))?;
+        let n = w.checked_mul(h).filter(|n| *n <= mkaegis_core::MAX_ITEMS).ok_or_else(|| Error::param("size", "image too large"))?;
         let mut pixels = Vec::with_capacity(n * 4);
         for _ in 0..n {
             pixels.extend_from_slice(&[background.r, background.g, background.b, background.a]);

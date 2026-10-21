@@ -1,8 +1,8 @@
 //! Spatial weights: who neighbours whom, and how much. A weights object belongs to one layer
 //! and holds, for each of its features (by row), the neighbours' rows and weights, sparse.
-//! `aegis-stats` builds them; every spatial statistic takes one.
+//! `mkaegis-stats` builds them; every spatial statistic takes one.
 
-use aegis_core::{Error, Result};
+use mkaegis_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 /// How the neighbours were found.

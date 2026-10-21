@@ -1,5 +1,5 @@
 [package]
-name = "aegis-model"
+name = "mkaegis-model"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ description = "MK aeGIS L1: feature classes, layers, maps, symbology, attribute 
 workspace = true
 
 [dependencies]
-aegis-core = { workspace = true }
-aegis-geom = { workspace = true }
-aegis-crs = { workspace = true }
+mkaegis-core = { workspace = true }
+mkaegis-geom = { workspace = true }
+mkaegis-crs = { workspace = true }
 serde = { workspace = true }

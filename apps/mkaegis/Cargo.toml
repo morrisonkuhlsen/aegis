@@ -1,5 +1,5 @@
 [package]
-name = "aegis"
+name = "mkaegis"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,8 +10,8 @@ description = "MK aeGIS desktop app"
 workspace = true
 
 [dependencies]
-aegis-engine = { workspace = true }
-aegis-ui-egui = { workspace = true }
+mkaegis-engine = { workspace = true }
+mkaegis-ui-egui = { workspace = true }
 egui = { workspace = true }
 eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11"] }
 rfd = { workspace = true }

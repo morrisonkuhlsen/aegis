@@ -24,8 +24,8 @@ publishes them as a GitHub release, with a checksum for every file.
    - `publish` runs only when every build passed. It creates the release `MK aeGIS v0.2.0`, with
      notes generated from the pull requests merged since the previous tag, the archives and
      `SHA256SUMS.txt`.
-4. **Check it.** Download the archive for your system, open `aegis --sample` and run
-   `aegis-cli run --sample --cmd 'analysis.summaryStatistics={"layer":"Cidades","field":"POP"}'`.
+4. **Check it.** Download the archive for your system, open `mkaegis --sample` and run
+   `mkaegis-cli run --sample --cmd 'analysis.summaryStatistics={"layer":"Cidades","field":"POP"}'`.
    Then edit the release on GitHub to put the highlights above the generated notes.
 
 A tag with a suffix (`v0.2.0-rc.1`, from version `0.2.0-rc.1`) is published as a
@@ -33,12 +33,12 @@ A tag with a suffix (`v0.2.0-rc.1`, from version `0.2.0-rc.1`) is published as a
 
 ## What a release contains
 
-| File                                 | Contents                                          |
-|--------------------------------------|---------------------------------------------------|
-| `aegis-<ver>-linux-x86_64.tar.gz`    | `aegis`, `aegis-cli`                              |
-| `aegis-<ver>-windows-x64.zip`        | `aegis.exe`, `aegis-cli.exe`                      |
-| `aegis-<ver>-macos-universal.tar.gz` | the same two, each for Apple silicon and Intel    |
-| `SHA256SUMS.txt`                     | the SHA-256 checksum of every archive             |
+| File                                   | Contents                                       |
+|----------------------------------------|------------------------------------------------|
+| `mkaegis-<ver>-linux-x86_64.tar.gz`    | `mkaegis`, `mkaegis-cli`                       |
+| `mkaegis-<ver>-windows-x64.zip`        | `mkaegis.exe`, `mkaegis-cli.exe`               |
+| `mkaegis-<ver>-macos-universal.tar.gz` | the same two, each for Apple silicon and Intel |
+| `SHA256SUMS.txt`                       | the SHA-256 checksum of every archive          |
 
 Every archive also holds `README.md`, `LICENSE-MIT`, `LICENSE-APACHE` and `ATTRIBUTION.md`.
 The macOS binaries are universal: `lipo` joins the `aarch64-apple-darwin` and
@@ -69,4 +69,4 @@ under *Artifacts*.
   Developer ID and a Windows code-signing certificate, both paid.
 - **Installers:** `.msi`, `.dmg`, `.deb`/`.rpm`, AppImage, Flatpak.
 - **More platforms:** Linux aarch64, Windows arm64.
-- **The web app** ([#38](https://github.com/morrisonkuhlsen/aegis/issues/38)).
+- **The web app** ([#38](https://github.com/morrisonkuhlsen/mkaegis/issues/38)).

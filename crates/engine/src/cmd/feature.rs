@@ -1,7 +1,7 @@
 //! Feature primitives: select rows, identify, edit attributes, delete (Edit tab).
 
-use aegis_core::{Error, Value};
-use aegis_model::FieldType;
+use mkaegis_core::{Error, Value};
+use mkaegis_model::FieldType;
 use serde_json::{Value as Json, json};
 
 use super::{CommandSpec, Kind, has_layers, layer_key, mode, req_str, rows};

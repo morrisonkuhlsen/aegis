@@ -1,5 +1,5 @@
 [package]
-name = "aegis-engine"
+name = "mkaegis-engine"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,15 +9,15 @@ description = "MK aeGIS L4: session, commands, undo/redo"
 workspace = true
 
 [dependencies]
-aegis-core = { workspace = true }
-aegis-geom = { workspace = true }
-aegis-crs = { workspace = true }
-aegis-model = { workspace = true }
-aegis-geojson = { workspace = true }
-aegis-shp = { workspace = true }
-aegis-render = { workspace = true }
-aegis-analysis = { workspace = true }
-aegis-stats = { workspace = true }
+mkaegis-core = { workspace = true }
+mkaegis-geom = { workspace = true }
+mkaegis-crs = { workspace = true }
+mkaegis-model = { workspace = true }
+mkaegis-geojson = { workspace = true }
+mkaegis-shp = { workspace = true }
+mkaegis-render = { workspace = true }
+mkaegis-analysis = { workspace = true }
+mkaegis-stats = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }

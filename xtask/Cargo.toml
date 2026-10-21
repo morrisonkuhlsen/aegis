@@ -10,5 +10,5 @@ description = "MK aeGIS's project tasks: cargo xtask <task>"
 workspace = true
 
 [dependencies]
-aegis-engine = { workspace = true }
+mkaegis-engine = { workspace = true }
 serde_json = { workspace = true }

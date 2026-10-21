@@ -1,13 +1,13 @@
 //! Renders the MK aeGIS window offscreen (wgpu, no window) to a PNG, to look at the UI without
 //! touching the screen.
 //!
-//! `cargo run -p aegis-ui-egui --example snapshot -- [--sample] [--in file.geojson|.shp|.aegis]
+//! `cargo run -p mkaegis-ui-egui --example snapshot -- [--sample] [--in file.geojson|.shp|.aegis]
 //!  [--cmd 'id={json}']... [--tab map|analysis|statistics|edit|view|share] [--pane geoprocessing|symbology|history]
 //!  [--tool buffer|project|calculate|attributes|location|statistics|weights] [--table] [--select] [--dark]
 //!  [--splash] [--icon] [--size 1280x800] out.png`
 
-use aegis_engine::Session;
-use aegis_ui_egui::{MapApp, Pane, Tab, Tool};
+use mkaegis_engine::Session;
+use mkaegis_ui_egui::{MapApp, Pane, Tab, Tool};
 use serde_json::json;
 
 fn main() -> Result<(), String> {
@@ -78,7 +78,7 @@ fn main() -> Result<(), String> {
         app.tool = Tool::Select;
     }
     if let Some(name) = gp {
-        use aegis_ui_egui::GpTool as T;
+        use mkaegis_ui_egui::GpTool as T;
         let tool = match name.as_str() {
             "project" => T::Project,
             "calculate" => T::CalculateGeometry,
@@ -98,7 +98,7 @@ fn main() -> Result<(), String> {
             let rect = ui.ctx().content_rect();
             ui.painter().rect_filled(rect, 26.0, egui::Color32::from_rgb(0x14, 0x16, 0x1C));
             let coral = egui::Color32::from_rgb(0xE8, 0x5A, 0x5F);
-            aegis_ui_egui::icons::paint(ui.painter(), rect.shrink(22.0), aegis_ui_egui::icons::Icon::Logo, coral, coral);
+            mkaegis_ui_egui::icons::paint(ui.painter(), rect.shrink(22.0), mkaegis_ui_egui::icons::Icon::Logo, coral, coral);
         });
         harness.run_steps(2);
         let image = harness.render().map_err(|e| e.to_string())?;
@@ -109,10 +109,10 @@ fn main() -> Result<(), String> {
     if splash {
         // The splash screen alone, at its own size.
         let mut harness = egui_kittest::Harness::builder()
-            .with_size(egui::vec2(aegis_ui_egui::splash::SIZE[0], aegis_ui_egui::splash::SIZE[1]))
+            .with_size(egui::vec2(mkaegis_ui_egui::splash::SIZE[0], mkaegis_ui_egui::splash::SIZE[1]))
             .with_pixels_per_point(2.0)
             .wgpu()
-            .build_ui_state(|ui, s: &mut aegis_ui_egui::splash::SplashScreen| s.ui(ui), Default::default());
+            .build_ui_state(|ui, s: &mut mkaegis_ui_egui::splash::SplashScreen| s.ui(ui), Default::default());
         harness.run_steps(3);
         let image = harness.render().map_err(|e| e.to_string())?;
         image.save(&out).map_err(|e| e.to_string())?;

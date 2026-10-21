@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use aegis_core::{Error, Result};
+use mkaegis_core::{Error, Result};
 
 /// The most features or lines a weights file is read with.
 const MAX_ROWS: usize = 2_000_000;

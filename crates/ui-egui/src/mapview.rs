@@ -1,11 +1,11 @@
-//! The map view. The map is rasterised by `aegis-render` (the same pixels Export Map writes)
+//! The map view. The map is rasterised by `mkaegis-render` (the same pixels Export Map writes)
 //! into a texture, redrawn only when the map or the view changes; labels are drawn on top with
 //! egui's text. Drag pans (Explore) or draws a selection box (Select); the wheel zooms about
 //! the pointer; middle-drag always pans.
 
-use aegis_geom::{Coord, Envelope};
-use aegis_render::{Options, Shape, Viewport};
 use egui::{Color32, Pos2, Rect, Sense, Ui, Vec2};
+use mkaegis_geom::{Coord, Envelope};
+use mkaegis_render::{Options, Shape, Viewport};
 use serde_json::json;
 
 use crate::theme::Tokens;
@@ -44,7 +44,7 @@ fn default_extent(app: &MapApp) -> Envelope {
     app.session.map.extent.or_else(|| app.session.map.full_extent()).unwrap_or_else(|| {
         // The world, in the map's CRS.
         let world = Envelope::new(Coord::new(-170.0, -60.0), Coord::new(170.0, 75.0));
-        aegis_model::project_envelope(world, aegis_crs::Crs::WGS84, app.session.map.crs).unwrap_or(world)
+        mkaegis_model::project_envelope(world, mkaegis_crs::Crs::WGS84, app.session.map.crs).unwrap_or(world)
     })
 }
 
@@ -106,7 +106,7 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
     if response.clicked()
         && let Some(pos) = response.interact_pointer_pos()
     {
-        let hit = aegis_render::hit_test(&app.session.map, &vp, to_px(pos), 4.0 * f64::from(ppp));
+        let hit = mkaegis_render::hit_test(&app.session.map, &vp, to_px(pos), 4.0 * f64::from(ppp));
         match app.tool {
             Tool::Explore => {
                 app.identify = hit.and_then(|(li, row)| app.session.map.layers.get(li).map(|l| (l.id, row)));
@@ -132,8 +132,8 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
     // Redraw the texture when something changed.
     let key = Key { revision: app.session.revision, center: (vp.center.x, vp.center.y), resolution: vp.resolution, size: (w as usize, h as usize) };
     if app.view.key != Some(key) || app.view.texture.is_none() {
-        let shapes = aegis_render::display_list(&app.session.map, &vp, &Options { pixels_per_point: ppp, ..Options::default() });
-        if let Ok(mut canvas) = aegis_render::raster::Canvas::new(w as u32, h as u32, app.session.map.background) {
+        let shapes = mkaegis_render::display_list(&app.session.map, &vp, &Options { pixels_per_point: ppp, ..Options::default() });
+        if let Ok(mut canvas) = mkaegis_render::raster::Canvas::new(w as u32, h as u32, app.session.map.background) {
             app.view.labels.clear();
             for s in shapes {
                 if matches!(s, Shape::Label { .. }) {

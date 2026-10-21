@@ -4,7 +4,7 @@
 
 use std::io::{BufRead, Write};
 
-use aegis_engine::Session;
+use mkaegis_engine::Session;
 use serde_json::{Value as Json, json};
 
 const PROTOCOL: &str = "2025-06-18";
@@ -68,7 +68,7 @@ pub fn handle(session: &mut Session, msg: &Json) -> Option<Json> {
         "initialize" => json!({
             "protocolVersion": PROTOCOL,
             "capabilities": { "tools": {} },
-            "serverInfo": { "name": "aegis", "version": env!("CARGO_PKG_VERSION") }
+            "serverInfo": { "name": "mkaegis", "version": env!("CARGO_PKG_VERSION") }
         }),
         "ping" => json!({}),
         "tools/list" => json!({ "tools": tools() }),
@@ -112,7 +112,7 @@ mod tests {
     fn initialize_list_and_call() {
         let mut s = Session::default();
         let init = handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {} })).unwrap();
-        assert_eq!(init["result"]["serverInfo"]["name"], "aegis");
+        assert_eq!(init["result"]["serverInfo"]["name"], "mkaegis");
         assert!(handle(&mut s, &json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).is_none());
         let list = handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).unwrap();
         assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 3);

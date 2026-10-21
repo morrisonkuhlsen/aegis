@@ -10,7 +10,7 @@ mod map;
 mod project;
 mod stats;
 
-use aegis_core::{Error, Result};
+use mkaegis_core::{Error, Result};
 use serde_json::Value as Json;
 
 use crate::Session;
@@ -150,7 +150,7 @@ pub(crate) fn layer_key(p: &Json, key: &str) -> Result<String> {
 /// A list of row numbers (0-based), capped.
 pub(crate) fn rows(p: &Json, key: &str, len: usize) -> Result<Vec<usize>> {
     let list = p.get(key).and_then(Json::as_array).ok_or_else(|| Error::param(key, "required: a list of row numbers"))?;
-    if list.len() > aegis_core::MAX_ITEMS {
+    if list.len() > mkaegis_core::MAX_ITEMS {
         return Err(Error::param(key, "too many rows"));
     }
     list.iter()
@@ -163,9 +163,9 @@ pub(crate) fn rows(p: &Json, key: &str, len: usize) -> Result<Vec<usize>> {
         .collect()
 }
 
-pub(crate) fn mode(p: &Json) -> Result<aegis_model::SelectionMode> {
+pub(crate) fn mode(p: &Json) -> Result<mkaegis_model::SelectionMode> {
     let text = opt_str(p, "mode").unwrap_or("new");
-    aegis_model::SelectionMode::parse(text).ok_or_else(|| Error::param("mode", "new, add, remove or intersect"))
+    mkaegis_model::SelectionMode::parse(text).ok_or_else(|| Error::param("mode", "new, add, remove or intersect"))
 }
 
 /// A path parameter.

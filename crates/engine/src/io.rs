@@ -3,8 +3,8 @@
 
 use std::path::Path;
 
-use aegis_core::{Error, Result};
-use aegis_model::{FeatureClass, Map};
+use mkaegis_core::{Error, Result};
+use mkaegis_model::{FeatureClass, Map};
 
 /// The extension of the project file.
 pub const PROJECT_EXTENSION: &str = "aegis";
@@ -25,12 +25,12 @@ pub fn read_data(path: &Path) -> Result<(FeatureClass, Vec<String>)> {
     match extension(path).as_str() {
         "geojson" | "json" => {
             let text = std::fs::read_to_string(path)?;
-            let r = aegis_geojson::read(&text, &stem(path))?;
+            let r = mkaegis_geojson::read(&text, &stem(path))?;
             let warnings = if r.skipped > 0 { vec![format!("{} features of another geometry type skipped", r.skipped)] } else { Vec::new() };
             Ok((r.data, warnings))
         }
         "shp" => {
-            let r = aegis_shp::read_path(path)?;
+            let r = mkaegis_shp::read_path(path)?;
             Ok((r.data, r.warnings))
         }
         other => Err(Error::NotAvailable(format!("reading `.{other}` files"))),
@@ -40,8 +40,8 @@ pub fn read_data(path: &Path) -> Result<(FeatureClass, Vec<String>)> {
 /// Writes a feature class to a data file chosen by extension.
 pub fn write_data(fc: &FeatureClass, path: &Path) -> Result<()> {
     match extension(path).as_str() {
-        "geojson" | "json" => Ok(std::fs::write(path, aegis_geojson::write(fc)?)?),
-        "shp" => aegis_shp::write_path(fc, path),
+        "geojson" | "json" => Ok(std::fs::write(path, mkaegis_geojson::write(fc)?)?),
+        "shp" => mkaegis_shp::write_path(fc, path),
         other => Err(Error::NotAvailable(format!("writing `.{other}` files"))),
     }
 }

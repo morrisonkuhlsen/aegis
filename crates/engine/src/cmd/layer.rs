@@ -245,23 +245,37 @@ pub const CALCULATE_FIELD: CommandSpec = CommandSpec {
         let field = req_str(p, "field")?;
         let i = layer.data.field_index(field).ok_or_else(|| Error::NotFound(format!("field `{field}`")))?;
         let kind = layer.data.fields.get(i).map(|f| f.kind).unwrap_or(FieldType::Text);
-        let q = Query::parse(req_str(p, "expression")?, &layer.data)?;
+        let expression = req_str(p, "expression")?;
+        let q = Query::parse(expression, &layer.data)?;
         let rows: Vec<usize> = if only_selected { layer.selection.iter().copied().collect() } else { (0..layer.data.features.len()).collect() };
         let mut values = Vec::with_capacity(rows.len());
+        let mut nulls = 0usize;
         for r in &rows {
             let v = q.evaluate(&layer.data, *r);
+            nulls += usize::from(v.is_null());
             let shown = v.to_string();
             let fits = kind
                 .coerce(v)
                 .ok_or_else(|| Error::param("expression", format!("row {}: `{shown}` doesn't fit the {} field `{field}`", r + 1, kind.name())))?;
             values.push((*r, fits));
         }
+        // NULL on every row is almost always a mistake (`POP / 0`, an empty field) that would wipe
+        // the column: refused, unless NULL is what was asked for (#7).
+        if !rows.is_empty() && nulls == rows.len() && !expression.trim().eq_ignore_ascii_case("NULL") {
+            return Err(Error::param(
+                "expression",
+                format!(
+                    "`{expression}` is NULL on every row (a division by zero, or a NULL operand), so nothing was written; to empty `{field}`, use the expression NULL"
+                ),
+            ));
+        }
         for (r, v) in values {
             if let Some(slot) = layer.data.features.get_mut(r).and_then(|f| f.values.get_mut(i)) {
                 *slot = v;
             }
         }
-        Ok(json!({ "message": format!("{} rows calculated", rows.len()) }))
+        let set_null = if nulls > 0 { format!(", {nulls} set to NULL") } else { String::new() };
+        Ok(json!({ "message": format!("{} rows calculated{set_null}", rows.len()), "calculated": rows.len(), "nulls": nulls }))
     },
 };
 

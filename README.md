@@ -94,6 +94,38 @@ Tracked as GitHub issues labelled `statistics`:
 | GWR                      | Geographically weighted regression, AICc/CV bandwidth                  | #33   |
 | Geostatistics            | IDW, variogram fitting, ordinary/universal kriging, cross-validation   | #34   |
 
+## Downloads
+
+Builds for Linux, Windows and macOS are on the
+[Releases](https://github.com/morrisonkuhlsen/aegis/releases) page
+([latest](https://github.com/morrisonkuhlsen/aegis/releases/latest)). `<ver>` in the file names is
+the version, and `SHA256SUMS.txt` has a checksum for every file. Each archive holds the desktop app
+`aegis` and the command line `aegis-cli` (`aegis-cli mcp` is the MCP server).
+
+| System                                 | File                                 | Needs               |
+|----------------------------------------|--------------------------------------|---------------------|
+| Windows 10 or 11, x64                  | `aegis-<ver>-windows-x64.zip`        | nothing else        |
+| macOS 11 or later, Apple silicon/Intel | `aegis-<ver>-macos-universal.tar.gz` | nothing else        |
+| Linux x86_64                           | `aegis-<ver>-linux-x86_64.tar.gz`    | glibc 2.39 or later |
+
+The builds aren't code-signed yet, so the first launch asks for confirmation:
+
+- **Windows:** unzip and run `aegis.exe`. If SmartScreen says *Windows protected your PC*, choose
+  **More info › Run anyway**. A console window opens beside the app for now
+  ([#78](https://github.com/morrisonkuhlsen/aegis/issues/78)); closing it closes the app.
+- **macOS:** unpack, lift the download quarantine, and run:
+
+  ```sh
+  tar -xzf aegis-<ver>-macos-universal.tar.gz
+  xattr -dr com.apple.quarantine aegis-<ver>-macos-universal
+  ./aegis-<ver>-macos-universal/aegis
+  ```
+
+- **Linux:** `tar -xzf aegis-<ver>-linux-x86_64.tar.gz` and run `./aegis-<ver>-linux-x86_64/aegis`.
+  The app needs X11 or Wayland and a Vulkan or OpenGL driver.
+
+How releases are made: [`docs/releasing.md`](docs/releasing.md).
+
 ## Quick start
 
 ```sh

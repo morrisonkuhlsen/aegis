@@ -10,5 +10,15 @@ splash screen.
 
 Third-party material
 
-None: every other asset, including the splash artwork, is original to MK aeGIS and licensed as
-above. The per-file list (author, source, licence) is in ATTRIBUTION.md.
+Every asset in this repository, the splash artwork included, is original to MK aeGIS and
+licensed as above, except the brand assets; the per-file list (author, source, licence) is in
+ATTRIBUTION.md.
+
+The programs are built from the Rust crates listed in Cargo.lock, each under its own permissive
+licence (MIT, Apache-2.0, BSD, Zlib, ISC, BSL-1.0 or similar). Through egui
+(epaint_default_fonts), the desktop app embeds these fonts:
+
+- Ubuntu Light, under the Ubuntu Font Licence 1.0;
+- Noto Emoji, under the SIL Open Font License 1.1;
+- Hack, under the MIT License (with parts under the Bitstream Vera License);
+- emoji-icon-font, under the MIT License (Copyright (c) 2014 John Slegers).

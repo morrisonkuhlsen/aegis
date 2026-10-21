@@ -35,7 +35,36 @@ fn services() -> Services {
         save_file: Some(Box::new(|title: &str, extensions: &[&str], suggested: &str| {
             rfd::FileDialog::new().set_title(title).add_filter("MK aeGIS", extensions).set_file_name(suggested).save_file()
         })),
+        save_recent: Some(Box::new(|files: &[std::path::PathBuf]| {
+            if let Some(file) = settings_file("recent.txt") {
+                let text: Vec<String> = files.iter().map(|p| p.display().to_string()).collect();
+                let _ = file.parent().map(std::fs::create_dir_all);
+                let _ = std::fs::write(file, text.join("\n"));
+            }
+        })),
     }
+}
+
+/// The recent projects kept by earlier runs, newest first.
+fn load_recent() -> Vec<std::path::PathBuf> {
+    settings_file("recent.txt")
+        .and_then(|f| std::fs::read_to_string(f).ok())
+        .map(|text| text.lines().filter(|l| !l.trim().is_empty()).map(std::path::PathBuf::from).collect())
+        .unwrap_or_default()
+}
+
+/// A file in the platform's per-user configuration folder, under `mkaegis`.
+fn settings_file(name: &str) -> Option<std::path::PathBuf> {
+    let base = if cfg!(target_os = "windows") {
+        std::env::var_os("APPDATA").map(std::path::PathBuf::from)
+    } else if cfg!(target_os = "macos") {
+        std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Library/Application Support"))
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME")
+            .map(std::path::PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))
+    };
+    base.map(|b| b.join("mkaegis").join(name))
 }
 
 /// The graphics backends to try, best first; `None` is wgpu's own choice. On Windows that choice
@@ -106,6 +135,7 @@ fn main() -> eframe::Result {
         if show_splash { candidates.iter().copied().find(|b| !matches!(splash(*b), Err(eframe::Error::Wgpu(_)))).unwrap_or(first) } else { first };
     let mut app = MapApp::new(session);
     app.services = services();
+    app.recent = load_recent();
     if let Some(p) = problems.first() {
         app.status = Some((p.clone(), true));
     }

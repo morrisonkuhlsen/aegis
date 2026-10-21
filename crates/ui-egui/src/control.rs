@@ -5,7 +5,7 @@
 //! - `engine.execute {command, params}` — run any command, as the ribbon does.
 //! - `engine.commands` — every command with its ribbon path and parameters.
 //! - `ui.state` — tab, pane, tool, active layer, view extent and scale, last message.
-//! - `ui.set {tab?, pane?, tool?, table?, active?}` — change what the window shows.
+//! - `ui.set {tab?, pane?, tool?, table?, active?, backstage?}` — change what the window shows.
 //! - `ui.screenshot {path}` — the window as a PNG (needs a presented frame).
 //! - `ui.render {path, width?, height?}` — the map alone, rendered offscreen, as Export Map.
 
@@ -158,6 +158,7 @@ fn state(app: &MapApp) -> Json {
         "tool": format!("{:?}", app.tool),
         "table": app.show_table,
         "active": app.active,
+        "backstage": app.backstage.map(|p| format!("{p:?}")),
         "extent": vp.map(|v| { let e = v.extent(); vec![e.min_x, e.min_y, e.max_x, e.max_y] }),
         "scale": vp.map(|v| v.scale(app.session.map.crs)),
         "status": app.status.as_ref().map(|(m, e)| json!({ "message": m, "error": e })),
@@ -193,6 +194,18 @@ fn set(app: &mut MapApp, p: &Json) -> Result<(), String> {
     }
     if let Some(active) = p.get("active").and_then(Json::as_u64).and_then(|a| u32::try_from(a).ok()) {
         app.active = Some(active);
+    }
+    if let Some(page) = p.get("backstage") {
+        use crate::BackstagePage as B;
+        app.backstage = match page.as_str().map(str::to_ascii_lowercase).as_deref() {
+            None | Some("") | Some("none") => None,
+            Some("home") => Some(B::Home),
+            Some("new") => Some(B::New),
+            Some("open") => Some(B::Open),
+            Some("info") => Some(B::Info),
+            Some("export") => Some(B::Export),
+            Some(other) => return Err(format!("unknown backstage page `{other}`")),
+        };
     }
     Ok(())
 }

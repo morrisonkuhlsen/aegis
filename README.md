@@ -51,7 +51,7 @@
 </tr>
 <tr>
 <td width="50%" valign="top"><img src="docs/images/weights.png" alt="The Statistics tab with Spatial Weights, Neighbors, Import Weights and Export Weights; the Spatial Weights tool open with K nearest neighbors, k 4 and row standardization; the four nearest neighbours of Porto Celeste highlighted on the map" width="100%"><p align="center"><sub><b>Spatial weights.</b> Contiguity, k nearest neighbours, distance bands and kernels; select a feature's neighbours on the map; GAL/GWT in and out.</sub></p></td>
-<td width="50%" valign="top"></td>
+<td width="50%" valign="top"><img src="docs/images/backstage.png" alt="The File backstage: on the left, a dark column with the Morrison Kühlsen wordmark, MK aeGIS and its places (Home, New, Open, Info, Save, Save As, Export, Close, About, Exit); in the middle, Welcome to MK aeGIS with cards for a new map, the sample map, opening a project and adding data, and the recent projects; on the right, Athena fading into the page" width="100%"><p align="center"><sub><b>The File backstage.</b> Start a map, open a recent project, see the project's facts, save and export.</sub></p></td>
 </tr>
 </table>
 

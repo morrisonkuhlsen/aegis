@@ -33,24 +33,25 @@ Requests run on the UI thread between frames, in the order they arrive.
 
 ## Methods
 
-| Method            | Params                                         | Result                                                                |
-|-------------------|------------------------------------------------|-----------------------------------------------------------------------|
-| `engine.execute`  | `command`, `params` (object, default `{}`)     | The command's result, as from the ribbon                              |
-| `engine.commands` | none                                           | Every command: `id`, `label`, `ribbon`, `shortcut`, `params`          |
-| `ui.state`        | none                                           | `tab`, `pane`, `tool`, `table`, `active`, `extent`, `scale`, `status` |
-| `ui.set`          | `tab?`, `pane?`, `tool?`, `table?`, `active?`  | The new `ui.state`                                                    |
-| `ui.screenshot`   | `path`                                         | `{"path"}` once the window's next frame is saved as PNG               |
-| `ui.render`       | `path`, `width?`, `height?` (1–8192, 1280×800) | `{"path"}`: the map alone, rendered offscreen as Export Map writes it |
+| Method            | Params                                                      | Result                                                                             |
+|-------------------|-------------------------------------------------------------|------------------------------------------------------------------------------------|
+| `engine.execute`  | `command`, `params` (object, default `{}`)                  | The command's result, as from the ribbon                                           |
+| `engine.commands` | none                                                        | Every command: `id`, `label`, `ribbon`, `shortcut`, `params`                       |
+| `ui.state`        | none                                                        | `tab`, `pane`, `tool`, `table`, `active`, `backstage`, `extent`, `scale`, `status` |
+| `ui.set`          | `tab?`, `pane?`, `tool?`, `table?`, `active?`, `backstage?` | The new `ui.state`                                                                 |
+| `ui.screenshot`   | `path`                                                      | `{"path"}` once the window's next frame is saved as PNG                            |
+| `ui.render`       | `path`, `width?`, `height?` (1–8192, 1280×800)              | `{"path"}`: the map alone, rendered offscreen as Export Map writes it              |
 
 `ui.set` values:
 
-| Param    | Values                                                    |
-|----------|-----------------------------------------------------------|
-| `tab`    | `map`, `analysis`, `statistics`, `edit`, `view`, `share`  |
-| `pane`   | `geoprocessing`, `symbology`, `history`, `none` (or `""`) |
-| `tool`   | `select`; anything else is `explore`                      |
-| `table`  | `true` or `false`: the attribute table shows              |
-| `active` | a layer id                                                |
+| Param       | Values                                                                               |
+|-------------|--------------------------------------------------------------------------------------|
+| `tab`       | `map`, `analysis`, `statistics`, `edit`, `view`, `share`                             |
+| `pane`      | `geoprocessing`, `symbology`, `history`, `none` (or `""`)                            |
+| `tool`      | `select`; anything else is `explore`                                                 |
+| `table`     | `true` or `false`: the attribute table shows                                         |
+| `active`    | a layer id                                                                           |
+| `backstage` | the File backstage's page: `home`, `new`, `open`, `info`, `export`; `none` closes it |
 
 `ui.screenshot` needs a presented frame, so it waits for the window to draw; `ui.render` doesn't
 and also works while the window is hidden.

@@ -10,6 +10,19 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ## [Unreleased]
 
+### Added
+
+- **The File backstage**, as in MK Sigma. File opens a page over the window with these places:
+  - Home: a new map, the sample map, opening a project, adding data, and the recent projects.
+  - New and Open.
+  - Info: the project's layers, features, coordinate system, spatial weights, and whether it is
+    saved.
+  - Save, Save As and Export (the map image, a layer's features).
+  - Close, About and Exit.
+
+  Esc or Back returns to the map. Recent projects are kept between runs. The control channel's
+  `ui.set` takes `backstage`.
+
 ## [0.1.2] - 2026-10-21
 
 ### Changed results

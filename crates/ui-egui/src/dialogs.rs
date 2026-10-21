@@ -59,14 +59,18 @@ pub enum Dialog {
 }
 
 /// What would throw away the current map, waiting on the Unsaved Changes dialog.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Discard {
     /// Closing the window.
     Close,
     /// Project › New.
     New,
+    /// A new map with the sample data (File › New › Sample map).
+    Sample,
     /// Project › Open.
     Open,
+    /// A recent project, from the File backstage.
+    OpenFile(std::path::PathBuf),
 }
 
 /// OK and Cancel; returns (ok, cancel).
@@ -269,10 +273,10 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     if ui.add(egui::Button::new("Save").min_size(egui::vec2(70.0, 0.0))).clicked() {
-                        decided = Some((*then, true));
+                        decided = Some((then.clone(), true));
                     }
                     if ui.button("Don't Save").clicked() {
-                        decided = Some((*then, false));
+                        decided = Some((then.clone(), false));
                     }
                     keep = !ui.button("Cancel").clicked() && decided.is_none();
                 });

@@ -24,16 +24,16 @@ const ARTWORK: &[u8] = include_bytes!("../assets/athena.jpg");
 const MORRISON_KUHLSEN: &[u8] = include_bytes!("../../../docs/brand/morrison-kuhlsen.png");
 /// The largest image side decoded, against a corrupt header.
 const MAX_SIDE: usize = 4096;
-/// Morrison Kühlsen's ink, and the text on it.
-const INK: Color32 = Color32::from_rgb(0x14, 0x16, 0x1C);
-const ON_INK: Color32 = Color32::from_rgb(0xFF, 0xFF, 0xFF);
-const ON_INK_SOFT: Color32 = Color32::from_rgba_premultiplied(184, 184, 184, 184);
+/// Morrison Kühlsen's ink, and the text on it (the File backstage's column too).
+pub(crate) const INK: Color32 = Color32::from_rgb(0x14, 0x16, 0x1C);
+pub(crate) const ON_INK: Color32 = Color32::from_rgb(0xFF, 0xFF, 0xFF);
+pub(crate) const ON_INK_SOFT: Color32 = Color32::from_rgba_premultiplied(184, 184, 184, 184);
 /// MK aeGIS's colour: the coral of the artwork's clouds.
-const BRAND: Color32 = Color32::from_rgb(0xE8, 0x5A, 0x5F);
-const NAME: &str = "MK aeGIS";
-const MOTTO: &str = "Ex nihilo, ad æternum";
-const TAGLINE: &str = "Spatial statistics, open and auditable: every map with its method.";
-const HOUSE: &str = "A Morrison Kühlsen project";
+pub(crate) const BRAND: Color32 = Color32::from_rgb(0xE8, 0x5A, 0x5F);
+pub(crate) const NAME: &str = "MK aeGIS";
+pub(crate) const MOTTO: &str = "Ex nihilo, ad æternum";
+pub(crate) const TAGLINE: &str = "Spatial statistics, open and auditable: every map with its method.";
+pub(crate) const HOUSE: &str = "A Morrison Kühlsen project";
 
 /// The program's components, named in turn as the bar fills.
 const COMPONENTS: [&str; 12] = [
@@ -130,6 +130,16 @@ fn paint(painter: &egui::Painter, ctx: &egui::Context, rect: Rect, progress: f32
         painter.image(texture.id(), Rect::from_min_size(pos2(left, foot - size.y), size), uv, ON_INK);
     }
     painter.text(pos2(left + width, foot - 4.0 * k), Align2::RIGHT_BOTTOM, HOUSE, FontId::proportional(11.0 * k), ON_INK_SOFT);
+}
+
+/// Athena, the splash's artwork, as a texture (the File backstage shows it too).
+pub(crate) fn artwork(ctx: &egui::Context) -> Option<TextureHandle> {
+    cached(ctx, "splash-athena", ARTWORK, decode_jpeg)
+}
+
+/// The Morrison Kühlsen wordmark, white on clear, as a texture.
+pub(crate) fn wordmark(ctx: &egui::Context) -> Option<TextureHandle> {
+    cached(ctx, "splash-morrison-kuhlsen", MORRISON_KUHLSEN, decode_png)
 }
 
 /// A decoded image as a texture, loaded once per context.

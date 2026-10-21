@@ -186,35 +186,10 @@ fn title_bar(app: &mut MapApp, ui: &mut Ui) {
     });
 }
 
-/// The File menu: what ArcGIS Pro keeps in its Project backstage.
-fn file_menu(app: &mut MapApp, ui: &mut Ui) {
-    ui.set_min_width(200.0);
-    if ui.button("New Map").clicked() {
-        app.new_project();
-    }
-    if ui.button("Open…").clicked() {
-        app.open_project();
-    }
-    if ui.button("Save").clicked() {
-        app.save_project(false);
-    }
-    if ui.button("Save As…").clicked() {
-        app.save_project(true);
-    }
-    ui.separator();
-    if ui.button("Add Data…").clicked() {
-        app.add_data();
-    }
-    if ui.button("Add Sample Data").clicked() {
-        app.run("map.addSample", json!({}));
-    }
-    ui.separator();
-    if ui.button("About MK aeGIS").clicked() {
-        app.dialog = Some(Dialog::About);
-    }
-    if ui.button("Exit").clicked() {
-        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-    }
+/// The title row alone, over the File backstage.
+pub(crate) fn title_row(app: &mut MapApp, ui: &mut Ui) {
+    ui.spacing_mut().item_spacing.y = 0.0;
+    title_bar(app, ui);
 }
 
 pub fn show(app: &mut MapApp, ui: &mut Ui) {
@@ -226,8 +201,11 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
         ui.add_space(4.0);
         ui.spacing_mut().item_spacing.x = 16.0;
         ui.set_min_height(28.0);
+        // File opens the backstage, as in MK Sigma: Home, New, Open, Info, Save, Export…
         let file = ui.add(egui::Button::new(egui::RichText::new("File").size(14.0).color(t.accent)).frame(false).min_size(vec2(0.0, 28.0)));
-        egui::Popup::menu(&file).show(|ui| file_menu(app, ui));
+        if file.on_hover_text("New, open, save and export projects").clicked() {
+            app.open_backstage();
+        }
         ui.add_space(6.0);
         for tab in Tab::ALL {
             let on = app.tab == tab;

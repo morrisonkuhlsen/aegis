@@ -1,6 +1,7 @@
 //! MK aeGIS desktop app.
 //!
-//! `mkaegis [--sample] [--control PORT] [file.aegis | data.geojson | data.shp]…`
+//! `mkaegis [--sample] [--control PORT] [file.aegis | data.geojson | data.shp]…`, or
+//! `mkaegis --version`.
 // A GUI program on Windows: no console window beside the app. Debug builds keep theirs.
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
@@ -82,7 +83,11 @@ fn main() -> eframe::Result {
             "--control" => control = args.next().and_then(|p| p.parse::<u16>().ok()),
             "--no-splash" => show_splash = false,
             "--help" | "-h" => {
-                println!("mkaegis [--sample] [--control PORT] [--no-splash] [project.aegis | data.geojson | data.shp]…");
+                println!("mkaegis [--sample] [--control PORT] [--no-splash] [project.aegis | data.geojson | data.shp]… | --version");
+                return Ok(());
+            }
+            "--version" | "-V" => {
+                println!("mkaegis {}", env!("CARGO_PKG_VERSION"));
                 return Ok(());
             }
             path => {

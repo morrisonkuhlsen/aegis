@@ -6,6 +6,7 @@
 //!   (`.geojson`, `.shp`); `--png` exports the map.
 //! - `mkaegis-cli commands` — every command with its parameters.
 //! - `mkaegis-cli mcp [--sample]` — a Model Context Protocol server on stdio.
+//! - `mkaegis-cli --version` — the version, `mkaegis-cli X.Y.Z`.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 use std::process::ExitCode;
@@ -13,8 +14,7 @@ use std::process::ExitCode;
 use mkaegis_engine::Session;
 use serde_json::{Value as Json, json};
 
-const USAGE: &str =
-    "usage: mkaegis-cli info FILE | run [--sample] [--in FILE]… [--cmd 'id={json}']… [--out FILE] [--png FILE] | commands | mcp [--sample]";
+const USAGE: &str = "usage: mkaegis-cli info FILE | run [--sample] [--in FILE]… [--cmd 'id={json}']… [--out FILE] [--png FILE] | commands | mcp [--sample] | --version";
 
 fn info(path: &str) -> Result<(), String> {
     let mut s = Session::default();
@@ -87,6 +87,10 @@ fn main() -> ExitCode {
             for c in Session::commands() {
                 println!("{:<32} {:<30} {}", c.id, c.ribbon, c.params);
             }
+            Ok(())
+        }
+        Some("--version" | "-V" | "version") => {
+            println!("mkaegis-cli {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         Some("mcp") => {

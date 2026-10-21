@@ -7,8 +7,15 @@ publishes them as a GitHub release, with a checksum for every file.
 ## Cutting a release
 
 1. **Bump the version.** It lives in one place, `[workspace.package] version` in the root
-   `Cargo.toml`. Run `cargo check` so `Cargo.lock` follows, and merge both through a pull
-   request once CI passes.
+   `Cargo.toml`, and every crate inherits it:
+
+   ```sh
+   cargo xtask version                 # prints the current version, e.g. 0.1.1
+   cargo xtask version set 0.2.0       # or 0.2.0-rc.1; updates Cargo.toml and Cargo.lock
+   ```
+
+   It refuses anything a tag can't name (`v0.2.0`, `0.2`, `0.2.0+build`). Merge the two files
+   through a pull request once CI passes.
 2. **Tag the merge commit and push the tag:**
 
    ```sh
@@ -20,11 +27,13 @@ publishes them as a GitHub release, with a checksum for every file.
 3. **Wait for the workflow** (Actions › Release, about 10 minutes). It runs three jobs:
    - `version` checks that the tag is `v` + the workspace version. A mismatch stops the run
      before anything is built.
-   - `build` builds and packages each platform.
+   - `build` builds each platform, checks that `mkaegis --version` and `mkaegis-cli --version`
+     report the version, and packages it.
    - `publish` runs only when every build passed. It creates the release `MK aeGIS v0.2.0`, with
      notes generated from the pull requests merged since the previous tag, the archives and
      `SHA256SUMS.txt`.
-4. **Check it.** Download the archive for your system, open `mkaegis --sample` and run
+4. **Check it.** Download the archive for your system, run `mkaegis-cli --version`, open
+   `mkaegis --sample` and run
    `mkaegis-cli run --sample --cmd 'analysis.summaryStatistics={"layer":"Cidades","field":"POP"}'`.
    Then edit the release on GitHub to put the highlights above the generated notes.
 
@@ -40,7 +49,8 @@ A tag with a suffix (`v0.2.0-rc.1`, from version `0.2.0-rc.1`) is published as a
 | `mkaegis-<ver>-macos-universal.tar.gz` | the same two, each for Apple silicon and Intel |
 | `SHA256SUMS.txt`                       | the SHA-256 checksum of every archive          |
 
-Every archive also holds `README.md`, `LICENSE-MIT`, `LICENSE-APACHE` and `ATTRIBUTION.md`.
+Every archive also holds `README.md`, `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE` (the licences,
+and the brand assets the app embeds, which they don't cover) and `ATTRIBUTION.md`.
 The macOS binaries are universal: `lipo` joins the `aarch64-apple-darwin` and
 `x86_64-apple-darwin` builds. The Linux build runs on Ubuntu 24.04, so it needs glibc 2.39 or
 later.

@@ -1,0 +1,24 @@
+MK aeGIS
+Copyright (c) 2026 the MK aeGIS contributors.
+Licensed under the MIT License or the Apache License, Version 2.0, at your option
+(LICENSE-MIT, LICENSE-APACHE).
+
+The Morrison Kühlsen name and wordmark (docs/brand/) are Morrison Kühlsen brand assets, used
+with their owner's permission. They are not open source and are not covered by the licences
+above; their terms are in docs/brand/LICENSE.md. The desktop app embeds the wordmark in its
+splash screen.
+
+Third-party material
+
+Every asset in this repository, the splash artwork included, is original to MK aeGIS and
+licensed as above, except the brand assets; the per-file list (author, source, licence) is in
+ATTRIBUTION.md.
+
+The programs are built from the Rust crates listed in Cargo.lock, each under its own permissive
+licence (MIT, Apache-2.0, BSD, Zlib, ISC, BSL-1.0 or similar). Through egui
+(epaint_default_fonts), the desktop app embeds these fonts:
+
+- Ubuntu Light, under the Ubuntu Font Licence 1.0;
+- Noto Emoji, under the SIL Open Font License 1.1;
+- Hack, under the MIT License (with parts under the Bitstream Vera License);
+- emoji-icon-font, under the MIT License (Copyright (c) 2014 John Slegers).

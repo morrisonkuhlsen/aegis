@@ -63,6 +63,7 @@ jobs:
       run:
         shell: bash
     env:
+      VERSION: ${{ needs.version.outputs.version }}
       NAME: mkaegis-${{ needs.version.outputs.version }}-${{ matrix.platform }}
       BINS: mkaegis mkaegis-cli
     steps:
@@ -101,13 +102,25 @@ jobs:
             cargo build --release --locked "${pkgs[@]}"
           fi
 
+      - name: The binaries report the version
+        run: |
+          exe=
+          if [ "$RUNNER_OS" = Windows ]; then exe=.exe; fi
+          for b in $BINS; do
+            got=$("target/release/$b$exe" --version | tr -d '\r')
+            if [ "$got" != "$b $VERSION" ]; then
+              echo "::error::$b --version says '$got', not '$b $VERSION'"
+              exit 1
+            fi
+          done
+
       - name: Package
         run: |
           exe=
           if [ "$RUNNER_OS" = Windows ]; then exe=.exe; fi
           mkdir "$NAME"
           for b in $BINS; do cp "target/release/$b$exe" "$NAME/"; done
-          cp README.md LICENSE-MIT LICENSE-APACHE ATTRIBUTION.md "$NAME/"
+          cp README.md LICENSE-MIT LICENSE-APACHE NOTICE ATTRIBUTION.md "$NAME/"
           if [ "$RUNNER_OS" = Windows ]; then
             7z a -tzip "$NAME.zip" "$NAME" > /dev/null
           else

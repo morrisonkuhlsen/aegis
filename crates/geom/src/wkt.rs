@@ -3,7 +3,6 @@
 
 use mkaegis_core::{Error, Result};
 
-use crate::algo::ring_contains;
 use crate::{Coord, Geometry};
 
 /// The longest WKT text we parse.
@@ -31,25 +30,21 @@ pub fn to_wkt(g: &Geometry) -> String {
 }
 
 /// Polygon rings grouped as shell, holes…: a ring inside an odd number of others is a hole of
-/// the smallest ring that contains it.
+/// the smallest ring that contains it (containment as `algo::ring_containers` decides it).
 pub fn shells_with_holes(rings: &[Vec<Coord>]) -> Vec<Vec<&Vec<Coord>>> {
-    let inside = |i: usize| -> Vec<usize> {
-        let Some(p) = rings.get(i).and_then(|r| r.first()).copied() else { return Vec::new() };
-        (0..rings.len()).filter(|j| *j != i && rings.get(*j).is_some_and(|r| ring_contains(r, p))).collect()
-    };
+    let containers = crate::algo::ring_containers(rings);
     let area = |i: usize| crate::algo::area(&Geometry::Polygon(rings.get(i).cloned().into_iter().collect()));
     let mut groups: Vec<(usize, Vec<&Vec<Coord>>)> = Vec::new();
     let mut holes = Vec::new();
-    for (i, ring) in rings.iter().enumerate() {
-        let containers = inside(i);
-        if containers.len() % 2 == 0 {
+    for (i, (ring, inside)) in rings.iter().zip(containers).enumerate() {
+        if inside.len() % 2 == 0 {
             groups.push((i, vec![ring]));
         } else {
-            holes.push((i, containers));
+            holes.push((i, inside));
         }
     }
-    for (i, containers) in holes {
-        let parent = containers.into_iter().filter(|c| groups.iter().any(|(s, _)| s == c)).min_by(|a, b| area(*a).total_cmp(&area(*b)));
+    for (i, inside) in holes {
+        let parent = inside.into_iter().filter(|c| groups.iter().any(|(s, _)| s == c)).min_by(|a, b| area(*a).total_cmp(&area(*b)));
         match (parent.and_then(|p| groups.iter_mut().find(|(s, _)| *s == p)), rings.get(i)) {
             (Some((_, group)), Some(ring)) => group.push(ring),
             (None, Some(ring)) => groups.push((i, vec![ring])),

@@ -12,8 +12,10 @@ use zune_jpeg::JpegDecoder;
 
 use crate::icons::{self, Icon};
 
-/// The window's size, in points.
-pub const SIZE: [f32; 2] = [680.0, 400.0];
+/// The window's size, in points: each half keeps the artwork's 680×800 proportions.
+pub const SIZE: [f32; 2] = [816.0, 480.0];
+/// The height the layout's measures are given for; they scale with the window's.
+const LAYOUT_HEIGHT: f32 = 400.0;
 /// Seconds it stays.
 const HOLD: f64 = 5.0;
 /// The artwork, the right half: see `ATTRIBUTION.md`.
@@ -83,6 +85,8 @@ impl SplashScreen {
 
 fn paint(painter: &egui::Painter, ctx: &egui::Context, rect: Rect, progress: f32) {
     let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+    // The layout is drawn for 400 points of height and scales with the window.
+    let k = rect.height() / LAYOUT_HEIGHT;
     // Two halves: the words on Morrison Kühlsen's ink, the artwork beside them.
     let half = rect.left() + rect.width() / 2.0;
     let words = Rect::from_min_max(rect.min, pos2(half, rect.bottom()));
@@ -91,42 +95,41 @@ fn paint(painter: &egui::Painter, ctx: &egui::Context, rect: Rect, progress: f32
     if let Some(texture) = cached(ctx, "splash-athena", ARTWORK, decode_jpeg) {
         painter.image(texture.id(), art, uv, Color32::WHITE);
     }
-    // The brand's stripe along the top of the words.
-    painter.rect_filled(Rect::from_min_size(words.min, vec2(words.width(), 5.0)), 0.0, BRAND);
 
-    let left = words.left() + 36.0;
-    let width = words.width() - 72.0;
+    let left = words.left() + 36.0 * k;
+    let width = words.width() - 72.0 * k;
     // The mark and the name.
-    icons::paint(painter, Rect::from_min_size(pos2(left, words.top() + 52.0), vec2(46.0, 46.0)), Icon::Logo, BRAND, BRAND);
-    painter.text(pos2(left + 58.0, words.top() + 75.0), Align2::LEFT_CENTER, NAME, FontId::proportional(34.0), ON_INK);
-    painter.text(pos2(left, words.top() + 128.0), Align2::LEFT_CENTER, MOTTO, FontId::proportional(15.0), ON_INK_SOFT);
-    let tagline = painter.layout(TAGLINE.to_string(), FontId::proportional(12.5), ON_INK_SOFT, width);
-    let below = words.top() + 152.0 + tagline.size().y;
-    painter.galley(pos2(left, words.top() + 152.0), tagline, ON_INK_SOFT);
+    let mark = Rect::from_min_size(pos2(left, words.top() + 52.0 * k), vec2(46.0, 46.0) * k);
+    icons::paint(painter, mark, Icon::Logo, BRAND, BRAND);
+    painter.text(pos2(left + 58.0 * k, words.top() + 75.0 * k), Align2::LEFT_CENTER, NAME, FontId::proportional(34.0 * k), ON_INK);
+    painter.text(pos2(left, words.top() + 128.0 * k), Align2::LEFT_CENTER, MOTTO, FontId::proportional(15.0 * k), ON_INK_SOFT);
+    let tagline = painter.layout(TAGLINE.to_string(), FontId::proportional(12.5 * k), ON_INK_SOFT, width);
+    let below = words.top() + 152.0 * k + tagline.size().y;
+    painter.galley(pos2(left, words.top() + 152.0 * k), tagline, ON_INK_SOFT);
     painter.text(
-        pos2(left, below + 10.0),
+        pos2(left, below + 10.0 * k),
         Align2::LEFT_TOP,
         format!("Version {}", env!("CARGO_PKG_VERSION")),
-        FontId::proportional(12.5),
+        FontId::proportional(12.5 * k),
         ON_INK_SOFT,
     );
 
     // The component loading, over the progress bar.
-    let bar = Rect::from_min_size(pos2(left, words.bottom() - 96.0), vec2(width, 3.0));
+    let bar = Rect::from_min_size(pos2(left, words.bottom() - 96.0 * k), vec2(width, 3.0 * k));
     let shown = ((progress * COMPONENTS.len() as f32) as usize).min(COMPONENTS.len() - 1);
     let status = COMPONENTS.get(shown).map_or_else(String::new, |c| format!("Loading {c}…"));
-    painter.text(bar.left_top() - vec2(0.0, 10.0), Align2::LEFT_BOTTOM, status, FontId::proportional(12.0), ON_INK_SOFT);
+    painter.text(bar.left_top() - vec2(0.0, 10.0 * k), Align2::LEFT_BOTTOM, status, FontId::proportional(12.0 * k), ON_INK_SOFT);
     painter.rect_filled(bar, 0.0, Color32::from_white_alpha(28));
     painter.rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * progress, bar.height())), 0.0, BRAND);
 
     // The house: its logo and line at the foot.
-    let foot = words.bottom() - 28.0;
+    let foot = words.bottom() - 28.0 * k;
     if let Some(texture) = cached(ctx, "splash-morrison-kuhlsen", MORRISON_KUHLSEN, decode_png) {
-        let logo_width = 104.0;
+        let logo_width = 104.0 * k;
         let size = vec2(logo_width, logo_width * texture.size_vec2().y / texture.size_vec2().x.max(1.0));
         painter.image(texture.id(), Rect::from_min_size(pos2(left, foot - size.y), size), uv, ON_INK);
     }
-    painter.text(pos2(left + width, foot - 4.0), Align2::RIGHT_BOTTOM, HOUSE, FontId::proportional(11.0), ON_INK_SOFT);
+    painter.text(pos2(left + width, foot - 4.0 * k), Align2::RIGHT_BOTTOM, HOUSE, FontId::proportional(11.0 * k), ON_INK_SOFT);
 }
 
 /// A decoded image as a texture, loaded once per context.

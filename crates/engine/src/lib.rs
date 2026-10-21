@@ -96,14 +96,21 @@ impl Session {
         let result = catch_unwind(AssertUnwindSafe(|| (spec.run)(self, params)))
             .unwrap_or_else(|_| Err(Error::Internal(format!("`{id}` failed unexpectedly; the map was restored"))));
         match (&result, before) {
+            // A new or opened project starts a fresh undo history and has nothing unsaved. Undoing
+            // back to the previous map would keep the new file's path, and Save would then write
+            // the old map over it (#41).
+            (Ok(_), Some(_)) if matches!(id, "project.new" | "project.open") => {
+                self.undo.clear();
+                self.redo.clear();
+                self.modified = false;
+            }
             (Ok(_), Some(before)) => {
                 self.undo.push((spec.label.to_string(), before));
                 if self.undo.len() > UNDO_DEPTH {
                     self.undo.remove(0);
                 }
                 self.redo.clear();
-                // A new or just-opened map has nothing unsaved (undoing back to the old map does).
-                self.modified = !matches!(id, "project.new" | "project.open");
+                self.modified = true;
             }
             (Err(_), Some(before)) => {
                 self.map = before;
@@ -131,19 +138,27 @@ impl Session {
     fn undo(&mut self) -> Result<Json> {
         let (label, map) = self.undo.pop().ok_or_else(|| Error::param("edit.undo", "nothing to undo"))?;
         let now = std::mem::replace(&mut self.map, map);
+        self.after_restore(&now);
         self.redo.push((label.clone(), now));
-        self.modified = true;
-        self.revision += 1;
         Ok(serde_json::json!({ "undone": label }))
     }
 
     fn redo(&mut self) -> Result<Json> {
         let (label, map) = self.redo.pop().ok_or_else(|| Error::param("edit.redo", "nothing to redo"))?;
         let now = std::mem::replace(&mut self.map, map);
+        self.after_restore(&now);
         self.undo.push((label.clone(), now));
+        Ok(serde_json::json!({ "redone": label }))
+    }
+
+    /// After undo or redo put back another map: it is unsaved, views redraw, and when its CRS
+    /// differs the view refits, since its extent is in the other CRS's units.
+    fn after_restore(&mut self, replaced: &Map) {
         self.modified = true;
         self.revision += 1;
-        Ok(serde_json::json!({ "redone": label }))
+        if replaced.crs != self.map.crs {
+            self.view_serial += 1;
+        }
     }
 }
 

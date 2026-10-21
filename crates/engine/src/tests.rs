@@ -306,14 +306,54 @@ fn data_and_projects_round_trip_through_files() {
     t.execute("project.open", &json!({ "path": project.display().to_string() })).unwrap();
     assert_eq!(t.map, s.map);
     assert!(!t.modified, "a just-opened project has nothing unsaved");
-    t.execute("edit.undo", &json!({})).unwrap();
-    assert!(t.modified, "undoing the open changes the map");
+    assert!(t.execute("edit.undo", &json!({})).is_err(), "opening a project is not undoable");
     t.execute("project.new", &json!({})).unwrap();
     assert!(!t.modified);
     let png = dir.join("map.png");
     s.execute("share.exportMap", &json!({ "path": png.display().to_string(), "width": 320, "height": 200 })).unwrap();
     assert!(std::fs::metadata(&png).unwrap().len() > 1000);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn undo_never_puts_an_old_map_under_an_opened_projects_path() {
+    let dir = scratch("undo-open");
+    let project = dir.join("opened.aegis");
+    let mut s = Session::sample();
+    s.execute("project.saveAs", &json!({ "path": project.display().to_string() })).unwrap();
+    let saved = std::fs::read(&project).unwrap();
+    // Edits in another session, then the project is opened over them.
+    let mut t = Session::default();
+    t.execute("map.addSample", &json!({})).unwrap();
+    t.execute("layer.remove", &json!({ "layer": "Rios" })).unwrap();
+    t.execute("project.open", &json!({ "path": project.display().to_string() })).unwrap();
+    assert!(t.can_undo().is_none() && t.can_redo().is_none(), "a fresh history");
+    assert!(t.execute("edit.undo", &json!({})).is_err());
+    t.execute("project.save", &json!({})).unwrap();
+    assert_eq!(std::fs::read(&project).unwrap(), saved, "the opened file is untouched");
+    // The same after New: nothing to undo back into.
+    t.execute("layer.remove", &json!({ "layer": "Rios" })).unwrap();
+    t.execute("project.new", &json!({})).unwrap();
+    assert!(t.execute("edit.undo", &json!({})).is_err());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn undoing_a_crs_change_refits_the_view() {
+    let mut s = Session::sample();
+    // The sample map is in Web Mercator (metres); 4326 is in degrees.
+    s.execute("map.setCrs", &json!({ "epsg": 4326 })).unwrap();
+    let serial = s.view_serial;
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!(s.view_serial > serial, "an extent in degrees doesn't fit a map in metres");
+    let serial = s.view_serial;
+    s.execute("edit.redo", &json!({})).unwrap();
+    assert!(s.view_serial > serial);
+    // An undo that keeps the CRS keeps the view where the person left it.
+    s.execute("layer.remove", &json!({ "layer": "Rios" })).unwrap();
+    let serial = s.view_serial;
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(s.view_serial, serial);
 }
 
 #[test]

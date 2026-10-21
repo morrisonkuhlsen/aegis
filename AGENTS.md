@@ -45,7 +45,7 @@ People trust MK aeGIS with their data and their maps; a crash loses their work. 
 - **Layering** is enforced by `cargo xtask layers`: `core`/`geom`/`crs` (L0) → `model` (L1) → `geojson`/`shp`/`render` (L2) → `analysis`/`stats` (L3) → `engine` (L4) → `ui-egui`/`mcp` (L5) → `apps/*` (L6). Nothing below L5 depends on egui/eframe/winit/wgpu/rfd. **The UI crate is swappable.**
 - **The UI is thin**: panels read `Session` state and act through `app.run(id, params)`. Colours come from `theme::Tokens`. Platform services (file dialogs) come in through `Services`. The map view paints `mkaegis-render`'s output: what you see is what Export Map writes.
 - **Rust only** (no handwritten JS/TS). **Never break wasm** (`cargo xtask wasm`).
-- **Quality gates** before every commit: `cargo xtask ci` (fmt, clippy -D warnings, tests, assets, layers, panics, wasm). One task id per commit (`M1.2: polyline buffer`). Push only when the user asks.
+- **Quality gates** before every commit: `cargo xtask ci` (fmt, clippy -D warnings, tests, assets, layers, panics, wasm, parity --check). One task id per commit (`M1.2: polyline buffer`). Push only when the user asks.
 
 ## Running and looking at the app
 - `cargo run --release -p mkaegis -- --sample --control 7979` (sample map + control channel). Pick a free port; other crafting apps use control ports too.

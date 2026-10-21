@@ -1,5 +1,6 @@
 # The AGENTS.md quality gate (`cargo xtask ci`: fmt, clippy -D warnings, tests, assets, layers,
-# panics, wasm) on every pull request and every push to main, so nothing lands on a red tree.
+# panics, wasm, parity --check) on every pull request and every push to main, so nothing lands on
+# a red tree.
 name: CI
 
 on:

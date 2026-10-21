@@ -132,7 +132,7 @@ cargo run --release -p mkaegis -- --sample                       # desktop app w
 cargo run --release -p mkaegis -- data.shp                       # open a shapefile (or .geojson, .aegis)
 cargo run --release -p mkaegis -- --sample --control 7979        # + JSON control channel
 cargo run --release -p mkaegis -- --no-splash                    # skip the splash screen
-cargo xtask ci                                                    # fmt, clippy, tests, assets, layering, panics, wasm
+cargo xtask ci                                                    # fmt, clippy, tests, assets, layering, panics, wasm, parity
 ```
 
 Offscreen screenshots, with no window and nothing captured from the desktop:
@@ -180,7 +180,9 @@ frontend is a separate crate, so the UI can be swapped without touching the engi
 
 MK aeGIS is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
 All artwork is original or openly licensed (see [`ATTRIBUTION.md`](ATTRIBUTION.md)). MK aeGIS
-contains no third-party iconography, styles, basemaps or data.
+contains no third-party iconography, styles, basemaps or data. The Morrison Kühlsen wordmark in
+[`docs/brand/`](docs/brand/LICENSE.md) is the exception: a brand asset outside those licences, as
+[`NOTICE`](NOTICE) says.
 
 A Morrison Kühlsen project.
 

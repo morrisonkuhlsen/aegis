@@ -1,0 +1,15 @@
+[package]
+name = "mkaegis-stats"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "mkaeGIS L3: spatial statistics (spatial weights first)"
+
+[lints]
+workspace = true
+
+[dependencies]
+mkaegis-core = { workspace = true }
+mkaegis-geom = { workspace = true }
+mkaegis-crs = { workspace = true }
+mkaegis-model = { workspace = true }

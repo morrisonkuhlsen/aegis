@@ -1,10 +1,12 @@
 //! The map document (L1): feature classes (a geometry type, a CRS, fields and features), layers
 //! that draw them with a renderer, and the map that orders the layers. `symbology` holds the
-//! renderers and classification; `query` the SQL `WHERE` clauses of Select By Attributes.
+//! renderers and classification; `query` the SQL `WHERE` clauses of Select By Attributes;
+//! `weights` the spatial weights that the statistics use.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 pub mod query;
 pub mod symbology;
+pub mod weights;
 
 use std::collections::BTreeSet;
 
@@ -222,6 +224,9 @@ pub struct Map {
     pub extent: Option<Envelope>,
     pub background: Color,
     next_id: u32,
+    /// Spatial weights, by name (projects saved before weights existed have none).
+    #[serde(default)]
+    pub weights: Vec<weights::Weights>,
 }
 
 impl Default for Map {
@@ -232,7 +237,7 @@ impl Default for Map {
 
 impl Map {
     pub fn new(name: &str, crs: Crs) -> Self {
-        Map { name: name.to_string(), crs, layers: Vec::new(), extent: None, background: Color::WHITE, next_id: 1 }
+        Map { name: name.to_string(), crs, layers: Vec::new(), extent: None, background: Color::WHITE, next_id: 1, weights: Vec::new() }
     }
 
     /// Adds a feature class as the top layer and returns the layer's id.

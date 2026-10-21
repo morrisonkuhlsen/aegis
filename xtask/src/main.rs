@@ -19,7 +19,7 @@ use std::process::{Command, ExitCode};
 
 /// Each internal crate's layer: L0 `core`/`geom`/`crs` → L1 `model` → L2 `geojson`/`shp`/`render`
 /// → L3 `analysis` → L4 `engine` → L5 `ui-egui`/`mcp` → L6 `apps/*`.
-const LAYERS: [(&str, u8); 13] = [
+const LAYERS: [(&str, u8); 14] = [
     ("mkaegis-core", 0),
     ("mkaegis-geom", 0),
     ("mkaegis-crs", 0),
@@ -28,6 +28,7 @@ const LAYERS: [(&str, u8); 13] = [
     ("mkaegis-shp", 2),
     ("mkaegis-render", 2),
     ("mkaegis-analysis", 3),
+    ("mkaegis-stats", 3),
     ("mkaegis-engine", 4),
     ("mkaegis-ui-egui", 5),
     ("mkaegis-mcp", 5),

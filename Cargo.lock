@@ -1842,6 +1842,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mkaegis-stats"
+version = "0.1.0"
+dependencies = [
+ "mkaegis-core",
+ "mkaegis-crs",
+ "mkaegis-geom",
+ "mkaegis-model",
+]
+
+[[package]]
 name = "mkaegis-ui-egui"
 version = "0.1.0"
 dependencies = [

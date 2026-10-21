@@ -20,6 +20,9 @@ pub const WEB_MERCATOR_MAX_LAT: f64 = 85.051_128_779_806_59;
 const UTM_K0: f64 = 0.9996;
 const UTM_FALSE_EASTING: f64 = 500_000.0;
 const UTM_FALSE_NORTHING_SOUTH: f64 = 10_000_000.0;
+/// Vincenty's inverse iterates to this change in λ (radians, about 0.006 mm).
+const VINCENTY_TOLERANCE: f64 = 1e-12;
+const VINCENTY_MAX_ITERATIONS: usize = 200;
 
 /// A reference ellipsoid: semi-major axis and inverse flattening.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -31,6 +34,72 @@ pub struct Ellipsoid {
 
 pub const WGS84: Ellipsoid = Ellipsoid { name: "WGS_1984", a: 6_378_137.0, inv_f: 298.257_223_563 };
 pub const GRS80: Ellipsoid = Ellipsoid { name: "GRS_1980", a: 6_378_137.0, inv_f: 298.257_222_101 };
+
+impl Ellipsoid {
+    /// The geodesic distance in metres between two longitude/latitude points (degrees), by
+    /// Vincenty's inverse formula (Survey Review, 1975). Near-antipodal points, where it does not
+    /// converge, fall back to the great circle on the sphere of equal area (within 0.5 %).
+    pub fn distance(self, a: Coord, b: Coord) -> Result<f64> {
+        if !a.is_finite() || !b.is_finite() || a.y.abs() > 90.0 || b.y.abs() > 90.0 {
+            return Err(Error::Projection(format!("not longitude/latitude points: {a:?}, {b:?}")));
+        }
+        let f = 1.0 / self.inv_f;
+        let b_axis = self.a * (1.0 - f);
+        let l = (b.x - a.x).to_radians();
+        let (u1, u2) = (((1.0 - f) * a.y.to_radians().tan()).atan(), ((1.0 - f) * b.y.to_radians().tan()).atan());
+        let (sin_u1, cos_u1, sin_u2, cos_u2) = (u1.sin(), u1.cos(), u2.sin(), u2.cos());
+        let mut lambda = l;
+        for _ in 0..VINCENTY_MAX_ITERATIONS {
+            let (sin_l, cos_l) = lambda.sin_cos();
+            let sin_sigma = ((cos_u2 * sin_l).powi(2) + (cos_u1 * sin_u2 - sin_u1 * cos_u2 * cos_l).powi(2)).sqrt();
+            if sin_sigma == 0.0 {
+                return Ok(0.0);
+            }
+            let cos_sigma = sin_u1 * sin_u2 + cos_u1 * cos_u2 * cos_l;
+            let sigma = sin_sigma.atan2(cos_sigma);
+            let sin_alpha = cos_u1 * cos_u2 * sin_l / sin_sigma;
+            let cos2_alpha = 1.0 - sin_alpha * sin_alpha;
+            // On the equator cos²α = 0 and the term vanishes.
+            let cos_2sm = if cos2_alpha == 0.0 { 0.0 } else { cos_sigma - 2.0 * sin_u1 * sin_u2 / cos2_alpha };
+            let c = f / 16.0 * cos2_alpha * (4.0 + f * (4.0 - 3.0 * cos2_alpha));
+            let previous = lambda;
+            lambda = l + (1.0 - c) * f * sin_alpha * (sigma + c * sin_sigma * (cos_2sm + c * cos_sigma * (-1.0 + 2.0 * cos_2sm * cos_2sm)));
+            if (lambda - previous).abs() < VINCENTY_TOLERANCE {
+                let u_sq = cos2_alpha * (self.a * self.a - b_axis * b_axis) / (b_axis * b_axis);
+                let big_a = 1.0 + u_sq / 16384.0 * (4096.0 + u_sq * (-768.0 + u_sq * (320.0 - 175.0 * u_sq)));
+                let big_b = u_sq / 1024.0 * (256.0 + u_sq * (-128.0 + u_sq * (74.0 - 47.0 * u_sq)));
+                let delta_sigma = big_b
+                    * sin_sigma
+                    * (cos_2sm
+                        + big_b / 4.0
+                            * (cos_sigma * (-1.0 + 2.0 * cos_2sm * cos_2sm)
+                                - big_b / 6.0 * cos_2sm * (-3.0 + 4.0 * sin_sigma * sin_sigma) * (-3.0 + 4.0 * cos_2sm * cos_2sm)));
+                return Ok(b_axis * big_a * (sigma - delta_sigma));
+            }
+        }
+        Ok(self.authalic_radius() * great_circle(a, b))
+    }
+
+    /// The radius of the sphere with the ellipsoid's surface area.
+    pub fn authalic_radius(self) -> f64 {
+        let f = 1.0 / self.inv_f;
+        let e2 = f * (2.0 - f);
+        let e = e2.sqrt();
+        let b = self.a * (1.0 - f);
+        if e == 0.0 {
+            return self.a;
+        }
+        let area_term = 1.0 + (1.0 - e2) / (2.0 * e) * ((1.0 + e) / (1.0 - e)).ln();
+        (self.a * self.a / 2.0 * area_term).sqrt().max(b)
+    }
+}
+
+/// The central angle (radians) between two longitude/latitude points on a sphere (haversine).
+fn great_circle(a: Coord, b: Coord) -> f64 {
+    let (p1, p2) = (a.y.to_radians(), b.y.to_radians());
+    let h = ((p2 - p1) / 2.0).sin().powi(2) + p1.cos() * p2.cos() * ((b.x - a.x).to_radians() / 2.0).sin().powi(2);
+    2.0 * h.sqrt().clamp(0.0, 1.0).asin()
+}
 
 /// A coordinate reference system, by its EPSG code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -128,6 +197,19 @@ impl Crs {
                 format!("{} / UTM zone {zone}{}", if datum == Datum::Wgs84 { "WGS 84" } else { "SIRGAS 2000" }, if south { 'S' } else { 'N' })
             }
         }
+    }
+
+    /// The ellipsoid of the CRS's datum (Web Mercator: WGS 84).
+    pub fn ellipsoid(self) -> Ellipsoid {
+        match self.kind() {
+            Kind::Geographic { datum } | Kind::Utm { datum, .. } => datum.ellipsoid(),
+            Kind::WebMercator => WGS84,
+        }
+    }
+
+    /// The geodesic distance in metres between two points in this CRS, on its ellipsoid.
+    pub fn distance(self, a: Coord, b: Coord) -> Result<f64> {
+        self.ellipsoid().distance(self.to_geographic(a)?, self.to_geographic(b)?)
     }
 
     pub fn is_geographic(self) -> bool {
@@ -358,6 +440,38 @@ mod tests {
 
     fn close(a: f64, b: f64, tol: f64) -> bool {
         (a - b).abs() <= tol
+    }
+
+    #[test]
+    fn geodesic_distances_match_reference_values() {
+        // Vincenty's 1975 example as published by Geoscience Australia: Flinders Peak to
+        // Buninyong on GRS 80, 54 972.271 m.
+        let dms = |d: f64, m: f64, s: f64| -(d + m / 60.0 + s / 3600.0);
+        let flinders = Coord::new(-dms(144.0, 25.0, 29.524_40), dms(37.0, 57.0, 3.720_30));
+        let buninyong = Coord::new(-dms(143.0, 55.0, 35.383_90), dms(37.0, 39.0, 10.156_10));
+        assert!(close(GRS80.distance(flinders, buninyong).unwrap(), 54_972.271, 1e-3));
+        // One degree along the equator is a·π/180.
+        let d = WGS84.distance(Coord::new(0.0, 0.0), Coord::new(1.0, 0.0)).unwrap();
+        assert!(close(d, 6_378_137.0 * PI / 180.0, 1e-6));
+        // Pole to pole along a meridian is twice the quarter meridian, 10 001 965.729 m on WGS 84
+        // (the meridian arc, as integrated in the UTM tests).
+        let d = WGS84.distance(Coord::new(0.0, -90.0), Coord::new(0.0, 90.0)).unwrap();
+        assert!(close(d, 2.0 * 10_001_965.729_3, 1e-3), "{d}");
+        assert_eq!(WGS84.distance(Coord::new(10.0, 20.0), Coord::new(10.0, 20.0)).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn geodesics_never_fail_on_hostile_points() {
+        // Nearly antipodal: Vincenty doesn't converge; the spherical fallback is within 0.5 %.
+        let d = WGS84.distance(Coord::new(0.0, 0.0), Coord::new(179.7, 0.5)).unwrap();
+        assert!(d.is_finite() && (d / 20_003_931.0 - 1.0).abs() < 0.005, "{d}");
+        assert!(WGS84.distance(Coord::new(f64::NAN, 0.0), Coord::new(0.0, 0.0)).is_err());
+        assert!(WGS84.distance(Coord::new(0.0, 91.0), Coord::new(0.0, 0.0)).is_err());
+        // In a projected CRS, distances go through longitude/latitude.
+        let utm = Crs::from_epsg(31983).unwrap();
+        let (a, b) = (Coord::new(333_000.0, 7_395_000.0), Coord::new(334_000.0, 7_395_000.0));
+        let d = utm.distance(a, b).unwrap();
+        assert!((d - 1000.0).abs() < 1.5, "grid and geodesic agree near the central meridian within the scale factor: {d}");
     }
 
     #[test]

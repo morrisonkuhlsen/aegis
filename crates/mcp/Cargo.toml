@@ -1,0 +1,13 @@
+[package]
+name = "mkaegis-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "mkaeGIS Model Context Protocol server (stdio)"
+
+[lints]
+workspace = true
+
+[dependencies]
+mkaegis-engine = { workspace = true }
+serde_json = { workspace = true }

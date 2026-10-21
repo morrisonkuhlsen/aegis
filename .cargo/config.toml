@@ -1,0 +1,3 @@
+[alias]
+# The project's tasks: `cargo xtask ci` runs every quality gate.
+xtask = "run --quiet --package xtask --"

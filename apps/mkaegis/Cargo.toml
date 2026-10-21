@@ -1,0 +1,19 @@
+[package]
+name = "mkaegis"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "mkaeGIS desktop app"
+
+[lints]
+workspace = true
+
+[dependencies]
+mkaegis-engine = { workspace = true }
+mkaegis-ui-egui = { workspace = true }
+egui = { workspace = true }
+eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11"] }
+rfd = { workspace = true }
+log = { workspace = true }
+serde_json = { workspace = true }

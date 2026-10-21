@@ -1,0 +1,60 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/*", "xtask"]
+default-members = ["crates/*", "apps/mkaegis", "apps/mkaegis-cli", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.90"
+
+[workspace.dependencies]
+# internal
+mkaegis-core = { path = "crates/core" }
+mkaegis-geom = { path = "crates/geom" }
+mkaegis-crs = { path = "crates/crs" }
+mkaegis-model = { path = "crates/model" }
+mkaegis-geojson = { path = "crates/geojson" }
+mkaegis-shp = { path = "crates/shp" }
+mkaegis-render = { path = "crates/render" }
+mkaegis-analysis = { path = "crates/analysis" }
+mkaegis-engine = { path = "crates/engine" }
+mkaegis-ui-egui = { path = "crates/ui-egui" }
+mkaegis-mcp = { path = "crates/mcp" }
+
+# foundation
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+# preserve_order: GeoJSON properties keep their order as fields.
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
+log = "0.4"
+# PNG encoding for map exports and offscreen snapshots. MIT/Apache, pure Rust.
+png = "0.18"
+
+# ui
+egui = "0.36"
+eframe = { version = "0.36", default-features = false }
+egui_kittest = "0.36"
+rfd = "0.17"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+debug = 0

@@ -1,0 +1,14 @@
+[package]
+name = "mkaegis-crs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "mkaeGIS L0: coordinate reference systems and map projections"
+
+[lints]
+workspace = true
+
+[dependencies]
+mkaegis-core = { workspace = true }
+mkaegis-geom = { workspace = true }
+serde = { workspace = true }

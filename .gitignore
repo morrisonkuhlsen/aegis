@@ -1,0 +1,7 @@
+*~
+plan/
+/target
+/dist
+/corpus
+.DS_Store
+/.claude/

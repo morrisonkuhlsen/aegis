@@ -1,0 +1,15 @@
+[package]
+name = "mkaegis-shp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "mkaeGIS L2: Esri Shapefile (.shp/.shx/.dbf/.prj) reader and writer, from the public technical description"
+
+[lints]
+workspace = true
+
+[dependencies]
+mkaegis-core = { workspace = true }
+mkaegis-geom = { workspace = true }
+mkaegis-crs = { workspace = true }
+mkaegis-model = { workspace = true }

@@ -1,0 +1,16 @@
+[package]
+name = "mkaegis-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "mkaeGIS L2: viewport, display list and software rasteriser"
+
+[lints]
+workspace = true
+
+[dependencies]
+mkaegis-core = { workspace = true }
+mkaegis-geom = { workspace = true }
+mkaegis-crs = { workspace = true }
+mkaegis-model = { workspace = true }
+png = { workspace = true }

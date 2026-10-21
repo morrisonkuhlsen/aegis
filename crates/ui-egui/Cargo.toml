@@ -1,0 +1,24 @@
+[package]
+name = "mkaegis-ui-egui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "mkaeGIS egui frontend; swappable, nothing below depends on it"
+
+[lints]
+workspace = true
+
+[dependencies]
+mkaegis-core = { workspace = true }
+mkaegis-geom = { workspace = true }
+mkaegis-crs = { workspace = true }
+mkaegis-model = { workspace = true }
+mkaegis-render = { workspace = true }
+mkaegis-engine = { workspace = true }
+egui = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+png = { workspace = true }
+
+[dev-dependencies]
+egui_kittest = { workspace = true, features = ["wgpu", "snapshot"] }

@@ -1,0 +1,11 @@
+# Names people chose for themselves, shown in About ▸ Contributors.
+#
+# Add only your own entry, in your own PR, committed as you. Everyone else is credited by their
+# GitHub username without an entry here. Never add, edit or guess anyone else's name.
+#
+# Template (copy, uncomment, fill in):
+#
+# [people.your-github-username]
+# real_name = "Your Name"          # optional
+# display_name = "How you'd like to appear"   # optional
+# sync_github_name = false         # true: use your public GitHub profile name

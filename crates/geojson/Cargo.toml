@@ -1,0 +1,16 @@
+[package]
+name = "mkaegis-geojson"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "mkaeGIS L2: GeoJSON (RFC 7946) reader and writer"
+
+[lints]
+workspace = true
+
+[dependencies]
+mkaegis-core = { workspace = true }
+mkaegis-geom = { workspace = true }
+mkaegis-crs = { workspace = true }
+mkaegis-model = { workspace = true }
+serde_json = { workspace = true }

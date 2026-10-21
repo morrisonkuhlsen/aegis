@@ -1,0 +1,13 @@
+[package]
+name = "mkaegis-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "mkaeGIS L0: errors, attribute values, colours"
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true }

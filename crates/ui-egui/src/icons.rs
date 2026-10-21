@@ -41,6 +41,10 @@ pub enum Icon {
     History,
     /// Spatial weights: features joined to their neighbours.
     Weights,
+    /// The File backstage's Home.
+    House,
+    Info,
+    Close,
 }
 
 /// Paints `icon` in `rect` with `color` (the accent marks the icon's key part).
@@ -142,6 +146,20 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32, accent: Color3
             for (x, y) in [(0.35, 0.52), (0.5, 0.52), (0.65, 0.52), (0.35, 0.72), (0.5, 0.72), (0.65, 0.72)] {
                 p.circle_filled(at(x, y), 0.04 * s, color);
             }
+        }
+        Icon::House => {
+            poly(&[(0.12, 0.48), (0.5, 0.15), (0.88, 0.48)], line, false);
+            poly(&[(0.22, 0.40), (0.22, 0.86), (0.78, 0.86), (0.78, 0.40)], line, false);
+            poly(&[(0.42, 0.86), (0.42, 0.62), (0.58, 0.62), (0.58, 0.86)], hi, false);
+        }
+        Icon::Info => {
+            ring(0.5, 0.5, 0.38, line);
+            poly(&[(0.5, 0.45), (0.5, 0.72)], hi, false);
+            p.circle_filled(at(0.5, 0.31), 0.045 * s, accent);
+        }
+        Icon::Close => {
+            poly(&[(0.22, 0.22), (0.78, 0.78)], line, false);
+            poly(&[(0.78, 0.22), (0.22, 0.78)], line, false);
         }
         Icon::Weights => {
             let nodes = [(0.22, 0.3), (0.72, 0.22), (0.5, 0.55), (0.2, 0.78), (0.8, 0.75)];

@@ -6,6 +6,7 @@
 //! attribute table below, and the status bar with scale and coordinates.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+mod backstage;
 mod contents;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod control;
@@ -24,6 +25,7 @@ use std::path::PathBuf;
 use mkaegis_engine::Session;
 use serde_json::{Value as Json, json};
 
+pub use backstage::Page as BackstagePage;
 pub use dialogs::{Dialog, Discard};
 pub use pane::{Pane, Tool as GpTool};
 pub use ribbon::Tab;
@@ -51,6 +53,8 @@ pub struct Services {
     pub open_file: Option<Box<dyn Fn(&str, &[&str]) -> Option<PathBuf>>>,
     /// Pick a file to save: (title, extensions, suggested name).
     pub save_file: Option<Box<dyn Fn(&str, &[&str], &str) -> Option<PathBuf>>>,
+    /// Keep the recent projects for later runs.
+    pub save_recent: Option<Box<dyn Fn(&[PathBuf])>>,
 }
 
 /// The whole window's state.
@@ -82,6 +86,10 @@ pub struct MapApp {
     pub search: Option<String>,
     /// Closing the window was confirmed (saved or discarded): the next close request goes through.
     pub close_confirmed: bool,
+    /// The File backstage's page while it is open.
+    pub backstage: Option<BackstagePage>,
+    /// Projects opened or saved, newest first (the backstage lists them).
+    pub recent: Vec<PathBuf>,
     view: mapview::State,
     themed: bool,
     title: String,
@@ -117,6 +125,8 @@ impl MapApp {
             show_contents: true,
             search: None,
             close_confirmed: false,
+            backstage: None,
+            recent: Vec::new(),
             view: mapview::State::default(),
             themed: false,
             title: String::new(),
@@ -142,6 +152,11 @@ impl MapApp {
                 }
                 self.fix_active();
                 self.autosave_after(id);
+                if matches!(id, "project.open" | "project.save" | "project.saveAs")
+                    && let Some(path) = self.session.path.clone()
+                {
+                    self.remember(path);
+                }
                 Some(v)
             }
             Err(e) => {
@@ -289,7 +304,115 @@ impl MapApp {
             Discard::New => {
                 self.run("project.new", json!({}));
             }
+            Discard::Sample => {
+                if self.run("project.new", json!({})).is_some() {
+                    self.run("map.addSample", json!({}));
+                    // The sample is where the map starts: nothing to save yet.
+                    self.session.modified = false;
+                }
+            }
             Discard::Open => self.pick_project(),
+            Discard::OpenFile(path) => {
+                self.run("project.open", json!({ "path": path.display().to_string() }));
+            }
+        }
+    }
+
+    /// Puts `path` first among the recent projects and keeps the list for later runs.
+    pub fn remember(&mut self, path: PathBuf) {
+        self.recent.retain(|p| *p != path);
+        self.recent.insert(0, path);
+        self.recent.truncate(backstage::RECENT);
+        if let Some(save) = &self.services.save_recent {
+            save(&self.recent);
+        }
+    }
+
+    /// Opens the File backstage on its Home page.
+    pub fn open_backstage(&mut self) {
+        self.backstage = Some(BackstagePage::Home);
+    }
+
+    /// Does what the backstage asked for. What replaces the map leaves the backstage first, so
+    /// the Unsaved Changes question, if any, shows over the map it is about.
+    fn backstage_act(&mut self, action: backstage::Action, ctx: &egui::Context) {
+        use backstage::Action as A;
+        match action {
+            A::Back => self.backstage = None,
+            A::Page(page) => self.backstage = Some(page),
+            A::Blank => {
+                self.backstage = None;
+                self.discard_or_ask(Discard::New);
+            }
+            A::Sample => {
+                self.backstage = None;
+                self.discard_or_ask(Discard::Sample);
+            }
+            A::Open(path) => {
+                self.backstage = None;
+                self.discard_or_ask(Discard::OpenFile(path));
+            }
+            A::Browse => {
+                self.backstage = None;
+                self.open_project();
+            }
+            A::AddData => {
+                self.backstage = None;
+                self.add_data();
+            }
+            A::Save => {
+                self.save_project(false);
+                if !self.session.modified {
+                    self.backstage = None;
+                }
+            }
+            A::SaveAs => {
+                self.backstage = None;
+                self.save_project(true);
+            }
+            A::ExportMap => {
+                self.backstage = None;
+                self.invoke("share.exportMap");
+            }
+            A::ExportFeatures => {
+                self.backstage = None;
+                self.invoke("layer.export");
+            }
+            A::Close => {
+                self.backstage = None;
+                self.discard_or_ask(Discard::New);
+            }
+            A::About => {
+                self.backstage = None;
+                self.dialog = Some(Dialog::About);
+            }
+            A::Exit => {
+                self.backstage = None;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
+    }
+
+    /// The File backstage over the window under its title row.
+    fn show_backstage(&mut self, ui: &mut egui::Ui, page: BackstagePage) {
+        let map = &self.session.map;
+        let name = self.session.path.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().into_owned());
+        let active = self.active.and_then(|id| map.layers.iter().find(|l| l.id == id)).map(|l| l.name.clone());
+        let view = backstage::View {
+            page,
+            recent: &self.recent,
+            file_name: name.as_deref(),
+            file_path: self.session.path.as_deref(),
+            modified: self.session.modified,
+            layers: map.layers.len(),
+            features: map.layers.iter().map(|l| l.data.features.len()).sum(),
+            crs: map.crs.name(),
+            weights: map.weights.len(),
+            active_layer: active.as_deref(),
+        };
+        if let Some(action) = backstage::show(ui, &view) {
+            let ctx = ui.ctx().clone();
+            self.backstage_act(action, &ctx);
         }
     }
 
@@ -431,6 +554,15 @@ impl MapApp {
         }
         let line = egui::Stroke::new(1.0, t.border);
 
+        if let Some(page) = self.backstage {
+            // The File backstage: the title row, then the backstage over everything else, on the
+            // window's colour to its very edges.
+            ui.painter().with_clip_rect(ctx.content_rect()).rect_filled(ctx.content_rect(), 0.0, t.window);
+            egui::Panel::top("ribbon").frame(egui::Frame::new().fill(t.ribbon).stroke(line)).show(ui, |ui| ribbon::title_row(self, ui));
+            egui::CentralPanel::no_frame().show(ui, |ui| self.show_backstage(ui, page));
+            dialogs::show(self, &ctx);
+            return;
+        }
         egui::Panel::top("ribbon").frame(egui::Frame::new().fill(t.ribbon).stroke(line)).show(ui, |ui| ribbon::show(self, ui));
         egui::Panel::bottom("status")
             .exact_size(STATUS_HEIGHT)
@@ -874,6 +1006,59 @@ mod tests {
         assert!(s.map.layer("Rios").is_err(), "Ctrl+Z in a text box is the text box's undo");
         assert_eq!(s.map.layer("Cidades").map(|l| l.data.features.len()).ok(), Some(cidades.1), "Delete edits the text");
         assert!(matches!(harness.state().dialog, Some(Dialog::Rename { .. })), "Ctrl+N doesn't start a new map");
+    }
+
+    #[test]
+    fn file_opens_the_backstage_and_esc_closes_it() {
+        let mut harness = harness(MapApp::new(Session::sample()));
+        harness.get_by_label("File").click();
+        harness.run_steps(2);
+        assert_eq!(harness.state().backstage, Some(BackstagePage::Home));
+        harness.get_by_label("Info").click();
+        harness.run_steps(2);
+        assert_eq!(harness.state().backstage, Some(BackstagePage::Info));
+        harness.key_press(egui::Key::Escape);
+        harness.run_steps(2);
+        assert_eq!(harness.state().backstage, None);
+    }
+
+    #[test]
+    fn the_sample_map_card_asks_before_discarding_changes() {
+        let mut app = MapApp::new(Session::sample());
+        app.run("layer.rename", json!({ "layer": "Cidades", "name": "Towns" }));
+        app.backstage = Some(BackstagePage::New);
+        let mut harness = harness(app);
+        harness.get_by_label("Sample map").click();
+        harness.run_steps(2);
+        assert_eq!(harness.state().dialog, Some(Dialog::UnsavedChanges { then: Discard::Sample }));
+        assert!(harness.state().session.map.layer("Towns").is_ok(), "nothing discarded before the answer");
+        harness.get_by_label("Don't Save").click();
+        harness.run_steps(2);
+        let s = &harness.state().session;
+        assert!(s.map.layer("Cidades").is_ok() && !s.modified, "a fresh sample map, nothing to save");
+    }
+
+    #[test]
+    fn saved_projects_are_recent_and_open_from_the_backstage() {
+        let dir = std::env::temp_dir().join(format!("mkaegis-recent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("islands.aegis");
+        let kept = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let mut app = MapApp::new(Session::sample());
+        let sink = kept.clone();
+        app.services.save_recent = Some(Box::new(move |files: &[std::path::PathBuf]| *sink.borrow_mut() = files.to_vec()));
+        app.run("project.saveAs", json!({ "path": path.display().to_string() }));
+        assert_eq!(app.recent, vec![path.clone()]);
+        assert_eq!(*kept.borrow(), vec![path.clone()], "kept for later runs");
+        app.run("project.new", json!({}));
+        app.backstage = Some(BackstagePage::Home);
+        let mut harness = harness(app);
+        harness.get_by_label("islands.aegis").click();
+        harness.run_steps(2);
+        assert_eq!(harness.state().backstage, None);
+        assert_eq!(harness.state().session.path.as_deref(), Some(path.as_path()));
+        assert!(harness.state().session.map.layer("Cidades").is_ok());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     fn harness(app: MapApp) -> egui_kittest::Harness<'static, MapApp> {

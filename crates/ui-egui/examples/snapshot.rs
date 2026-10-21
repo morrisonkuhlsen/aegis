@@ -4,7 +4,7 @@
 //! `cargo run -p mkaegis-ui-egui --example snapshot -- [--sample] [--in file.geojson|.shp|.aegis]
 //!  [--cmd 'id={json}']... [--tab map|analysis|statistics|edit|view|share] [--pane geoprocessing|symbology|history]
 //!  [--tool buffer|project|calculate|attributes|location|statistics|weights] [--table] [--select] [--dark]
-//!  [--splash] [--icon] [--size 1280x800] out.png`
+//!  [--splash] [--icon] [--backstage home|new|open|info|export] [--size 1280x800] out.png`
 
 use mkaegis_engine::Session;
 use mkaegis_ui_egui::{MapApp, Pane, Tab, Tool};
@@ -17,6 +17,7 @@ fn main() -> Result<(), String> {
     let mut out = "snapshot.png".to_string();
     let (mut tab, mut pane, mut table, mut dark, mut select, mut gp) = (Tab::Map, None, false, false, false, None);
     let mut splash = false;
+    let mut backstage = None;
     let mut icon = false;
     let mut cmds = Vec::new();
     let mut i = 0;
@@ -55,6 +56,15 @@ fn main() -> Result<(), String> {
             "--select" => select = true,
             "--dark" => dark = true,
             "--splash" => splash = true,
+            "--backstage" => {
+                backstage = Some(match value()?.to_ascii_lowercase().as_str() {
+                    "new" => mkaegis_ui_egui::BackstagePage::New,
+                    "open" => mkaegis_ui_egui::BackstagePage::Open,
+                    "info" => mkaegis_ui_egui::BackstagePage::Info,
+                    "export" => mkaegis_ui_egui::BackstagePage::Export,
+                    _ => mkaegis_ui_egui::BackstagePage::Home,
+                })
+            }
             "--icon" => icon = true,
             "--size" => {
                 let v = value()?;
@@ -72,6 +82,7 @@ fn main() -> Result<(), String> {
     }
     let mut app = MapApp::new(session);
     app.tab = tab;
+    app.backstage = backstage;
     app.pane = pane;
     app.show_table = table;
     if select {

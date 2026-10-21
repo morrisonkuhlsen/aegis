@@ -110,7 +110,7 @@ pub const EXPORT_MAP: CommandSpec = CommandSpec {
             if (1.0..=16_384.0).contains(&v) { Ok(v as u32) } else { Err(Error::param(k, "1 to 16384 pixels")) }
         };
         let png = mkaegis_render::export_png(&s.map, dim("width", 1600.0)?, dim("height", 1000.0)?, s.map.extent)?;
-        std::fs::write(&file, png)?;
+        crate::io::write_atomic(&file, &png)?;
         Ok(json!({ "message": format!("map exported to {}", file.display()) }))
     },
 };

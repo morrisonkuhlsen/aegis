@@ -161,7 +161,7 @@ pub const EXPORT_WEIGHTS: CommandSpec = CommandSpec {
             "gwt" => mkaegis_stats::gal::write_gwt(&w.neighbours, &ids, &layer.name, &id_field),
             other => return Err(Error::param("path", format!("`.{other}`: weights are written as .gal or .gwt"))),
         };
-        std::fs::write(&file, text)?;
+        crate::io::write_atomic(&file, text.as_bytes())?;
         Ok(json!({ "message": format!("weights `{}` written to {}", w.name, file.display()) }))
     },
 };

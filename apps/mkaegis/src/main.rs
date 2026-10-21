@@ -5,6 +5,7 @@
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+use eframe::egui_wgpu::{WgpuConfiguration, WgpuSetup, wgpu};
 use mkaegis_engine::Session;
 use mkaegis_ui_egui::{MapApp, Services};
 use serde_json::json;
@@ -36,8 +37,28 @@ fn services() -> Services {
     }
 }
 
+/// The graphics backends to try, best first; `None` is wgpu's own choice. On Windows that choice
+/// is Vulkan, and some Intel Vulkan drivers crash the app at start (igvk64.dll, #82), so it is
+/// DirectX 12, then OpenGL. `WGPU_BACKEND` overrides it everywhere.
+fn backends() -> Vec<Option<wgpu::Backends>> {
+    if cfg!(target_os = "windows") && wgpu::Backends::from_env().is_none() {
+        vec![Some(wgpu::Backends::DX12), Some(wgpu::Backends::GL)]
+    } else {
+        vec![None]
+    }
+}
+
+/// A window on the given graphics backends.
+fn options(viewport: egui::ViewportBuilder, backends: Option<wgpu::Backends>) -> eframe::NativeOptions {
+    let mut wgpu_options = WgpuConfiguration::default();
+    if let (Some(backends), WgpuSetup::CreateNew(setup)) = (backends, &mut wgpu_options.wgpu_setup) {
+        setup.instance_descriptor.backends = backends;
+    }
+    eframe::NativeOptions { viewport, wgpu_options, ..Default::default() }
+}
+
 /// The splash screen in a small window of its own, centred and undecorated, until it closes.
-fn splash() -> eframe::Result {
+fn splash(backends: Option<wgpu::Backends>) -> eframe::Result {
     let viewport = egui::ViewportBuilder::default()
         .with_title("MK aeGIS")
         .with_app_id("mkaegis")
@@ -45,7 +66,7 @@ fn splash() -> eframe::Result {
         .with_decorations(false)
         .with_resizable(false)
         .with_taskbar(false);
-    let options = eframe::NativeOptions { viewport, centered: true, ..Default::default() };
+    let options = eframe::NativeOptions { centered: true, ..options(viewport, backends) };
     eframe::run_native("MK aeGIS splash", options, Box::new(|_cc| Ok(Box::new(SplashWindow(Default::default())))))
 }
 
@@ -72,10 +93,12 @@ fn main() -> eframe::Result {
             }
         }
     }
-    if show_splash {
-        // Without its splash the program still starts.
-        let _ = splash();
-    }
+    // The splash also finds a graphics backend that starts, for the main window to use; without
+    // its splash (--no-splash, or any other error) the program still starts, on the first one.
+    let candidates = backends();
+    let first = candidates.first().copied().flatten();
+    let backends =
+        if show_splash { candidates.iter().copied().find(|b| !matches!(splash(*b), Err(eframe::Error::Wgpu(_)))).unwrap_or(first) } else { first };
     let mut app = MapApp::new(session);
     app.services = services();
     if let Some(p) = problems.first() {
@@ -93,6 +116,5 @@ fn main() -> eframe::Result {
         .with_app_id("mkaegis")
         .with_inner_size([1360.0, 860.0])
         .with_min_inner_size([800.0, 520.0]);
-    let options = eframe::NativeOptions { viewport, ..Default::default() };
-    eframe::run_native("MK aeGIS", options, Box::new(|_cc| Ok(Box::new(App(app)))))
+    eframe::run_native("MK aeGIS", options(viewport, backends), Box::new(|_cc| Ok(Box::new(App(app)))))
 }

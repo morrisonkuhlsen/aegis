@@ -10,6 +10,8 @@
 //! - `wasm`: the engine and the UI still build for WebAssembly.
 //! - `parity [--check]`: regenerates `docs/parity-checklist.md` from the command registry, or
 //!   (`--check`, part of `ci`) fails when it is stale.
+//! - `stats`: the headline numbers for `ROADMAP.md`: Rust files, lines and tests per crate, and
+//!   the commands in the registry.
 //! - `version [set X.Y.Z[-pre]]`: prints the workspace version, or sets it in the root
 //!   `Cargo.toml` and refreshes the workspace's entries in `Cargo.lock`.
 //! - `contributors [--check]`: regenerates `contributors/contributors.json` from the commits:
@@ -327,6 +329,66 @@ fn workspace_version_line(manifest: &str) -> Result<(usize, &str), String> {
     Err("no version in [workspace.package] of the root Cargo.toml".to_string())
 }
 
+/// `cargo xtask stats`: Rust files, lines and tests per crate, as a Markdown table, then the
+/// command count. A test is a `#[test]` attribute.
+fn stats() -> Result<(), String> {
+    let root = root();
+    let mut rows: Vec<(String, Counts)> = Vec::new();
+    for group in ["crates", "apps"] {
+        let entries = std::fs::read_dir(root.join(group)).map_err(|e| format!("{group}: {e}"))?;
+        for entry in entries.flatten().filter(|e| e.path().join("Cargo.toml").exists()) {
+            let (name, _) = manifest(&entry.path().join("Cargo.toml"))?;
+            rows.push((name, count_rust(&entry.path())));
+        }
+    }
+    rows.push(("xtask".to_string(), count_rust(&root.join("xtask"))));
+    rows.sort_by(|a, b| layer(&a.0).unwrap_or(u8::MAX).cmp(&layer(&b.0).unwrap_or(u8::MAX)).then(a.0.cmp(&b.0)));
+    let total =
+        rows.iter().fold(Counts::default(), |t, (_, c)| Counts { files: t.files + c.files, lines: t.lines + c.lines, tests: t.tests + c.tests });
+    rows.push(("**total**".to_string(), total));
+    let w = rows.iter().map(|(n, _)| n.chars().count()).max().unwrap_or(0).max("Crate".len());
+    println!("| {:<w$} | Files |  Lines | Tests |", "Crate");
+    println!("|{}|-------|--------|-------|", "-".repeat(w + 2));
+    for (name, c) in &rows {
+        println!("| {name:<w$} | {:>5} | {:>6} | {:>5} |", c.files, c.lines, c.tests);
+    }
+    println!("\n{} commands.", mkaegis_engine::Session::commands().len());
+    Ok(())
+}
+
+/// Rust files, lines and tests under one crate.
+#[derive(Clone, Copy, Default)]
+struct Counts {
+    files: usize,
+    lines: usize,
+    tests: usize,
+}
+
+/// Counts the `.rs` files under a crate's folder, iteratively, skipping build output.
+fn count_rust(dir: &Path) -> Counts {
+    let mut counts = Counts::default();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            if path.is_dir() {
+                if name != "target" && !name.starts_with('.') {
+                    stack.push(path);
+                }
+            } else if name.ends_with(".rs")
+                && let Ok(source) = std::fs::read_to_string(&path)
+            {
+                counts.files += 1;
+                counts.lines += source.lines().count();
+                counts.tests += source.lines().filter(|l| l.trim_start().starts_with("#[test]")).count();
+            }
+        }
+    }
+    counts
+}
+
 fn ci() -> Result<(), String> {
     let steps: [(&str, Task); 8] = [
         ("fmt", || cargo(&["fmt", "--all", "--check"])),
@@ -358,17 +420,20 @@ fn list(names: &[&str]) -> String {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let check = args.iter().any(|a| a == "--check");
-    let result = match args.first().map(String::as_str).unwrap_or_default() {
-        "ci" => ci(),
-        "layers" => layers(),
-        "assets" => assets(),
-        "panics" => panics(),
-        "wasm" => wasm(),
-        "parity" => parity(check),
-        "contributors" => contributors(check),
-        "version" => version(args.get(1..).unwrap_or_default()),
-        _ => Err("usage: cargo xtask <ci|layers|assets|panics|wasm|parity [--check]|contributors [--check]|version [set X.Y.Z[-pre]]>".to_string()),
-    };
+    let result =
+        match args.first().map(String::as_str).unwrap_or_default() {
+            "ci" => ci(),
+            "layers" => layers(),
+            "assets" => assets(),
+            "panics" => panics(),
+            "wasm" => wasm(),
+            "parity" => parity(check),
+            "contributors" => contributors(check),
+            "stats" => stats(),
+            "version" => version(args.get(1..).unwrap_or_default()),
+            _ => Err("usage: cargo xtask <ci|layers|assets|panics|wasm|parity [--check]|contributors [--check]|stats|version [set X.Y.Z[-pre]]>"
+                .to_string()),
+        };
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

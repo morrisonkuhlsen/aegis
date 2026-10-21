@@ -38,6 +38,7 @@
   <a href="#quick-start">Quick start</a> ·
   <a href="#for-agents-mcp-cli-and-the-control-channel">For agents</a> ·
   <a href="#architecture">Architecture</a> ·
+  <a href="#contributing">Contributing</a> ·
   <a href="#license-and-credits">License and credits</a>
 </p>
 
@@ -153,8 +154,8 @@ mkaegis-cli run --sample --cmd 'management.project={"layer":"Cidades","epsg":319
 ```
 
 The desktop app's control channel takes JSON lines on `127.0.0.1:PORT`:
-`engine.execute` runs any command, and `ui.screenshot` / `ui.render` return images (methods in
-`crates/ui-egui/src/control.rs`). The generated command list is in
+`engine.execute` runs any command, and `ui.screenshot` / `ui.render` return images (every method in
+[`docs/control-protocol.md`](docs/control-protocol.md)). The generated command list is in
 [`docs/parity-checklist.md`](docs/parity-checklist.md).
 
 ## Architecture
@@ -172,9 +173,17 @@ frontend is a separate crate, so the UI can be swapped without touching the engi
 | L5    | `ui-egui` (desktop UI, control channel) · `mcp` (MCP server)                                  |
 | L6    | `apps/mkaegis`, `apps/mkaegis-cli`                                                            |
 
-- **Contributor and agent rules** (clean-room, asset policy, never-crash, quality gates): [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md)
+More in [`docs/architecture.md`](docs/architecture.md); the dependencies allowed, and why, in
+[`docs/adr/0001-libraries.md`](docs/adr/0001-libraries.md).
+
+## Contributing
+
+- **Start here:** [`CONTRIBUTING.md`](CONTRIBUTING.md); the full rules for people and agents
+  (clean-room, asset policy, never-crash, quality gates) are in [`AGENTS.md`](AGENTS.md)
+- **Where things stand:** [`ROADMAP.md`](ROADMAP.md); what to work on, ranked: [`docs/gaps.md`](docs/gaps.md)
+- **Issues:** bugs and feature requests on GitHub, with `priority:` labels; security problems
+  privately, as [`SECURITY.md`](SECURITY.md) says
 - **Bundled assets:** each one is listed with its licence in [`ATTRIBUTION.md`](ATTRIBUTION.md)
-- **Issues:** bugs and feature requests on GitHub, with `priority:` labels
 
 ## License and credits
 
@@ -186,4 +195,5 @@ contains no third-party iconography, styles, basemaps or data. The Morrison Küh
 
 A Morrison Kühlsen project.
 
-Contributors are listed in **About MK aeGIS**, generated from the git history.
+Contributors are listed in **About MK aeGIS**, generated from the git history
+([`docs/contributors.md`](docs/contributors.md)).

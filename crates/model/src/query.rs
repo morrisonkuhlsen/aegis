@@ -7,7 +7,9 @@ use mkaegis_core::{Error, Result, Value};
 
 use crate::FeatureClass;
 
-/// How deep parentheses and `NOT`s may nest.
+/// How deep parentheses, `NOT`, unary minus and functions may nest. Chains of `AND`, `OR` and
+/// `+ - * /` are built flat and evaluated in a loop, so their length adds no depth: the tree's
+/// height, and with it the recursion in `eval` and in dropping the tree, stays bounded by this.
 const MAX_DEPTH: usize = 64;
 /// The longest clause we parse.
 const MAX_LEN: usize = 64 * 1024;
@@ -24,10 +26,13 @@ enum Expr {
     Lit(Value),
     Neg(Box<Expr>),
     Not(Box<Expr>),
-    And(Box<Expr>, Box<Expr>),
-    Or(Box<Expr>, Box<Expr>),
+    /// `a AND b AND …`, flat.
+    And(Vec<Expr>),
+    /// `a OR b OR …`, flat.
+    Or(Vec<Expr>),
     Cmp(Box<Expr>, Op, Box<Expr>),
-    Arith(Box<Expr>, char, Box<Expr>),
+    /// `a + b - c …` or `a * b / c …`, left to right, flat.
+    Arith(Box<Expr>, Vec<(char, Expr)>),
     IsNull(Box<Expr>, bool),
     Like(Box<Expr>, Box<Expr>, bool),
     In(Box<Expr>, Vec<Expr>, bool),
@@ -235,19 +240,21 @@ impl Parser<'_> {
     }
 
     fn or(&mut self) -> Result<Expr> {
-        let mut left = self.and()?;
+        let first = self.and()?;
+        let mut terms = Vec::new();
         while self.keyword("OR") {
-            left = Expr::Or(Box::new(left), Box::new(self.and()?));
+            terms.push(self.and()?);
         }
-        Ok(left)
+        Ok(if terms.is_empty() { first } else { Expr::Or([vec![first], terms].concat()) })
     }
 
     fn and(&mut self) -> Result<Expr> {
-        let mut left = self.not()?;
+        let first = self.not()?;
+        let mut terms = Vec::new();
         while self.keyword("AND") {
-            left = Expr::And(Box::new(left), Box::new(self.not()?));
+            terms.push(self.not()?);
         }
-        Ok(left)
+        Ok(if terms.is_empty() { first } else { Expr::And([vec![first], terms].concat()) })
     }
 
     fn not(&mut self) -> Result<Expr> {
@@ -307,31 +314,35 @@ impl Parser<'_> {
     }
 
     fn sum(&mut self) -> Result<Expr> {
-        let mut left = self.term()?;
+        let first = self.term()?;
+        let mut rest = Vec::new();
         loop {
             let op = if self.sym("+") {
                 '+'
             } else if self.sym("-") {
                 '-'
             } else {
-                return Ok(left);
+                break;
             };
-            left = Expr::Arith(Box::new(left), op, Box::new(self.term()?));
+            rest.push((op, self.term()?));
         }
+        Ok(if rest.is_empty() { first } else { Expr::Arith(Box::new(first), rest) })
     }
 
     fn term(&mut self) -> Result<Expr> {
-        let mut left = self.unary()?;
+        let first = self.unary()?;
+        let mut rest = Vec::new();
         loop {
             let op = if self.sym("*") {
                 '*'
             } else if self.sym("/") {
                 '/'
             } else {
-                return Ok(left);
+                break;
             };
-            left = Expr::Arith(Box::new(left), op, Box::new(self.unary()?));
+            rest.push((op, self.unary()?));
         }
+        Ok(if rest.is_empty() { first } else { Expr::Arith(Box::new(first), rest) })
     }
 
     fn unary(&mut self) -> Result<Expr> {
@@ -440,8 +451,8 @@ fn eval(e: &Expr, fc: &FeatureClass, row: usize) -> Value {
         Expr::Lit(v) => v.clone(),
         Expr::Neg(x) => eval(x, fc, row).as_f64().map_or(Value::Null, |v| Value::Float(-v)),
         Expr::Not(x) => b(!truthy(&eval(x, fc, row))),
-        Expr::And(x, y) => b(truthy(&eval(x, fc, row)) && truthy(&eval(y, fc, row))),
-        Expr::Or(x, y) => b(truthy(&eval(x, fc, row)) || truthy(&eval(y, fc, row))),
+        Expr::And(terms) => b(terms.iter().all(|t| truthy(&eval(t, fc, row)))),
+        Expr::Or(terms) => b(terms.iter().any(|t| truthy(&eval(t, fc, row)))),
         Expr::Cmp(x, op, y) => {
             let Some(ord) = compare(&eval(x, fc, row), &eval(y, fc, row)) else { return b(false) };
             use std::cmp::Ordering::*;
@@ -454,16 +465,22 @@ fn eval(e: &Expr, fc: &FeatureClass, row: usize) -> Value {
                 Op::Ge => ord != Less,
             })
         }
-        Expr::Arith(x, op, y) => {
-            let (Some(p), Some(q)) = (eval(x, fc, row).as_f64(), eval(y, fc, row).as_f64()) else { return Value::Null };
-            let r = match op {
-                '+' => p + q,
-                '-' => p - q,
-                '*' => p * q,
-                _ if q == 0.0 => return Value::Null,
-                _ => p / q,
-            };
-            if r.is_finite() { Value::Float(r) } else { Value::Null }
+        Expr::Arith(first, rest) => {
+            let Some(mut p) = eval(first, fc, row).as_f64() else { return Value::Null };
+            for (op, y) in rest {
+                let Some(q) = eval(y, fc, row).as_f64() else { return Value::Null };
+                p = match op {
+                    '+' => p + q,
+                    '-' => p - q,
+                    '*' => p * q,
+                    _ if q == 0.0 => return Value::Null,
+                    _ => p / q,
+                };
+                if !p.is_finite() {
+                    return Value::Null;
+                }
+            }
+            Value::Float(p)
         }
         Expr::IsNull(x, negated) => b(eval(x, fc, row).is_null() != *negated),
         Expr::Like(x, pat, negated) => {
@@ -554,6 +571,36 @@ mod tests {
         assert!(Query::parse(&deep, &fc).is_err());
         let nots = format!("{} POP > 1", "NOT ".repeat(10_000));
         assert!(Query::parse(&nots, &fc).is_err());
+    }
+
+    /// Chains as long as `MAX_LEN` allows parse and evaluate without deep recursion (#43): they
+    /// used to build a left-nested tree whose evaluation and drop overflowed the stack.
+    #[test]
+    fn long_chains_stay_shallow() {
+        let fc = table();
+        let check_on_a_small_stack = |q: String, row: usize, want: bool| {
+            let fc = fc.clone();
+            std::thread::Builder::new()
+                .stack_size(256 * 1024)
+                .spawn(move || {
+                    let parsed = Query::parse(&q, &fc).unwrap();
+                    assert_eq!(parsed.matches(&fc, row), want, "{}…", q.get(..40).unwrap_or(&q));
+                })
+                .unwrap()
+                .join()
+                .unwrap();
+        };
+        // About 32,000 `1+`, 5,000 ORs and 5,000 ANDs: each under MAX_LEN.
+        check_on_a_small_stack(format!("{}1 = 32001", "1+".repeat(32_000)), 0, true);
+        check_on_a_small_stack(format!("{}POP > 1000000", "POP < 0 OR ".repeat(5_000)), 0, true);
+        check_on_a_small_stack(format!("{}POP > 1000000", "POP > 0 AND ".repeat(5_000)), 1, false);
+        check_on_a_small_stack(format!("{}POP > 0", "2*".repeat(1_000)), 1, true);
+        // Left to right, as before: 10 - 2 - 3 = 5, 12 / 3 * 2 = 8, 2 + 3 * 4 = 14.
+        let value = |q: &str| Query::parse(q, &fc).unwrap().evaluate(&fc, 0);
+        assert_eq!(value("10 - 2 - 3"), Value::Float(5.0));
+        assert_eq!(value("12 / 3 * 2"), Value::Float(8.0));
+        assert_eq!(value("2 + 3 * 4"), Value::Float(14.0));
+        assert_eq!(value("1 + POP / 0"), Value::Null);
     }
 
     #[test]

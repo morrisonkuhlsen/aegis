@@ -65,6 +65,9 @@ fn hostile_params_never_panic() {
         json!("POP"),
         json!("POP > 1000 OR NOME LIKE '%a%'"),
         json!("(((("),
+        // Chains as long as a clause may be: they once overflowed the stack (#43).
+        json!(format!("{}1 = 1", "1+".repeat(32_000))),
+        json!(format!("{}POP > 0", "POP > 0 OR ".repeat(5_000))),
         json!("x".repeat(100_000)),
         json!([]),
         json!([0, 1, 2]),

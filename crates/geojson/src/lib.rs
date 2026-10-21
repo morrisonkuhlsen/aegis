@@ -3,10 +3,10 @@
 //! Field types are inferred from the properties. Output is always WGS 84, as the RFC requires.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
-use mkaegis_core::{Error, Result, Value};
-use mkaegis_crs::Crs;
-use mkaegis_geom::{Coord, Geometry, GeometryType};
-use mkaegis_model::{FeatureClass, Field, FieldType};
+use aegis_core::{Error, Result, Value};
+use aegis_crs::Crs;
+use aegis_geom::{Coord, Geometry, GeometryType};
+use aegis_model::{FeatureClass, Field, FieldType};
 use serde_json::{Map as JsonMap, Value as Json, json};
 
 /// The largest GeoJSON text we read.
@@ -202,7 +202,7 @@ pub fn write(fc: &FeatureClass) -> Result<String> {
                 json!({"type": "MultiLineString", "coordinates": parts.iter().map(|p| list(p)).collect::<Result<Vec<_>>>()?})
             }
             Some(Geometry::Polygon(rings)) => {
-                let polys = mkaegis_geom::wkt::shells_with_holes(rings)
+                let polys = aegis_geom::wkt::shells_with_holes(rings)
                     .into_iter()
                     .map(|group| {
                         // RFC 7946: shells counter-clockwise, holes clockwise.
@@ -265,7 +265,7 @@ mod tests {
             [("name", FieldType::Text), ("n", FieldType::Double), ("x", FieldType::Double), ("ok", FieldType::Boolean), ("tags", FieldType::Text)]
         );
         assert_eq!(r.data.features[1].values[4], Value::Text("[1,2]".into()));
-        assert!((mkaegis_geom::algo::area(r.data.features[0].geometry.as_ref().unwrap()) - 99.0).abs() < 1e-12);
+        assert!((aegis_geom::algo::area(r.data.features[0].geometry.as_ref().unwrap()) - 99.0).abs() < 1e-12);
     }
 
     #[test]

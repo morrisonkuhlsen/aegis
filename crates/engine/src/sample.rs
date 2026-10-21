@@ -2,10 +2,10 @@
 //! fixed seed — islands (one with a lake), towns, roads and rivers, with Portuguese names that
 //! belong to no real place. No real-world data, nobody else's sample files.
 
-use mkaegis_core::{Result, Value};
-use mkaegis_crs::Crs;
-use mkaegis_geom::{Coord, Geometry, GeometryType, algo};
-use mkaegis_model::{FeatureClass, Field, FieldType, Labels, Map};
+use aegis_core::{Result, Value};
+use aegis_crs::Crs;
+use aegis_geom::{Coord, Geometry, GeometryType, algo};
+use aegis_model::{FeatureClass, Field, FieldType, Labels, Map};
 
 /// A small deterministic generator (64-bit LCG, top bits).
 struct Rng(u64);
@@ -196,7 +196,7 @@ pub fn add_to(map: &mut Map) -> Result<()> {
                 .collect();
             rivers.push(Some(Geometry::Polyline(vec![path])), vec![Value::Text((*name).into())])?;
         }
-        mkaegis_analysis::calculate_geometry(&mut rivers, "EXTENSAO_KM", mkaegis_analysis::Property::LengthKm)?;
+        aegis_analysis::calculate_geometry(&mut rivers, "EXTENSAO_KM", aegis_analysis::Property::LengthKm)?;
     }
 
     map.add_layer(islands);
@@ -204,7 +204,7 @@ pub fn add_to(map: &mut Map) -> Result<()> {
     map.add_layer(roads);
     let towns_id = map.add_layer(towns);
     if let Ok(layer) = map.layer_mut(&towns_id.to_string()) {
-        layer.labels = Some(Labels { field: "NOME".into(), color: mkaegis_core::Color::rgb(0x20, 0x20, 0x20), size: 9.0 });
+        layer.labels = Some(Labels { field: "NOME".into(), color: aegis_core::Color::rgb(0x20, 0x20, 0x20), size: 9.0 });
     }
     style(map);
     map.extent = map.full_extent().map(|e| e.scale(1.15));
@@ -213,8 +213,8 @@ pub fn add_to(map: &mut Map) -> Result<()> {
 
 /// The sample's symbology: sand islands, blue rivers, grey roads, dark towns.
 fn style(map: &mut Map) {
-    use mkaegis_core::Color;
-    use mkaegis_model::{Renderer, Symbol};
+    use aegis_core::Color;
+    use aegis_model::{Renderer, Symbol};
     for layer in &mut map.layers {
         let s = layer.renderer.base();
         layer.renderer = Renderer::Single(match layer.name.as_str() {

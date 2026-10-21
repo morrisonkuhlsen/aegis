@@ -10,7 +10,7 @@
 pub mod algo;
 pub mod wkt;
 
-use mkaegis_core::{Error, Result};
+use aegis_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 /// A position in the layer's coordinate system (x = easting or longitude, y = northing or latitude).

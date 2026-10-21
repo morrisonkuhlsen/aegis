@@ -1,13 +1,13 @@
 [package]
-name = "mkaegis-geom"
+name = "aegis-geom"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "mkaeGIS L0: planar geometry, envelopes, algorithms, WKT"
+description = "MK aeGIS L0: planar geometry, envelopes, algorithms, WKT"
 
 [lints]
 workspace = true
 
 [dependencies]
-mkaegis-core = { workspace = true }
+aegis-core = { workspace = true }
 serde = { workspace = true }

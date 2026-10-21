@@ -1,7 +1,7 @@
 //! dBASE III tables (`.dbf`): the attribute half of a shapefile.
 
-use mkaegis_core::{Error, Result, Value};
-use mkaegis_model::{Field, FieldType};
+use aegis_core::{Error, Result, Value};
+use aegis_model::{Field, FieldType};
 
 /// dBASE field names are at most 10 bytes.
 const NAME_LEN: usize = 10;

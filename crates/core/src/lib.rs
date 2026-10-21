@@ -1,4 +1,4 @@
-//! mkaeGIS's foundation (L0): the error type every crate returns, attribute values and colours.
+//! MK aeGIS's foundation (L0): the error type every crate returns, attribute values and colours.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 use std::fmt;
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// hostile files and parameters declare huge counts.
 pub const MAX_ITEMS: usize = 50_000_000;
 
-/// Every error mkaeGIS reports. Messages are for people: they say what went wrong and where.
+/// Every error MK aeGIS reports. Messages are for people: they say what went wrong and where.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum Error {
     #[error("invalid parameter `{name}`: {reason}")]

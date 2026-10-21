@@ -1,4 +1,4 @@
-//! mkaeGIS's egui frontend (L5), swappable: nothing below depends on it. Panels read the
+//! MK aeGIS's egui frontend (L5), swappable: nothing below depends on it. Panels read the
 //! session's state and act only through [`MapApp::run`], which executes engine commands.
 //!
 //! The window follows ArcGIS Pro's arrangement: the ribbon on top, the Contents pane on the
@@ -21,7 +21,7 @@ pub mod theme;
 
 use std::path::PathBuf;
 
-use mkaegis_engine::Session;
+use aegis_engine::Session;
 use serde_json::{Value as Json, json};
 
 pub use dialogs::{Dialog, Discard};
@@ -129,7 +129,7 @@ impl MapApp {
     pub fn run(&mut self, id: &str, params: Json) -> Option<Json> {
         match self.session.execute(id, &params) {
             Ok(v) => {
-                let label = mkaegis_engine::Session::command(id).map_or(id, |c| c.label);
+                let label = aegis_engine::Session::command(id).map_or(id, |c| c.label);
                 let msg = v.get("message").and_then(Json::as_str).map_or_else(|| label.to_string(), |m| format!("{label}: {m}"));
                 if let Some(warnings) = v.get("warnings").and_then(Json::as_array).filter(|w| !w.is_empty()) {
                     let w: Vec<&str> = warnings.iter().filter_map(Json::as_str).collect();
@@ -153,8 +153,7 @@ impl MapApp {
 
     /// With AutoSave on, an edit is written to the project file at once.
     fn autosave_after(&mut self, id: &str) {
-        let edit =
-            matches!(id, "edit.undo" | "edit.redo") || mkaegis_engine::Session::command(id).is_some_and(|c| c.kind == mkaegis_engine::Kind::Edit);
+        let edit = matches!(id, "edit.undo" | "edit.redo") || aegis_engine::Session::command(id).is_some_and(|c| c.kind == aegis_engine::Kind::Edit);
         if self.autosave
             && edit
             && self.session.path.is_some()
@@ -247,7 +246,7 @@ impl MapApp {
         }
     }
 
-    pub fn active_layer(&self) -> Option<&mkaegis_model::Layer> {
+    pub fn active_layer(&self) -> Option<&aegis_model::Layer> {
         self.active.and_then(|a| self.session.map.layers.iter().find(|l| l.id == a))
     }
 
@@ -255,7 +254,7 @@ impl MapApp {
     pub fn add_data(&mut self) {
         match &self.services.open_file {
             Some(pick) => {
-                if let Some(path) = pick("Add Data", &mkaegis_engine::io::DATA_EXTENSIONS) {
+                if let Some(path) = pick("Add Data", &aegis_engine::io::DATA_EXTENSIONS) {
                     self.run("map.addData", json!({ "path": path.display().to_string() }));
                 }
             }
@@ -302,7 +301,7 @@ impl MapApp {
     fn pick_project(&mut self) {
         match &self.services.open_file {
             Some(pick) => {
-                if let Some(path) = pick("Open Project", &[mkaegis_engine::io::PROJECT_EXTENSION]) {
+                if let Some(path) = pick("Open Project", &[aegis_engine::io::PROJECT_EXTENSION]) {
                     self.run("project.open", json!({ "path": path.display().to_string() }));
                 }
             }
@@ -317,11 +316,11 @@ impl MapApp {
         }
         match &self.services.save_file {
             Some(pick) => {
-                if let Some(path) = pick("Save Project As", &[mkaegis_engine::io::PROJECT_EXTENSION], "map.mkaegis") {
+                if let Some(path) = pick("Save Project As", &[aegis_engine::io::PROJECT_EXTENSION], "map.aegis") {
                     self.run("project.saveAs", json!({ "path": path.display().to_string() }));
                 }
             }
-            None => self.dialog = Some(Dialog::Path { title: "Save Project As", command: "project.saveAs", path: "map.mkaegis".into() }),
+            None => self.dialog = Some(Dialog::Path { title: "Save Project As", command: "project.saveAs", path: "map.aegis".into() }),
         }
     }
 
@@ -395,7 +394,7 @@ impl MapApp {
         self.guard_close(&ctx);
         self.fix_active();
         let name = self.session.path.as_ref().and_then(|p| p.file_stem()).map_or("Untitled".to_string(), |s| s.to_string_lossy().into_owned());
-        let title = format!("{}{name} — mkaeGIS", if self.session.modified { "• " } else { "" });
+        let title = format!("{}{name} — MK aeGIS", if self.session.modified { "• " } else { "" });
         if title != self.title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
@@ -566,7 +565,7 @@ impl MapApp {
                     open = false;
                 }
                 let q = query.to_lowercase();
-                let hits: Vec<&mkaegis_engine::CommandSpec> = mkaegis_engine::Session::commands()
+                let hits: Vec<&aegis_engine::CommandSpec> = aegis_engine::Session::commands()
                     .iter()
                     .filter(|c| {
                         q.is_empty()
@@ -754,9 +753,9 @@ mod tests {
 
     #[test]
     fn save_in_the_dialog_saves_then_closes() {
-        let dir = std::env::temp_dir().join(format!("mkaegis-unsaved-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("aegis-unsaved-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("map.mkaegis");
+        let path = dir.join("map.aegis");
         let mut app = MapApp::new(Session::sample());
         app.run("project.saveAs", json!({ "path": path.display().to_string() }));
         app.run("layer.rename", json!({ "layer": "Cidades", "name": "Towns" }));

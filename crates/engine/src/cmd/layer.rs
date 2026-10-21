@@ -1,10 +1,10 @@
 //! Layer commands: the Contents pane's context menu, the Feature Layer tabs (Appearance,
 //! Labeling) and the attribute table's Add Field / Calculate Field.
 
-use mkaegis_core::{Color, Error};
-use mkaegis_model::query::Query;
-use mkaegis_model::symbology::{Classification, Ramp};
-use mkaegis_model::{Field, FieldType, Labels, Marker, Renderer, Symbol};
+use aegis_core::{Color, Error};
+use aegis_model::query::Query;
+use aegis_model::symbology::{Classification, Ramp};
+use aegis_model::{Field, FieldType, Labels, Marker, Renderer, Symbol};
 use serde_json::{Value as Json, json};
 
 use super::{CommandSpec, Kind, has_layers, layer_key, opt_bool, opt_f64, opt_str, path, req_str};

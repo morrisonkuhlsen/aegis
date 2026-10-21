@@ -1,9 +1,9 @@
 //! Map tab: Add Data, Selection, Navigate; and the map's own properties.
 
-use mkaegis_core::{Error, Result};
-use mkaegis_crs::Crs;
-use mkaegis_geom::{Coord, Envelope};
-use mkaegis_model::query::Query;
+use aegis_core::{Error, Result};
+use aegis_crs::Crs;
+use aegis_geom::{Coord, Envelope};
+use aegis_model::query::Query;
 use serde_json::{Value as Json, json};
 
 use super::{CommandSpec, Kind, always, has_layers, has_selection, layer_key, mode, opt_f64, opt_str, path, req_f64, req_str};
@@ -88,12 +88,11 @@ pub const SELECT_BY_LOCATION: CommandSpec = CommandSpec {
     run: |s, p| {
         let target = layer_key(p, "layer")?;
         let selecting = layer_key(p, "selecting")?;
-        let relation = mkaegis_analysis::Relation::parse(opt_str(p, "relation").unwrap_or("intersect"), opt_f64(p, "distance")?)?;
+        let relation = aegis_analysis::Relation::parse(opt_str(p, "relation").unwrap_or("intersect"), opt_f64(p, "distance")?)?;
         let mode = mode(p)?;
         let sel = s.map.layer(&selecting)?;
         let picked: Vec<usize> = sel.selection.iter().copied().collect();
-        let rows =
-            mkaegis_analysis::select_by_location(&s.map.layer(&target)?.data, &sel.data, (!picked.is_empty()).then_some(&picked[..]), relation)?;
+        let rows = aegis_analysis::select_by_location(&s.map.layer(&target)?.data, &sel.data, (!picked.is_empty()).then_some(&picked[..]), relation)?;
         let layer = s.map.layer_mut(&target)?;
         layer.select(rows, mode);
         let n = layer.selection.len();
@@ -118,7 +117,7 @@ pub const SELECT_BY_RECTANGLE: CommandSpec = CommandSpec {
         };
         let e = Envelope::new(a, b);
         let ring = vec![Coord::new(e.min_x, e.min_y), Coord::new(e.max_x, e.min_y), Coord::new(e.max_x, e.max_y), Coord::new(e.min_x, e.max_y)];
-        let rect = mkaegis_geom::Geometry::polygon(vec![ring])?;
+        let rect = aegis_geom::Geometry::polygon(vec![ring])?;
         let crs = s.map.crs;
         let mut total = 0;
         for (i, layer) in s.map.layers.iter_mut().enumerate() {
@@ -126,7 +125,7 @@ pub const SELECT_BY_RECTANGLE: CommandSpec = CommandSpec {
                 continue;
             }
             // The rectangle in the layer's CRS (densified edges keep it honest across projections).
-            let Some(le) = mkaegis_model::project_envelope(e, crs, layer.data.crs) else { continue };
+            let Some(le) = aegis_model::project_envelope(e, crs, layer.data.crs) else { continue };
             let local = if crs == layer.data.crs { rect.clone() } else { rect.try_map(|c| crs.transform(layer.data.crs, c)).unwrap_or(rect.clone()) };
             let rows: Vec<usize> = layer
                 .data
@@ -136,7 +135,7 @@ pub const SELECT_BY_RECTANGLE: CommandSpec = CommandSpec {
                 .filter(|(_, f)| {
                     f.geometry
                         .as_ref()
-                        .is_some_and(|g| g.envelope().is_some_and(|ge| ge.intersects(&le)) && mkaegis_geom::algo::intersects(g, &local, 0.0))
+                        .is_some_and(|g| g.envelope().is_some_and(|ge| ge.intersects(&le)) && aegis_geom::algo::intersects(g, &local, 0.0))
                 })
                 .map(|(r, _)| r)
                 .collect();
@@ -195,7 +194,7 @@ pub const ZOOM_TO_SELECTION: CommandSpec = CommandSpec {
             .flat_map(|l| {
                 l.selection.iter().filter_map(move |r| {
                     let g = l.data.features.get(*r)?.geometry.as_ref()?;
-                    mkaegis_model::project_envelope(g.envelope()?, l.data.crs, map.crs)
+                    aegis_model::project_envelope(g.envelope()?, l.data.crs, map.crs)
                 })
             })
             .reduce(Envelope::union);
@@ -248,7 +247,7 @@ pub const SET_CRS: CommandSpec = CommandSpec {
         let code = req_f64(p, "epsg")?;
         let crs = Crs::from_epsg(u32::try_from(code as i64).map_err(|_| Error::param("epsg", "not an EPSG code"))?)?;
         let old = s.map.crs;
-        let extent = s.map.extent.and_then(|e| mkaegis_model::project_envelope(e, old, crs));
+        let extent = s.map.extent.and_then(|e| aegis_model::project_envelope(e, old, crs));
         s.map.crs = crs;
         s.map.extent = extent.or_else(|| s.map.full_extent());
         s.view_serial += 1;

@@ -1,9 +1,9 @@
 //! The right-hand pane: Geoprocessing (find a tool, fill its parameters, run it), Symbology of
 //! the active layer, and the geoprocessing History.
 
+use aegis_geom::GeometryType;
+use aegis_model::Renderer;
 use egui::Ui;
-use mkaegis_geom::GeometryType;
-use mkaegis_model::Renderer;
 use serde_json::{Value as Json, json};
 
 use crate::MapApp;
@@ -172,7 +172,7 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             ui.label("Output Coordinate System (EPSG)");
             ui.add(egui::TextEdit::singleline(&mut g.epsg).desired_width(f32::INFINITY));
             let name =
-                g.epsg.trim().parse::<u32>().ok().and_then(|c| mkaegis_crs::Crs::from_epsg(c).ok()).map_or("unknown code".to_string(), |c| c.name());
+                g.epsg.trim().parse::<u32>().ok().and_then(|c| aegis_crs::Crs::from_epsg(c).ok()).map_or("unknown code".to_string(), |c| c.name());
             ui.label(egui::RichText::new(name).size(11.0).color(t.muted));
             ui.label("Output Feature Class");
             ui.add(egui::TextEdit::singleline(&mut g.output).hint_text("<input>_Project").desired_width(f32::INFINITY));
@@ -232,7 +232,7 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
         egui::Grid::new("stats").striped(true).num_columns(2).show(ui, |ui| {
             for k in ["count", "nulls", "sum", "mean", "min", "max", "std"] {
                 ui.label(egui::RichText::new(k).strong());
-                ui.label(r.get(k).map(|v| v.as_f64().map_or(v.to_string(), |x| mkaegis_core::Value::Float(x).to_string())).unwrap_or_default());
+                ui.label(r.get(k).map(|v| v.as_f64().map_or(v.to_string(), |x| aegis_core::Value::Float(x).to_string())).unwrap_or_default());
                 ui.end_row();
             }
         });
@@ -323,10 +323,10 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
     }
     ui.separator();
     ui.label(egui::RichText::new("Symbol").strong());
-    let to32 = |c: mkaegis_core::Color| egui::Color32::from_rgba_unmultiplied(c.r, c.g, c.b, c.a);
+    let to32 = |c: aegis_core::Color| egui::Color32::from_rgba_unmultiplied(c.r, c.g, c.b, c.a);
     let hex = |c: egui::Color32| {
         let [r, g, b, a] = c.to_srgba_unmultiplied();
-        mkaegis_core::Color::rgba(r, g, b, a).to_hex()
+        aegis_core::Color::rgba(r, g, b, a).to_hex()
     };
     egui::Grid::new("sym-grid").num_columns(2).show(ui, |ui| {
         if kind != GeometryType::Polyline {
@@ -407,7 +407,7 @@ fn history(app: &mut MapApp, ui: &mut Ui) {
             ui.label(egui::RichText::new("Nothing run yet.").color(t.muted));
         }
         for h in app.session.history() {
-            let label = mkaegis_engine::Session::command(&h.command).map_or(h.command.as_str(), |c| c.label);
+            let label = aegis_engine::Session::command(&h.command).map_or(h.command.as_str(), |c| c.label);
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new(if h.ok { "✔" } else { "✖" }).color(if h.ok { t.accent } else { t.error }));
                 ui.label(egui::RichText::new(label).strong());

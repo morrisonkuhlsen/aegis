@@ -1,16 +1,16 @@
 [package]
-name = "mkaegis-analysis"
+name = "aegis-analysis"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "mkaeGIS L3: geoprocessing tools"
+description = "MK aeGIS L3: geoprocessing tools"
 
 [lints]
 workspace = true
 
 [dependencies]
-mkaegis-core = { workspace = true }
-mkaegis-geom = { workspace = true }
-mkaegis-crs = { workspace = true }
-mkaegis-model = { workspace = true }
+aegis-core = { workspace = true }
+aegis-geom = { workspace = true }
+aegis-crs = { workspace = true }
+aegis-model = { workspace = true }
 serde = { workspace = true }

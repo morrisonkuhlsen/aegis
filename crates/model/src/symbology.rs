@@ -1,9 +1,9 @@
 //! Symbology: symbols, the renderers that pick a symbol per feature (single symbol, unique
 //! values, graduated colours), classification (equal interval, quantile) and labels. Every
-//! colour and ramp here is mkaeGIS's own.
+//! colour and ramp here is MK aeGIS's own.
 
-use mkaegis_core::{Color, Error, Result, Value};
-use mkaegis_geom::GeometryType;
+use aegis_core::{Color, Error, Result, Value};
+use aegis_geom::GeometryType;
 use serde::{Deserialize, Serialize};
 
 use crate::FeatureClass;
@@ -11,7 +11,7 @@ use crate::FeatureClass;
 /// The most classes a renderer may have.
 pub const MAX_CLASSES: usize = 256;
 
-/// mkaeGIS's default fills, cycled by layer id: muted, distinct, readable under black labels.
+/// MK aeGIS's default fills, cycled by layer id: muted, distinct, readable under black labels.
 const DEFAULT_FILLS: [Color; 8] = [
     Color::rgb(0xe8, 0xc5, 0x8f),
     Color::rgb(0x9f, 0xc9, 0xa4),
@@ -320,7 +320,7 @@ pub struct Labels {
 mod tests {
     use super::*;
     use crate::{Field, FieldType};
-    use mkaegis_crs::Crs;
+    use aegis_crs::Crs;
 
     fn table() -> FeatureClass {
         let mut fc =

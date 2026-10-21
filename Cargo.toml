@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
-default-members = ["crates/*", "apps/mkaegis", "apps/mkaegis-cli", "xtask"]
+default-members = ["crates/*", "apps/aegis", "apps/aegis-cli", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,18 +11,18 @@ rust-version = "1.90"
 
 [workspace.dependencies]
 # internal
-mkaegis-core = { path = "crates/core" }
-mkaegis-geom = { path = "crates/geom" }
-mkaegis-crs = { path = "crates/crs" }
-mkaegis-model = { path = "crates/model" }
-mkaegis-geojson = { path = "crates/geojson" }
-mkaegis-shp = { path = "crates/shp" }
-mkaegis-render = { path = "crates/render" }
-mkaegis-analysis = { path = "crates/analysis" }
-mkaegis-stats = { path = "crates/stats" }
-mkaegis-engine = { path = "crates/engine" }
-mkaegis-ui-egui = { path = "crates/ui-egui" }
-mkaegis-mcp = { path = "crates/mcp" }
+aegis-core = { path = "crates/core" }
+aegis-geom = { path = "crates/geom" }
+aegis-crs = { path = "crates/crs" }
+aegis-model = { path = "crates/model" }
+aegis-geojson = { path = "crates/geojson" }
+aegis-shp = { path = "crates/shp" }
+aegis-render = { path = "crates/render" }
+aegis-analysis = { path = "crates/analysis" }
+aegis-stats = { path = "crates/stats" }
+aegis-engine = { path = "crates/engine" }
+aegis-ui-egui = { path = "crates/ui-egui" }
+aegis-mcp = { path = "crates/mcp" }
 
 # foundation
 thiserror = "2"

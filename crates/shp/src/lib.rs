@@ -12,10 +12,10 @@ mod dbf;
 
 use std::path::Path;
 
-use mkaegis_core::{Error, Result, Value};
-use mkaegis_crs::Crs;
-use mkaegis_geom::{Coord, Envelope, Geometry, GeometryType};
-use mkaegis_model::FeatureClass;
+use aegis_core::{Error, Result, Value};
+use aegis_crs::Crs;
+use aegis_geom::{Coord, Envelope, Geometry, GeometryType};
+use aegis_model::FeatureClass;
 
 const FILE_CODE: i32 = 9994;
 const VERSION: i32 = 1000;
@@ -239,7 +239,7 @@ fn write_shape(g: Option<&Geometry>, out: &mut Vec<u8>) {
             let polygon = matches!(g, Geometry::Polygon(_));
             // Shells clockwise, holes counter-clockwise.
             let parts: Vec<Vec<Coord>> = if polygon {
-                mkaegis_geom::wkt::shells_with_holes(parts)
+                aegis_geom::wkt::shells_with_holes(parts)
                     .into_iter()
                     .flat_map(|group| {
                         group.into_iter().enumerate().map(|(i, r)| {
@@ -335,7 +335,7 @@ pub fn write_path(fc: &FeatureClass, path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mkaegis_model::{Field, FieldType};
+    use aegis_model::{Field, FieldType};
 
     fn square(x: f64, y: f64, s: f64) -> Vec<Coord> {
         vec![Coord::new(x, y), Coord::new(x + s, y), Coord::new(x + s, y + s), Coord::new(x, y + s), Coord::new(x, y)]
@@ -372,7 +372,7 @@ mod tests {
         assert_eq!(back.data.crs, fc.crs);
         assert_eq!(back.data.features.len(), 3);
         assert_eq!(back.data.features[1].geometry, None);
-        let a = |f: &FeatureClass, i: usize| mkaegis_geom::algo::area(f.features[i].geometry.as_ref().unwrap());
+        let a = |f: &FeatureClass, i: usize| aegis_geom::algo::area(f.features[i].geometry.as_ref().unwrap());
         assert_eq!(a(&back.data, 0), a(&fc, 0));
         assert_eq!(back.data.features[0].values, fc.features[0].values);
         assert_eq!(back.data.features[1].values, fc.features[1].values);

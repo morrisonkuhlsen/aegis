@@ -122,6 +122,160 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "aegis"
+version = "0.1.0"
+dependencies = [
+ "aegis-engine",
+ "aegis-ui-egui",
+ "eframe",
+ "egui",
+ "log",
+ "rfd",
+ "serde_json",
+]
+
+[[package]]
+name = "aegis-analysis"
+version = "0.1.0"
+dependencies = [
+ "aegis-core",
+ "aegis-crs",
+ "aegis-geom",
+ "aegis-model",
+ "serde",
+]
+
+[[package]]
+name = "aegis-cli"
+version = "0.1.0"
+dependencies = [
+ "aegis-engine",
+ "aegis-mcp",
+ "serde_json",
+]
+
+[[package]]
+name = "aegis-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "aegis-crs"
+version = "0.1.0"
+dependencies = [
+ "aegis-core",
+ "aegis-geom",
+ "serde",
+]
+
+[[package]]
+name = "aegis-engine"
+version = "0.1.0"
+dependencies = [
+ "aegis-analysis",
+ "aegis-core",
+ "aegis-crs",
+ "aegis-geojson",
+ "aegis-geom",
+ "aegis-model",
+ "aegis-render",
+ "aegis-shp",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "aegis-geojson"
+version = "0.1.0"
+dependencies = [
+ "aegis-core",
+ "aegis-crs",
+ "aegis-geom",
+ "aegis-model",
+ "serde_json",
+]
+
+[[package]]
+name = "aegis-geom"
+version = "0.1.0"
+dependencies = [
+ "aegis-core",
+ "serde",
+]
+
+[[package]]
+name = "aegis-mcp"
+version = "0.1.0"
+dependencies = [
+ "aegis-engine",
+ "serde_json",
+]
+
+[[package]]
+name = "aegis-model"
+version = "0.1.0"
+dependencies = [
+ "aegis-core",
+ "aegis-crs",
+ "aegis-geom",
+ "serde",
+]
+
+[[package]]
+name = "aegis-render"
+version = "0.1.0"
+dependencies = [
+ "aegis-core",
+ "aegis-crs",
+ "aegis-geom",
+ "aegis-model",
+ "png",
+]
+
+[[package]]
+name = "aegis-shp"
+version = "0.1.0"
+dependencies = [
+ "aegis-core",
+ "aegis-crs",
+ "aegis-geom",
+ "aegis-model",
+]
+
+[[package]]
+name = "aegis-stats"
+version = "0.1.0"
+dependencies = [
+ "aegis-core",
+ "aegis-crs",
+ "aegis-geom",
+ "aegis-model",
+]
+
+[[package]]
+name = "aegis-ui-egui"
+version = "0.1.0"
+dependencies = [
+ "aegis-core",
+ "aegis-crs",
+ "aegis-engine",
+ "aegis-geom",
+ "aegis-model",
+ "aegis-render",
+ "egui",
+ "egui_kittest",
+ "log",
+ "png",
+ "serde_json",
+ "zune-core",
+ "zune-jpeg",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1714,160 +1868,6 @@ checksum = "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c"
 dependencies = [
  "adler2",
  "simd-adler32",
-]
-
-[[package]]
-name = "mkaegis"
-version = "0.1.0"
-dependencies = [
- "eframe",
- "egui",
- "log",
- "mkaegis-engine",
- "mkaegis-ui-egui",
- "rfd",
- "serde_json",
-]
-
-[[package]]
-name = "mkaegis-analysis"
-version = "0.1.0"
-dependencies = [
- "mkaegis-core",
- "mkaegis-crs",
- "mkaegis-geom",
- "mkaegis-model",
- "serde",
-]
-
-[[package]]
-name = "mkaegis-cli"
-version = "0.1.0"
-dependencies = [
- "mkaegis-engine",
- "mkaegis-mcp",
- "serde_json",
-]
-
-[[package]]
-name = "mkaegis-core"
-version = "0.1.0"
-dependencies = [
- "serde",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "mkaegis-crs"
-version = "0.1.0"
-dependencies = [
- "mkaegis-core",
- "mkaegis-geom",
- "serde",
-]
-
-[[package]]
-name = "mkaegis-engine"
-version = "0.1.0"
-dependencies = [
- "log",
- "mkaegis-analysis",
- "mkaegis-core",
- "mkaegis-crs",
- "mkaegis-geojson",
- "mkaegis-geom",
- "mkaegis-model",
- "mkaegis-render",
- "mkaegis-shp",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mkaegis-geojson"
-version = "0.1.0"
-dependencies = [
- "mkaegis-core",
- "mkaegis-crs",
- "mkaegis-geom",
- "mkaegis-model",
- "serde_json",
-]
-
-[[package]]
-name = "mkaegis-geom"
-version = "0.1.0"
-dependencies = [
- "mkaegis-core",
- "serde",
-]
-
-[[package]]
-name = "mkaegis-mcp"
-version = "0.1.0"
-dependencies = [
- "mkaegis-engine",
- "serde_json",
-]
-
-[[package]]
-name = "mkaegis-model"
-version = "0.1.0"
-dependencies = [
- "mkaegis-core",
- "mkaegis-crs",
- "mkaegis-geom",
- "serde",
-]
-
-[[package]]
-name = "mkaegis-render"
-version = "0.1.0"
-dependencies = [
- "mkaegis-core",
- "mkaegis-crs",
- "mkaegis-geom",
- "mkaegis-model",
- "png",
-]
-
-[[package]]
-name = "mkaegis-shp"
-version = "0.1.0"
-dependencies = [
- "mkaegis-core",
- "mkaegis-crs",
- "mkaegis-geom",
- "mkaegis-model",
-]
-
-[[package]]
-name = "mkaegis-stats"
-version = "0.1.0"
-dependencies = [
- "mkaegis-core",
- "mkaegis-crs",
- "mkaegis-geom",
- "mkaegis-model",
-]
-
-[[package]]
-name = "mkaegis-ui-egui"
-version = "0.1.0"
-dependencies = [
- "egui",
- "egui_kittest",
- "log",
- "mkaegis-core",
- "mkaegis-crs",
- "mkaegis-engine",
- "mkaegis-geom",
- "mkaegis-model",
- "mkaegis-render",
- "png",
- "serde_json",
- "zune-core",
- "zune-jpeg",
 ]
 
 [[package]]
@@ -4077,7 +4077,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 name = "xtask"
 version = "0.1.0"
 dependencies = [
- "mkaegis-engine",
+ "aegis-engine",
  "serde_json",
 ]
 

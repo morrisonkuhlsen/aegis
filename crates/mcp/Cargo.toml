@@ -1,13 +1,13 @@
 [package]
-name = "mkaegis-mcp"
+name = "aegis-mcp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "mkaeGIS Model Context Protocol server (stdio)"
+description = "MK aeGIS Model Context Protocol server (stdio)"
 
 [lints]
 workspace = true
 
 [dependencies]
-mkaegis-engine = { workspace = true }
+aegis-engine = { workspace = true }
 serde_json = { workspace = true }

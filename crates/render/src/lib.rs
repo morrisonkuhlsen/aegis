@@ -6,10 +6,10 @@
 
 pub mod raster;
 
-use mkaegis_core::{Color, Result, Value};
-use mkaegis_crs::Crs;
-use mkaegis_geom::{Coord, Envelope, Geometry, algo};
-use mkaegis_model::{Layer, Map, Marker, Symbol};
+use aegis_core::{Color, Result, Value};
+use aegis_crs::Crs;
+use aegis_geom::{Coord, Envelope, Geometry, algo};
+use aegis_model::{Layer, Map, Marker, Symbol};
 
 /// Metres per pixel at 96 dpi, for the scale (1 : n).
 const METRES_PER_PIXEL: f64 = 0.0254 / 96.0;
@@ -251,7 +251,7 @@ fn graticule_step(span: f64) -> f64 {
 
 /// Meridians and parallels across the view, projected into the map's CRS.
 fn graticule(out: &mut Vec<Shape>, map: &Map, vp: &Viewport) {
-    let Some(geo) = mkaegis_model::project_envelope(vp.extent(), map.crs, Crs::WGS84) else { return };
+    let Some(geo) = aegis_model::project_envelope(vp.extent(), map.crs, Crs::WGS84) else { return };
     let geo = Envelope { min_x: geo.min_x.max(-180.0), min_y: geo.min_y.max(-85.0), max_x: geo.max_x.min(180.0), max_y: geo.max_y.min(85.0) };
     if geo.width() <= 0.0 || geo.height() <= 0.0 {
         return;
@@ -337,8 +337,8 @@ pub fn export_png(map: &Map, width: u32, height: u32, extent: Option<Envelope>) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mkaegis_geom::GeometryType;
-    use mkaegis_model::{FeatureClass, Field, FieldType, Labels};
+    use aegis_geom::GeometryType;
+    use aegis_model::{FeatureClass, Field, FieldType, Labels};
 
     fn map() -> Map {
         let mut m = Map::new("m", Crs::WEB_MERCATOR);

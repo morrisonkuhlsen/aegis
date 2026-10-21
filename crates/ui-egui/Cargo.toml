@@ -1,20 +1,20 @@
 [package]
-name = "mkaegis-ui-egui"
+name = "aegis-ui-egui"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "mkaeGIS egui frontend; swappable, nothing below depends on it"
+description = "MK aeGIS egui frontend; swappable, nothing below depends on it"
 
 [lints]
 workspace = true
 
 [dependencies]
-mkaegis-core = { workspace = true }
-mkaegis-geom = { workspace = true }
-mkaegis-crs = { workspace = true }
-mkaegis-model = { workspace = true }
-mkaegis-render = { workspace = true }
-mkaegis-engine = { workspace = true }
+aegis-core = { workspace = true }
+aegis-geom = { workspace = true }
+aegis-crs = { workspace = true }
+aegis-model = { workspace = true }
+aegis-render = { workspace = true }
+aegis-engine = { workspace = true }
 egui = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }

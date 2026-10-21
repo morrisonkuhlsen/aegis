@@ -1,4 +1,4 @@
-//! mkaeGIS's colours: every panel reads them from [`Tokens`], light or dark with egui's theme.
+//! MK aeGIS's colours: every panel reads them from [`Tokens`], light or dark with egui's theme.
 
 use egui::Color32;
 
@@ -54,7 +54,7 @@ impl Tokens {
     }
 }
 
-/// egui's style tuned to mkaeGIS: tighter spacing, our accent for selection.
+/// egui's style tuned to MK aeGIS: tighter spacing, our accent for selection.
 pub fn apply(ctx: &egui::Context) {
     for (theme, t) in [(egui::Theme::Light, LIGHT), (egui::Theme::Dark, DARK)] {
         ctx.style_mut_of(theme, |style| {
@@ -69,6 +69,6 @@ pub fn apply(ctx: &egui::Context) {
     }
 }
 
-pub fn color(c: mkaegis_core::Color) -> Color32 {
+pub fn color(c: aegis_core::Color) -> Color32 {
     Color32::from_rgba_unmultiplied(c.r, c.g, c.b, c.a)
 }

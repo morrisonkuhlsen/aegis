@@ -205,7 +205,7 @@ fn file_menu(app: &mut MapApp, ui: &mut Ui) {
         app.run("map.addSample", json!({}));
     }
     ui.separator();
-    if ui.button("About mkaeGIS").clicked() {
+    if ui.button("About MK aeGIS").clicked() {
         app.dialog = Some(Dialog::About);
     }
     if ui.button("Exit").clicked() {
@@ -334,7 +334,7 @@ fn map_tab(app: &mut MapApp, ui: &mut Ui) {
             let field = if labelled {
                 None
             } else {
-                l.data.fields.iter().find(|f| f.kind == mkaegis_model::FieldType::Text).or(l.data.fields.first()).map(|f| f.name.clone())
+                l.data.fields.iter().find(|f| f.kind == aegis_model::FieldType::Text).or(l.data.fields.first()).map(|f| f.name.clone())
             };
             app.run("layer.labels", json!({ "layer": id, "field": field }));
         }

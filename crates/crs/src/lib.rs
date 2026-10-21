@@ -9,8 +9,8 @@
 
 use std::f64::consts::{FRAC_PI_4, PI};
 
-use mkaegis_core::{Error, Result};
-use mkaegis_geom::Coord;
+use aegis_core::{Error, Result};
+use aegis_geom::Coord;
 use serde::{Deserialize, Serialize};
 
 /// Web Mercator's sphere radius: WGS 84's semi-major axis.
@@ -154,7 +154,7 @@ impl Crs {
     pub const SIRGAS2000: Crs = Crs(4674);
     pub const WEB_MERCATOR: Crs = Crs(3857);
 
-    /// The CRS with this EPSG code, if mkaeGIS knows it.
+    /// The CRS with this EPSG code, if MK aeGIS knows it.
     pub fn from_epsg(code: u32) -> Result<Crs> {
         match code {
             4326 | 4674 | 3857 | 32601..=32660 | 32701..=32760 | 31978..=31985 => Ok(Crs(code)),
@@ -346,7 +346,7 @@ impl Crs {
         (name.contains("WGS_1984") || name.contains("WGS_84") || name.contains("WGS84")).then_some(Crs::WGS84)
     }
 
-    /// The codes mkaeGIS knows, for pickers.
+    /// The codes MK aeGIS knows, for pickers.
     pub fn known() -> Vec<Crs> {
         let mut out = vec![Crs::WGS84, Crs::SIRGAS2000, Crs::WEB_MERCATOR];
         out.extend((31978..=31985).map(Crs));

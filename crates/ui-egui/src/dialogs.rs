@@ -93,7 +93,7 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
         Dialog::CoordinateSystem { .. } => "Map Coordinate System".into(),
         Dialog::LayerInfo { .. } => "Layer Properties".into(),
         Dialog::UnsavedChanges { .. } => "Unsaved Changes".into(),
-        Dialog::About => "About mkaeGIS".into(),
+        Dialog::About => "About MK aeGIS".into(),
     };
     let info: Option<Json> = match &dialog {
         Dialog::LayerInfo { layer } => app.session.execute("layer.info", &json!({ "layer": layer })).ok(),
@@ -217,7 +217,7 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
             Dialog::CoordinateSystem { epsg } => {
                 ui.label("EPSG code");
                 ui.add(egui::TextEdit::singleline(epsg).desired_width(f32::INFINITY));
-                let known = epsg.trim().parse::<u32>().ok().and_then(|c| mkaegis_crs::Crs::from_epsg(c).ok());
+                let known = epsg.trim().parse::<u32>().ok().and_then(|c| aegis_crs::Crs::from_epsg(c).ok());
                 ui.label(egui::RichText::new(known.map_or("Unknown or unsupported code".to_string(), |c| c.name())).color(if known.is_some() {
                     t.text
                 } else {
@@ -278,7 +278,7 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
                 });
             }
             Dialog::About => {
-                ui.label(egui::RichText::new("mkaeGIS").strong().size(18.0));
+                ui.label(egui::RichText::new("MK aeGIS").strong().size(18.0));
                 ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
                 ui.label("An open-source, clean-room geographic information system in pure Rust.");
                 ui.label(egui::RichText::new("Licensed MIT OR Apache-2.0.").color(t.muted));

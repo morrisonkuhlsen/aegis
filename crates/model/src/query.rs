@@ -3,7 +3,7 @@
 //! `AREA BETWEEN 10 AND 20`, `NAME IS NOT NULL`, arithmetic, `UPPER()`/`LOWER()`.
 //! A comparison with Null is false, as in SQL.
 
-use mkaegis_core::{Error, Result, Value};
+use aegis_core::{Error, Result, Value};
 
 use crate::FeatureClass;
 
@@ -501,8 +501,8 @@ fn eval(e: &Expr, fc: &FeatureClass, row: usize) -> Value {
 mod tests {
     use super::*;
     use crate::{Field, FieldType};
-    use mkaegis_crs::Crs;
-    use mkaegis_geom::GeometryType;
+    use aegis_crs::Crs;
+    use aegis_geom::GeometryType;
 
     fn table() -> FeatureClass {
         let mut fc = FeatureClass::new(

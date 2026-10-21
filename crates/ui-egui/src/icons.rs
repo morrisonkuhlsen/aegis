@@ -1,4 +1,4 @@
-//! mkaeGIS's icon set, drawn in code from simple strokes: original, no vendor artwork.
+//! MK aeGIS's icon set, drawn in code from simple strokes: original, no vendor artwork.
 
 use egui::{Color32, Painter, Pos2, Rect, Stroke, pos2, vec2};
 
@@ -180,7 +180,7 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32, accent: Color3
             poly(&[(0.32, 0.6), (0.68, 0.6)], hi, false);
         }
         Icon::Logo => {
-            // A map pin over a folded map: mkaeGIS's own mark.
+            // A map pin over a folded map: MK aeGIS's own mark.
             poly(&[(0.08, 0.80), (0.36, 0.68), (0.64, 0.80), (0.92, 0.68), (0.92, 0.95), (0.64, 0.95), (0.36, 0.83), (0.08, 0.95)], line, true);
             let pin: Vec<(f32, f32)> = (0..=20)
                 .map(|i| {

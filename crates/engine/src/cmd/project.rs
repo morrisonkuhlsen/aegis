@@ -1,6 +1,6 @@
 //! Project tab: new, open, save; and undo/redo (Quick Access Toolbar).
 
-use mkaegis_core::{Error, Result};
+use aegis_core::{Error, Result};
 use serde_json::{Value as Json, json};
 
 use super::{CommandSpec, Kind, always, opt_str, path};
@@ -15,7 +15,7 @@ pub const NEW: CommandSpec = CommandSpec {
     kind: Kind::Edit,
     enabled: always,
     run: |s, _| {
-        s.map = mkaegis_model::Map::default();
+        s.map = aegis_model::Map::default();
         s.path = None;
         s.view_serial += 1;
         Ok(json!({ "message": "new map" }))
@@ -27,7 +27,7 @@ pub const OPEN: CommandSpec = CommandSpec {
     label: "Open Project",
     ribbon: "Project ▸ Open",
     shortcut: Some("Ctrl+O"),
-    params: "{path} — a .mkaegis project",
+    params: "{path} — a .aegis project",
     kind: Kind::Edit,
     enabled: always,
     run: |s, p| {

@@ -1,7 +1,7 @@
 //! OGC Well-Known Text (Simple Features Access, part 1): `POINT`, `MULTIPOINT`, `LINESTRING`,
 //! `MULTILINESTRING`, `POLYGON`, `MULTIPOLYGON`, 2D. Z and M values are read and dropped.
 
-use mkaegis_core::{Error, Result};
+use aegis_core::{Error, Result};
 
 use crate::algo::ring_contains;
 use crate::{Coord, Geometry};

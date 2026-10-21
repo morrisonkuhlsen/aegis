@@ -8,7 +8,7 @@ fn panicked(r: &Result<Json>) -> bool {
 }
 
 fn scratch(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("mkaegis-test-{}-{name}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("aegis-test-{}-{name}", std::process::id()));
     let _ = std::fs::create_dir_all(&dir);
     dir
 }
@@ -38,13 +38,13 @@ fn every_command_survives_empty_params() {
 
 #[test]
 fn hostile_params_never_panic() {
-    let missing = std::env::temp_dir().join("mkaegis-no-such-dir").join("x");
+    let missing = std::env::temp_dir().join("aegis-no-such-dir").join("x");
     let paths = [
         json!(""),
         json!(missing.with_extension("geojson").display().to_string()),
         json!(missing.with_extension("shp").display().to_string()),
         json!(missing.with_extension("png").display().to_string()),
-        json!(missing.with_extension("mkaegis").display().to_string()),
+        json!(missing.with_extension("aegis").display().to_string()),
     ];
     let values = [
         json!(null),
@@ -259,7 +259,7 @@ fn data_and_projects_round_trip_through_files() {
         assert_eq!(added.data.features.len(), 3, "{ext}");
         assert!(added.data.field_index("NOME").is_some());
     }
-    let project = dir.join("sample.mkaegis");
+    let project = dir.join("sample.aegis");
     s.execute("project.saveAs", &json!({ "path": project.display().to_string() })).unwrap();
     assert!(!s.modified);
     let mut t = Session::default();

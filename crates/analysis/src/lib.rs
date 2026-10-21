@@ -5,10 +5,10 @@
 //! each feature (good to a fraction of a percent inside a zone); geodesic measures come later.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
-use mkaegis_core::{Error, Result, Value};
-use mkaegis_crs::Crs;
-use mkaegis_geom::{Coord, Geometry, GeometryType, algo};
-use mkaegis_model::{FeatureClass, Field, FieldType};
+use aegis_core::{Error, Result, Value};
+use aegis_crs::Crs;
+use aegis_geom::{Coord, Geometry, GeometryType, algo};
+use aegis_model::{FeatureClass, Field, FieldType};
 use serde::{Deserialize, Serialize};
 
 /// The largest buffer distance (metres): a hemisphere.

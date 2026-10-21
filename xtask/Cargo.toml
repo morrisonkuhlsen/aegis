@@ -4,11 +4,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
-description = "mkaeGIS's project tasks: cargo xtask <task>"
+description = "MK aeGIS's project tasks: cargo xtask <task>"
 
 [lints]
 workspace = true
 
 [dependencies]
-mkaegis-engine = { workspace = true }
+aegis-engine = { workspace = true }
 serde_json = { workspace = true }

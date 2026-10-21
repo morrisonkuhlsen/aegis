@@ -1,14 +1,14 @@
 [package]
-name = "mkaegis-cli"
+name = "aegis-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "mkaeGIS headless command line"
+description = "MK aeGIS headless command line"
 
 [lints]
 workspace = true
 
 [dependencies]
-mkaegis-engine = { workspace = true }
-mkaegis-mcp = { workspace = true }
+aegis-engine = { workspace = true }
+aegis-mcp = { workspace = true }
 serde_json = { workspace = true }

@@ -1,4 +1,4 @@
-<h1 align="center">mkaeGIS</h1>
+<h1 align="center">MK aeGIS</h1>
 
 <p align="center">
   <b>A statistical GIS: an open-source geographic information system built for statisticians, in pure Rust.</b>
@@ -32,7 +32,7 @@
 
 <p align="center">
   <a href="#a-look-around">A look around</a> ·
-  <a href="#why-mkaegis">Why mkaeGIS</a> ·
+  <a href="#why-mk-aegis">Why MK aeGIS</a> ·
   <a href="#statistics-roadmap">Statistics roadmap</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#for-agents-mcp-cli-and-the-control-channel">For agents</a> ·
@@ -44,14 +44,14 @@
 
 <table>
 <tr>
-<td width="50%" valign="top"><img src="docs/images/map.png" alt="mkaeGIS with the sample archipelago: cities coloured by population in five quantile classes, islands by unique values, city labels, the attribute table below and the Symbology pane on the right" width="100%"><p align="center"><sub><b>Classification and symbology.</b> Graduated colours by quantile or equal interval, unique values, labels and the attribute table.</sub></p></td>
-<td width="50%" valign="top"><img src="docs/images/dark-analysis.png" alt="mkaeGIS in dark mode with the Analysis tab open: 13 cities selected by attribute and highlighted on the map and in the table, with the Summary Statistics tool open in the Geoprocessing pane" width="100%"><p align="center"><sub><b>Dark mode and analysis.</b> Select By Attributes in SQL, linked selection between map and table, Summary Statistics.</sub></p></td>
+<td width="50%" valign="top"><img src="docs/images/map.png" alt="MK aeGIS with the sample archipelago: cities coloured by population in five quantile classes, islands by unique values, city labels, the attribute table below and the Symbology pane on the right" width="100%"><p align="center"><sub><b>Classification and symbology.</b> Graduated colours by quantile or equal interval, unique values, labels and the attribute table.</sub></p></td>
+<td width="50%" valign="top"><img src="docs/images/dark-analysis.png" alt="MK aeGIS in dark mode with the Analysis tab open: 13 cities selected by attribute and highlighted on the map and in the table, with the Summary Statistics tool open in the Geoprocessing pane" width="100%"><p align="center"><sub><b>Dark mode and analysis.</b> Select By Attributes in SQL, linked selection between map and table, Summary Statistics.</sub></p></td>
 </tr>
 </table>
 
-## Why mkaeGIS
+## Why MK aeGIS
 
-- **Built for statisticians.** Most GIS packages treat statistics as an add-on. In mkaeGIS
+- **Built for statisticians.** Most GIS packages treat statistics as an add-on. In MK aeGIS
   spatial statistics are the point: every statistic reports what you need to judge it
   (inference method, permutations, p-values, multiple-testing correction), and every result
   is written back as fields you can map, chart and export.
@@ -92,28 +92,28 @@ Tracked as GitHub issues labelled `statistics`:
 ## Quick start
 
 ```sh
-cargo run --release -p mkaegis -- --sample                       # desktop app with the sample map
-cargo run --release -p mkaegis -- data.shp                       # open a shapefile (or .geojson, .mkaegis)
-cargo run --release -p mkaegis -- --sample --control 7979        # + JSON control channel
-cargo run --release -p mkaegis -- --no-splash                    # skip the splash screen
+cargo run --release -p aegis -- --sample                       # desktop app with the sample map
+cargo run --release -p aegis -- data.shp                       # open a shapefile (or .geojson, .aegis)
+cargo run --release -p aegis -- --sample --control 7979        # + JSON control channel
+cargo run --release -p aegis -- --no-splash                    # skip the splash screen
 cargo xtask ci                                                    # fmt, clippy, tests, assets, layering, panics, wasm
 ```
 
 Offscreen screenshots, with no window and nothing captured from the desktop:
 
 ```sh
-cargo run -p mkaegis-ui-egui --example snapshot -- --sample --table --pane symbology out.png
+cargo run -p aegis-ui-egui --example snapshot -- --sample --table --pane symbology out.png
 ```
 
 ## For agents: MCP, CLI and the control channel
 
 ```sh
-claude mcp add mkaegis -- mkaegis-cli mcp                         # headless MCP server
-mkaegis-cli info data.shp                                         # layer, CRS, fields, extent
-mkaegis-cli commands                                              # every command and its params
-mkaegis-cli run --sample --cmd 'map.selectByAttributes={"layer":"Cidades","where":"POP > 100000"}'
-mkaegis-cli run --sample --cmd 'analysis.summaryStatistics={"layer":"Cidades","field":"POP"}'
-mkaegis-cli run --sample --cmd 'management.project={"layer":"Cidades","epsg":31983}' --png map.png
+claude mcp add aegis -- aegis-cli mcp                         # headless MCP server
+aegis-cli info data.shp                                         # layer, CRS, fields, extent
+aegis-cli commands                                              # every command and its params
+aegis-cli run --sample --cmd 'map.selectByAttributes={"layer":"Cidades","where":"POP > 100000"}'
+aegis-cli run --sample --cmd 'analysis.summaryStatistics={"layer":"Cidades","field":"POP"}'
+aegis-cli run --sample --cmd 'management.project={"layer":"Cidades","epsg":31983}' --png map.png
 ```
 
 The desktop app's control channel takes JSON lines on `127.0.0.1:PORT`:
@@ -123,7 +123,7 @@ The desktop app's control channel takes JSON lines on `127.0.0.1:PORT`:
 
 ## Architecture
 
-mkaeGIS is an engine-first Cargo workspace with enforced layering (`cargo xtask layers`). The egui
+MK aeGIS is an engine-first Cargo workspace with enforced layering (`cargo xtask layers`). The egui
 frontend is a separate crate, so the UI can be swapped without touching the engine.
 
 | Layer | Crates                                                                                        |
@@ -134,7 +134,7 @@ frontend is a separate crate, so the UI can be swapped without touching the engi
 | L3    | `analysis` (geoprocessing tools) · `stats` (spatial statistics, in progress: #22)             |
 | L4    | `engine` (session, command registry, undo/redo, history, file I/O)                            |
 | L5    | `ui-egui` (desktop UI, control channel) · `mcp` (MCP server)                                  |
-| L6    | `apps/mkaegis`, `apps/mkaegis-cli`                                                            |
+| L6    | `apps/aegis`, `apps/aegis-cli`                                                            |
 
 - **Contributor and agent rules** (clean-room, asset policy, never-crash, quality gates): [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md)
 - **Bundled assets:** each one is listed with its licence in [`ATTRIBUTION.md`](ATTRIBUTION.md)
@@ -142,9 +142,9 @@ frontend is a separate crate, so the UI can be swapped without touching the engi
 
 ## License and credits
 
-mkaeGIS is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
-All artwork is original or openly licensed (see [`ATTRIBUTION.md`](ATTRIBUTION.md)). mkaeGIS
+MK aeGIS is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+All artwork is original or openly licensed (see [`ATTRIBUTION.md`](ATTRIBUTION.md)). MK aeGIS
 contains no Esri, Google or other vendor iconography, styles, basemaps or data. Feature names
 that follow ArcGIS Pro's (Buffer, Select By Location, Contents) refer to behaviour only.
 
-Contributors are listed in **About mkaeGIS**, generated from the git history.
+Contributors are listed in **About MK aeGIS**, generated from the git history.

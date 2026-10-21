@@ -5,7 +5,7 @@ use serde_json::{Value as Json, json};
 use crate::MapApp;
 use crate::theme::Tokens;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Dialog {
     /// A path for a command that reads or writes a file (when there is no native file dialog).
     Path {
@@ -51,7 +51,22 @@ pub enum Dialog {
     LayerInfo {
         layer: u32,
     },
+    /// Save, Don't Save or Cancel before `then` throws away a modified map.
+    UnsavedChanges {
+        then: Discard,
+    },
     About,
+}
+
+/// What would throw away the current map, waiting on the Unsaved Changes dialog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Discard {
+    /// Closing the window.
+    Close,
+    /// Project › New.
+    New,
+    /// Project › Open.
+    Open,
 }
 
 /// OK and Cancel; returns (ok, cancel).
@@ -77,6 +92,7 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
         Dialog::EditValue { .. } => "Edit Attribute".into(),
         Dialog::CoordinateSystem { .. } => "Map Coordinate System".into(),
         Dialog::LayerInfo { .. } => "Layer Properties".into(),
+        Dialog::UnsavedChanges { .. } => "Unsaved Changes".into(),
         Dialog::About => "About mkaeGIS".into(),
     };
     let info: Option<Json> = match &dialog {
@@ -88,6 +104,7 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
         app.session.map.layers.iter().find(|l| l.id == id).map(|l| l.data.fields.iter().map(|f| f.name.clone()).collect()).unwrap_or_default()
     };
     let mut action: Option<(&'static str, Json)> = None;
+    let mut decided: Option<(Discard, bool)> = None;
     let mut keep = true;
     egui::Window::new(title).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0)).show(ctx, |ui| {
         ui.set_min_width(360.0);
@@ -247,6 +264,19 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
                 }
                 keep = !ui.button("Close").clicked();
             }
+            Dialog::UnsavedChanges { then } => {
+                ui.label(format!("Save changes to {}?", app.document_name()));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui.add(egui::Button::new("Save").min_size(egui::vec2(70.0, 0.0))).clicked() {
+                        decided = Some((*then, true));
+                    }
+                    if ui.button("Don't Save").clicked() {
+                        decided = Some((*then, false));
+                    }
+                    keep = !ui.button("Cancel").clicked() && decided.is_none();
+                });
+            }
             Dialog::About => {
                 ui.label(egui::RichText::new("mkaeGIS").strong().size(18.0));
                 ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
@@ -272,5 +302,8 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
     }
     if let Some((command, params)) = action {
         app.run(command, params);
+    }
+    if let Some((then, save)) = decided {
+        app.resolve_unsaved(then, save);
     }
 }

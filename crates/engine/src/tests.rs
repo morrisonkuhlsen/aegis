@@ -232,6 +232,11 @@ fn data_and_projects_round_trip_through_files() {
     let mut t = Session::default();
     t.execute("project.open", &json!({ "path": project.display().to_string() })).unwrap();
     assert_eq!(t.map, s.map);
+    assert!(!t.modified, "a just-opened project has nothing unsaved");
+    t.execute("edit.undo", &json!({})).unwrap();
+    assert!(t.modified, "undoing the open changes the map");
+    t.execute("project.new", &json!({})).unwrap();
+    assert!(!t.modified);
     let png = dir.join("map.png");
     s.execute("share.exportMap", &json!({ "path": png.display().to_string(), "width": 320, "height": 200 })).unwrap();
     assert!(std::fs::metadata(&png).unwrap().len() > 1000);

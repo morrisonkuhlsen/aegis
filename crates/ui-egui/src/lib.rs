@@ -23,7 +23,7 @@ use std::path::PathBuf;
 use mkaegis_engine::Session;
 use serde_json::{Value as Json, json};
 
-pub use dialogs::Dialog;
+pub use dialogs::{Dialog, Discard};
 pub use pane::{Pane, Tool as GpTool};
 pub use ribbon::Tab;
 use theme::Tokens;
@@ -79,6 +79,8 @@ pub struct MapApp {
     pub show_contents: bool,
     /// The command search, open with its query.
     pub search: Option<String>,
+    /// Closing the window was confirmed (saved or discarded): the next close request goes through.
+    pub close_confirmed: bool,
     view: mapview::State,
     themed: bool,
     title: String,
@@ -113,6 +115,7 @@ impl MapApp {
             zoom: 100,
             show_contents: true,
             search: None,
+            close_confirmed: false,
             view: mapview::State::default(),
             themed: false,
             title: String::new(),
@@ -259,7 +262,43 @@ impl MapApp {
         }
     }
 
+    /// Project › New, asking first when the map has unsaved changes.
+    pub fn new_project(&mut self) {
+        self.discard_or_ask(Discard::New);
+    }
+
+    /// Project › Open, asking first when the map has unsaved changes.
     pub fn open_project(&mut self) {
+        self.discard_or_ask(Discard::Open);
+    }
+
+    /// Answers the Unsaved Changes dialog: saves first when asked (and stops if that didn't
+    /// save), then does what was waiting.
+    pub fn resolve_unsaved(&mut self, then: Discard, save: bool) {
+        if save {
+            self.save_project(false);
+            if self.session.modified {
+                return;
+            }
+        }
+        match then {
+            Discard::Close => self.close_confirmed = true,
+            Discard::New => {
+                self.run("project.new", json!({}));
+            }
+            Discard::Open => self.pick_project(),
+        }
+    }
+
+    fn discard_or_ask(&mut self, then: Discard) {
+        if self.session.modified {
+            self.dialog = Some(Dialog::UnsavedChanges { then });
+        } else {
+            self.resolve_unsaved(then, false);
+        }
+    }
+
+    fn pick_project(&mut self) {
         match &self.services.open_file {
             Some(pick) => {
                 if let Some(path) = pick("Open Project", &[mkaegis_engine::io::PROJECT_EXTENSION]) {
@@ -320,7 +359,7 @@ impl MapApp {
             self.open_project();
         }
         if pressed(Modifiers::COMMAND, Key::N) {
-            self.run("project.new", json!({}));
+            self.new_project();
         }
         if pressed(Modifiers::COMMAND | Modifiers::SHIFT, Key::A) {
             self.run("map.clearSelection", json!({}));
@@ -352,6 +391,7 @@ impl MapApp {
         #[cfg(not(target_arch = "wasm32"))]
         control::poll(self, &ctx);
         self.shortcuts(&ctx);
+        self.guard_close(&ctx);
         self.fix_active();
         let name = self.session.path.as_ref().and_then(|p| p.file_stem()).map_or("Untitled".to_string(), |s| s.to_string_lossy().into_owned());
         let title = format!("{}{name} — mkaeGIS", if self.session.modified { "• " } else { "" });
@@ -412,6 +452,18 @@ impl MapApp {
         #[cfg(not(target_arch = "wasm32"))]
         if self.control.is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(50));
+        }
+    }
+
+    /// Closing the window with unsaved changes asks first; once answered, the window closes.
+    fn guard_close(&mut self, ctx: &egui::Context) {
+        if self.close_confirmed {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
+        if ctx.input(|i| i.viewport().close_requested()) && self.session.modified {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.dialog = Some(Dialog::UnsavedChanges { then: Discard::Close });
         }
     }
 
@@ -635,6 +687,7 @@ pub fn dms(v: f64, pos: char, neg: char) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use egui_kittest::kittest::Queryable;
 
     #[test]
     fn formats() {
@@ -669,5 +722,76 @@ mod tests {
             harness.run_steps(2);
         }
         assert!(harness.state().status.as_ref().is_none_or(|(_, err)| !err));
+    }
+
+    #[test]
+    fn closing_with_unsaved_changes_asks_first() {
+        let mut harness = harness(MapApp::new(Session::sample()));
+        harness.state_mut().run("layer.rename", json!({ "layer": "Cidades", "name": "Towns" }));
+        assert!(harness.state().session.modified);
+        request_close(&mut harness);
+        assert_eq!(harness.state().dialog, Some(Dialog::UnsavedChanges { then: Discard::Close }));
+        assert!(!harness.state().close_confirmed);
+        harness.get_by_label("Cancel").click();
+        harness.run_steps(2);
+        assert!(harness.state().dialog.is_none());
+        assert!(!harness.state().close_confirmed, "Cancel keeps the window open");
+
+        request_close(&mut harness);
+        harness.get_by_label("Don't Save").click();
+        harness.run_steps(2);
+        assert!(harness.state().close_confirmed);
+    }
+
+    #[test]
+    fn closing_a_saved_map_does_not_ask() {
+        let mut harness = harness(MapApp::new(Session::sample()));
+        assert!(!harness.state().session.modified);
+        request_close(&mut harness);
+        assert!(harness.state().dialog.is_none());
+    }
+
+    #[test]
+    fn save_in_the_dialog_saves_then_closes() {
+        let dir = std::env::temp_dir().join(format!("mkaegis-unsaved-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("map.mkaegis");
+        let mut app = MapApp::new(Session::sample());
+        app.run("project.saveAs", json!({ "path": path.display().to_string() }));
+        app.run("layer.rename", json!({ "layer": "Cidades", "name": "Towns" }));
+        let mut harness = harness(app);
+        request_close(&mut harness);
+        harness.get_by_label("Save").click();
+        harness.run_steps(2);
+        assert!(!harness.state().session.modified);
+        assert!(harness.state().close_confirmed);
+        assert!(std::fs::read_to_string(&path).unwrap().contains("Towns"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn new_and_open_ask_before_discarding_changes() {
+        let mut app = MapApp::new(Session::sample());
+        app.run("layer.rename", json!({ "layer": "Cidades", "name": "Towns" }));
+        app.new_project();
+        assert_eq!(app.dialog, Some(Dialog::UnsavedChanges { then: Discard::New }));
+        assert!(!app.session.map.layers.is_empty(), "nothing is discarded before the answer");
+        app.dialog = None;
+        app.resolve_unsaved(Discard::New, false);
+        assert!(app.session.map.layers.is_empty());
+        app.open_project();
+        assert!(!matches!(app.dialog, Some(Dialog::UnsavedChanges { .. })), "an empty new map has nothing to lose");
+    }
+
+    fn harness(app: MapApp) -> egui_kittest::Harness<'static, MapApp> {
+        let mut harness =
+            egui_kittest::Harness::builder().with_size(egui::vec2(1280.0, 800.0)).build_ui_state(|ui, app: &mut MapApp| app.ui(ui), app);
+        harness.run_steps(2);
+        harness
+    }
+
+    fn request_close(harness: &mut egui_kittest::Harness<'static, MapApp>) {
+        harness.input_mut().viewports.entry(egui::ViewportId::ROOT).or_default().events.push(egui::ViewportEvent::Close);
+        harness.run_steps(2);
     }
 }

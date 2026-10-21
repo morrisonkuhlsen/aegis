@@ -102,7 +102,8 @@ impl Session {
                     self.undo.remove(0);
                 }
                 self.redo.clear();
-                self.modified = true;
+                // A new or just-opened map has nothing unsaved (undoing back to the old map does).
+                self.modified = !matches!(id, "project.new" | "project.open");
             }
             (Err(_), Some(before)) => {
                 self.map = before;

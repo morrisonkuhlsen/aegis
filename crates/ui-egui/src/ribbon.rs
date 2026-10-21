@@ -186,7 +186,7 @@ fn title_bar(app: &mut MapApp, ui: &mut Ui) {
 fn file_menu(app: &mut MapApp, ui: &mut Ui) {
     ui.set_min_width(200.0);
     if ui.button("New Map").clicked() {
-        app.run("project.new", json!({}));
+        app.new_project();
     }
     if ui.button("Open…").clicked() {
         app.open_project();

@@ -226,7 +226,7 @@ pub const ADD_FIELD: CommandSpec = CommandSpec {
             "boolean" | "bool" => FieldType::Boolean,
             other => return Err(Error::param("type", format!("unknown field type `{other}`"))),
         };
-        layer.data.add_field(Field::new(req_str(p, "name")?, kind))?;
+        layer.data_mut().add_field(Field::new(req_str(p, "name")?, kind))?;
         Ok(json!({ "message": "field added" }))
     },
 };
@@ -270,7 +270,7 @@ pub const CALCULATE_FIELD: CommandSpec = CommandSpec {
             ));
         }
         for (r, v) in values {
-            if let Some(slot) = layer.data.features.get_mut(r).and_then(|f| f.values.get_mut(i)) {
+            if let Some(slot) = layer.data_mut().features.get_mut(r).and_then(|f| f.values.get_mut(i)) {
                 *slot = v;
             }
         }
@@ -290,7 +290,7 @@ pub const EXPORT: CommandSpec = CommandSpec {
     run: |s, p| {
         let layer = s.map.layer(&layer_key(p, "layer")?)?;
         let file = path(p, "path")?;
-        let mut data = layer.data.clone();
+        let mut data = (*layer.data).clone();
         if opt_bool(p, "selectedOnly")?.unwrap_or(false) {
             data.features = layer.selection.iter().filter_map(|r| layer.data.features.get(*r).cloned()).collect();
         }

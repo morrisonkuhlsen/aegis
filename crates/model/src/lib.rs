@@ -9,6 +9,7 @@ pub mod symbology;
 pub mod weights;
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use mkaegis_core::{Color, Error, Result, Value};
 use mkaegis_crs::Crs;
@@ -101,6 +102,19 @@ impl FeatureClass {
         FeatureClass { name: name.to_string(), geometry_type, crs, fields, features: Vec::new() }
     }
 
+    /// About how many bytes the features take in memory: coordinates, values and text. An
+    /// estimate, for budgets such as how much undo may hold.
+    pub fn approx_bytes(&self) -> usize {
+        let value = |v: &Value| std::mem::size_of::<Value>() + if let Value::Text(t) = v { t.len() } else { 0 };
+        self.features
+            .iter()
+            .map(|f| {
+                let coords = f.geometry.as_ref().map_or(0, |g| g.coords().count());
+                std::mem::size_of::<Feature>() + coords * std::mem::size_of::<mkaegis_geom::Coord>() + f.values.iter().map(value).sum::<usize>()
+            })
+            .sum()
+    }
+
     /// The index of a field by name, ignoring case.
     pub fn field_index(&self, name: &str) -> Option<usize> {
         self.fields.iter().position(|f| f.name.eq_ignore_ascii_case(name.trim()))
@@ -177,7 +191,9 @@ pub struct Layer {
     pub id: u32,
     pub name: String,
     pub visible: bool,
-    pub data: FeatureClass,
+    /// The features, shared with undo snapshots until a command changes them: read it as it
+    /// is, change it through [`Layer::data_mut`], which copies it first if it is shared.
+    pub data: Arc<FeatureClass>,
     pub renderer: Renderer,
     pub labels: Option<Labels>,
     /// Selected rows.
@@ -193,12 +209,17 @@ impl Layer {
             id,
             name: data.name.clone(),
             visible: true,
-            data,
+            data: Arc::new(data),
             renderer: Renderer::Single(symbol),
             labels: None,
             selection: BTreeSet::new(),
             opacity: 100,
         }
+    }
+
+    /// The features to change: copied first when an undo snapshot still shares them.
+    pub fn data_mut(&mut self) -> &mut FeatureClass {
+        Arc::make_mut(&mut self.data)
     }
 
     /// Applies `rows` to the selection the way `mode` says.
@@ -226,7 +247,7 @@ pub struct Map {
     next_id: u32,
     /// Spatial weights, by name (projects saved before weights existed have none).
     #[serde(default)]
-    pub weights: Vec<weights::Weights>,
+    pub weights: Vec<Arc<weights::Weights>>,
 }
 
 impl Default for Map {

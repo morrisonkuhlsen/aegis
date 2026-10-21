@@ -29,7 +29,7 @@ pub const BUFFER: CommandSpec = CommandSpec {
             "km" | "kilometer" | "kilometers" | "kilometre" | "kilometres" => distance *= 1000.0,
             other => return Err(Error::param("unit", format!("unknown unit `{other}`"))),
         }
-        let mut data = layer.data.clone();
+        let mut data = (*layer.data).clone();
         if opt_bool(p, "selectedOnly")?.unwrap_or(false) || (!layer.selection.is_empty() && p.get("selectedOnly").is_none()) {
             // Like ArcGIS, a tool works on the selection when there is one.
             data.features = layer.selection.iter().filter_map(|r| layer.data.features.get(*r).cloned()).collect();
@@ -74,7 +74,7 @@ pub const CALCULATE_GEOMETRY: CommandSpec = CommandSpec {
             .ok_or_else(|| Error::param("property", "area, areaHectares, areaKm2, length, lengthKm, centroidX or centroidY"))?;
         let field = req_str(p, "field")?;
         let layer = s.map.layer_mut(&layer_key(p, "layer")?)?;
-        let n = mkaegis_analysis::calculate_geometry(&mut layer.data, field, property)?;
+        let n = mkaegis_analysis::calculate_geometry(layer.data_mut(), field, property)?;
         Ok(json!({ "message": format!("{n} rows calculated") }))
     },
 };

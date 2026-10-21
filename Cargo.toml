@@ -26,7 +26,8 @@ mkaegis-mcp = { path = "crates/mcp" }
 
 # foundation
 thiserror = "2"
-serde = { version = "1", features = ["derive"] }
+# rc: layers share their features through Arc (undo snapshots copy on write).
+serde = { version = "1", features = ["derive", "rc"] }
 # preserve_order: GeoJSON properties keep their order as fields.
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 log = "0.4"

@@ -1,12 +1,13 @@
 //! Geoprocessing tools (L3), named after the toolboxes': Buffer (Analysis), Project and Calculate
 //! Geometry Attributes (Data Management), Select Layer By Location, Summary Statistics.
 //!
-//! Distances and areas are in metres. Data in a geographic CRS is measured in the UTM zone of
-//! each feature (good to a fraction of a percent inside a zone); geodesic measures come later.
+//! Distances and areas are in metres. Data in a UTM zone is measured as it is; data in any other
+//! CRS (geographic, Web Mercator) is measured in the UTM zone of each feature (good to a fraction
+//! of a percent inside a zone); geodesic measures come later.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 use mkaegis_core::{Error, Result, Value};
-use mkaegis_crs::Crs;
+use mkaegis_crs::{Crs, Kind};
 use mkaegis_geom::{Coord, Geometry, GeometryType, algo};
 use mkaegis_model::{FeatureClass, Field, FieldType};
 use serde::{Deserialize, Serialize};
@@ -14,12 +15,16 @@ use serde::{Deserialize, Serialize};
 /// The largest buffer distance (metres): a hemisphere.
 const MAX_DISTANCE: f64 = 2.0e7;
 
-/// The geometry in a metric CRS for measuring: itself if projected, else in its UTM zone.
+/// The geometry in a CRS whose units are ground metres, for measuring: itself in a UTM zone, else
+/// in the UTM zone of its centroid. Geographic coordinates are degrees, and Web Mercator's metres
+/// are 1/cos φ ground metres (areas 19 % too large at 23.5°S, 4× at 60°N), so neither is
+/// measured as it is (#50).
 fn metric(g: &Geometry, crs: Crs) -> Result<(Geometry, Crs)> {
-    if !crs.is_geographic() {
+    if matches!(crs.kind(), Kind::Utm { .. }) {
         return Ok((g.clone(), crs));
     }
     let c = algo::centroid(g).or_else(|| g.coords().next()).ok_or_else(|| Error::Geometry("empty geometry".into()))?;
+    let c = crs.to_geographic(c)?;
     let utm = Crs::utm_for(c.x, c.y.clamp(-80.0, 84.0))?;
     Ok((g.try_map(|p| crs.transform(utm, p))?, utm))
 }
@@ -327,5 +332,69 @@ mod tests {
         // Sample variance of 12, 4, 6: (14²/9 + 10²/9 + 4²/9) / 2 = 52/3.
         assert!((s.std.unwrap() - (52.0f64 / 3.0).sqrt()).abs() < 1e-12);
         assert!(summary_statistics(&c, "nope", None).is_err());
+    }
+
+    /// #50: Web Mercator's units were taken for ground metres. The same features measured in
+    /// longitude/latitude and in Web Mercator now agree, and both match the ellipsoid.
+    mod web_mercator {
+        use super::*;
+
+        /// The WGS 84 area of the cell between two parallels and `dlon` degrees of longitude, in
+        /// closed form: b²·Δλ/2 · [f(φ₂) − f(φ₁)], f(φ) = sin φ / (1 − e² sin² φ) + atanh(e sin φ) / e.
+        fn cell_area(lat1: f64, lat2: f64, dlon: f64) -> f64 {
+            let (a, f) = (6_378_137.0f64, 1.0 / 298.257_223_563);
+            let (b, e) = (a * (1.0 - f), (f * (2.0 - f)).sqrt());
+            let q = |lat: f64| {
+                let s = lat.to_radians().sin();
+                s / (1.0 - e * e * s * s) + (e * s).atanh() / e
+            };
+            b * b * dlon.to_radians() / 2.0 * (q(lat2) - q(lat1))
+        }
+
+        /// A `side`-degree square with its south-west corner at (lon, lat), in WGS 84 and in Web Mercator.
+        fn square(lon: f64, lat: f64, side: f64) -> (FeatureClass, FeatureClass) {
+            let mut fc = FeatureClass::new("sq", GeometryType::Polygon, Crs::WGS84, vec![]);
+            let ring = vec![Coord::new(lon, lat), Coord::new(lon + side, lat), Coord::new(lon + side, lat + side), Coord::new(lon, lat + side)];
+            fc.push(Some(Geometry::polygon(vec![ring]).unwrap()), vec![]).unwrap();
+            let mercator = project(&fc, Crs::WEB_MERCATOR, "m").unwrap();
+            (fc, mercator)
+        }
+
+        #[test]
+        fn areas_and_lengths_are_ground_measures_at_every_latitude() {
+            // Zone 23's central meridian is 45°W: UTM's scale there is 0.9996.
+            for lat in [-0.05, -23.5, 60.0, -70.0] {
+                let (geo, mercator) = square(-45.05, lat, 0.1);
+                let truth = cell_area(lat, lat + 0.1, 0.1);
+                for fc in [&geo, &mercator] {
+                    let area = measure(fc.features[0].geometry.as_ref().unwrap(), fc.crs, Property::Area).unwrap();
+                    assert!((area / truth - 1.0).abs() < 2e-3, "{lat}° in {}: {area} m² against {truth}", fc.crs.name());
+                }
+                // A meridian side, against Vincenty's geodesic.
+                let side = |fc: &FeatureClass| {
+                    let Some(Geometry::Polygon(rings)) = &fc.features[0].geometry else { panic!("a polygon") };
+                    let (p, q) = (rings[0][1], rings[0][2]);
+                    let line = Geometry::Polyline(vec![vec![p, q]]);
+                    (measure(&line, fc.crs, Property::Length).unwrap(), fc.crs.distance(p, q).unwrap())
+                };
+                let (length, geodesic) = side(&mercator);
+                assert!((length / geodesic - 1.0).abs() < 1e-3, "{lat}°: {length} m against {geodesic}");
+            }
+        }
+
+        #[test]
+        fn buffers_have_their_ground_radius() {
+            for lat in [0.0, -23.5, 60.0] {
+                let centre = Crs::WEB_MERCATOR.from_geographic(Coord::new(-45.0, lat)).unwrap();
+                let mut fc = FeatureClass::new("p", GeometryType::Point, Crs::WEB_MERCATOR, vec![]);
+                fc.push(Some(Geometry::Point(centre)), vec![]).unwrap();
+                let b = buffer(&fc, 10_000.0, "b").unwrap();
+                let Some(Geometry::Polygon(rings)) = &b.features[0].geometry else { panic!("a polygon") };
+                for v in &rings[0] {
+                    let d = Crs::WEB_MERCATOR.distance(centre, *v).unwrap();
+                    assert!((d / 10_000.0 - 1.0).abs() < 1e-3, "{lat}°: a vertex {d} m away");
+                }
+            }
+        }
     }
 }

@@ -212,6 +212,14 @@ impl MapApp {
             "management.project" => gp(self, T::Project),
             "management.calculateGeometry" => gp(self, T::CalculateGeometry),
             "analysis.summaryStatistics" => gp(self, T::SummaryStatistics),
+            "stats.globalMoran" | "stats.gearyC" | "stats.generalG" => {
+                gp(self, T::SpatialAutocorrelation);
+                self.gp.statistic = match id {
+                    "stats.gearyC" => "stats.gearyC",
+                    "stats.generalG" => "stats.generalG",
+                    _ => "stats.globalMoran",
+                };
+            }
             "layer.symbology" | "layer.labels" | "layer.setOpacity" => self.pane = Some(Pane::Symbology),
             "map.selectByRectangle" => self.tool = Tool::Select,
             "feature.identify" => self.tool = Tool::Explore,
@@ -918,6 +926,25 @@ mod tests {
         harness.get_by_label("Neighbors").click();
         harness.run_steps(2);
         assert_eq!(harness.state().session.map.layer("Cidades").map(|l| l.selection.len()).unwrap_or(0), 4);
+    }
+
+    /// #23: the Statistics tab's Global Moran's I opens the Spatial Autocorrelation tool, which
+    /// runs on the latest weights and shows its report.
+    #[test]
+    fn the_autocorrelation_tool_reports_moran_s_i() {
+        let mut harness = harness(MapApp::new(Session::sample()));
+        harness.state_mut().run("stats.weights", json!({ "layer": "Cidades", "method": "knn", "k": 4 }));
+        harness.state_mut().tab = Tab::Statistics;
+        harness.run_steps(2);
+        harness.get_by_label("Global Moran's I").click();
+        harness.run_steps(2);
+        assert_eq!(harness.state().gp.tool, Some(GpTool::SpatialAutocorrelation));
+        harness.get_by_label("Run").click();
+        harness.run_steps(2);
+        harness.get_by_label("Moran's I — POP by Cidades_knn");
+        harness.get_by_label("p (randomization, two-sided)");
+        harness.get_by_label("Pseudo p (one-sided)");
+        harness.get_by_label("999 (seed 12345)");
     }
 
     #[test]

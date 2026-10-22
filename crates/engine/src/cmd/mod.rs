@@ -97,6 +97,9 @@ pub static COMMANDS: &[CommandSpec] = &[
     stats::REMOVE_WEIGHTS,
     stats::EXPORT_WEIGHTS,
     stats::IMPORT_WEIGHTS,
+    stats::GLOBAL_MORAN,
+    stats::GEARY_C,
+    stats::GENERAL_G,
     project::UNDO,
     project::REDO,
 ];

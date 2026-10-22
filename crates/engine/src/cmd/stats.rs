@@ -1,5 +1,5 @@
-//! Statistics tab: spatial weights (build, inspect, select neighbours, import and export). The
-//! spatial statistics that take them come next.
+//! Statistics tab: spatial weights (build, inspect, select neighbours, import and export) and
+//! the global statistics that take them (Moran's I, Geary's C, General G).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -9,6 +9,7 @@ use mkaegis_geom::GeometryType;
 use mkaegis_model::Layer;
 use mkaegis_model::weights::{Bandwidth, Kernel, Method, Standardization, Weights};
 use mkaegis_stats::Spec;
+use mkaegis_stats::autocorrelation::{self, Statistic};
 use serde_json::{Value as Json, json};
 
 use super::{CommandSpec, Kind, has_layers, layer_key, mode, opt_bool, opt_f64, opt_str, path, req_str};
@@ -16,6 +17,12 @@ use crate::Session;
 
 /// The largest weights file read.
 const MAX_FILE_BYTES: u64 = 512 * 1024 * 1024;
+/// Permutations a test runs unless told otherwise, and the seed they start from: a stated seed
+/// makes a pseudo p-value reproducible.
+const DEFAULT_PERMUTATIONS: u32 = 999;
+const DEFAULT_SEED: u64 = 12_345;
+const AUTOCORRELATION_PARAMS: &str = "{weights, field, permutations? (default 999, 0 for none, up to 99999), seed? (default 12345)} — \
+                                      a numeric field without NULLs, on the weights' layer";
 
 pub(crate) fn has_weights(s: &Session) -> bool {
     !s.map.weights.is_empty()
@@ -206,6 +213,94 @@ pub const IMPORT_WEIGHTS: CommandSpec = CommandSpec {
         Ok(add_weights(s, weights))
     },
 };
+
+pub const GLOBAL_MORAN: CommandSpec = CommandSpec {
+    id: "stats.globalMoran",
+    label: "Spatial Autocorrelation (Global Moran's I)",
+    ribbon: "Statistics ▸ Autocorrelation",
+    shortcut: None,
+    params: AUTOCORRELATION_PARAMS,
+    kind: Kind::Query,
+    enabled: has_weights,
+    run: |s, p| global(s, p, Statistic::MoranI),
+};
+
+pub const GEARY_C: CommandSpec = CommandSpec {
+    id: "stats.gearyC",
+    label: "Geary's C",
+    ribbon: "Statistics ▸ Autocorrelation",
+    shortcut: None,
+    params: AUTOCORRELATION_PARAMS,
+    kind: Kind::Query,
+    enabled: has_weights,
+    run: |s, p| global(s, p, Statistic::GearyC),
+};
+
+pub const GENERAL_G: CommandSpec = CommandSpec {
+    id: "stats.generalG",
+    label: "High/Low Clustering (Getis-Ord General G)",
+    ribbon: "Statistics ▸ Autocorrelation",
+    shortcut: None,
+    params: AUTOCORRELATION_PARAMS,
+    kind: Kind::Query,
+    enabled: has_weights,
+    run: |s, p| global(s, p, Statistic::GeneralG),
+};
+
+/// A global statistic of a field for a weights matrix, as a report.
+fn global(s: &Session, p: &Json, stat: Statistic) -> Result<Json> {
+    let w = find(s, req_str(p, "weights")?)?;
+    let layer = layer_of(s, w)?;
+    let field = req_str(p, "field")?;
+    let i = layer.data.field_index(field).ok_or_else(|| Error::NotFound(format!("field `{field}`")))?;
+    if layer.data.fields.get(i).is_some_and(|f| !f.kind.is_numeric()) {
+        return Err(Error::param("field", format!("`{field}` is not numeric")));
+    }
+    let values: Vec<Option<f64>> = layer.data.features.iter().map(|f| f.values.get(i).and_then(Value::as_f64)).collect();
+    let missing = values.iter().filter(|v| v.is_none()).count();
+    if missing > 0 {
+        let first = values.iter().position(Option::is_none).map_or(0, |r| r + 1);
+        return Err(Error::param(
+            "field",
+            format!("{missing} features have no `{field}` (the first is row {first}): {} needs a value at every feature", stat.name()),
+        ));
+    }
+    let values: Vec<f64> = values.into_iter().flatten().collect();
+    let permutations = match opt_f64(p, "permutations")? {
+        None => DEFAULT_PERMUTATIONS,
+        Some(x) if x.fract() == 0.0 && (0.0..=f64::from(autocorrelation::MAX_PERMUTATIONS)).contains(&x) => x as u32,
+        Some(_) => return Err(Error::param("permutations", format!("a whole number from 0 to {}", autocorrelation::MAX_PERMUTATIONS))),
+    };
+    let seed = match p.get("seed") {
+        None | Some(Json::Null) => DEFAULT_SEED,
+        Some(v) => v.as_u64().ok_or_else(|| Error::param("seed", "a whole number from 0"))?,
+    };
+    let report = autocorrelation::global(stat, &values, &w.neighbours, permutations, seed)?;
+    let inference = match &report.permutation {
+        Some(perm) => format!("pseudo p = {} ({} permutations, seed {})", number(perm.p), perm.permutations, perm.seed),
+        None => format!("p = {} (randomization)", number(report.randomization.p)),
+    };
+    let message = format!(
+        "{} of {field} = {} (expected {}), z = {}, {inference}",
+        stat.name(),
+        number(report.value),
+        number(report.expected),
+        number(report.randomization.z)
+    );
+    let mut out = serde_json::to_value(&report).map_err(|e| Error::Internal(e.to_string()))?;
+    if let Some(o) = out.as_object_mut() {
+        o.insert("message".into(), json!(message));
+        o.insert("layer".into(), json!(layer.name));
+        o.insert("field".into(), json!(field));
+        o.insert("weights".into(), json!(w.name));
+    }
+    Ok(out)
+}
+
+/// A statistic for a message: four decimals, or scientific notation when very small or large.
+fn number(x: f64) -> String {
+    if x != 0.0 && (x.abs() < 1e-3 || x.abs() >= 1e6) { format!("{x:.3e}") } else { format!("{:.4}", x) }
+}
 
 /// Adds a weights matrix to the map; its summary is the command's result.
 fn add_weights(s: &mut Session, weights: Weights) -> Json {

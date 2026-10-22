@@ -32,6 +32,13 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Added
 
+- **Global spatial autocorrelation** (#23): Global Moran's I (`stats.globalMoran`), Geary's C
+  (`stats.gearyC`) and Getis-Ord General G (`stats.generalG`) of a field, for a spatial weights
+  matrix. Each reports the statistic and its expectation; z-scores and two-sided p-values under
+  normality and under randomisation (General G: randomisation only); and a permutation test,
+  999 permutations from seed 12345 by default, with its one-sided pseudo p-value. A stated seed
+  gives the same pseudo p-value every time. In the app: Statistics ▸ Global Moran's I opens the
+  Spatial Autocorrelation tool.
 - `mkaegis-cli run --out-layer NAME` picks the layer `--out` writes (#3).
 - **Define Projection** (`management.defineProjection {layer, epsg}`, #6) says which coordinate
   system a layer's coordinates are in, without moving them. `layer.info` reports whether the

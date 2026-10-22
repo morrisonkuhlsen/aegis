@@ -120,6 +120,9 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Changed
 
+- **CI runs the quality gate on Linux, Windows and macOS** (#19), not on Linux only. A
+  `.gitattributes` keeps text files LF in every checkout, so `parity --check` no longer fails on
+  a Windows clone whose files Git turned into CRLF.
 - The right pane folds with a chevron (›), mirroring the one (‹) that opens it, instead of ×.
 
 ### Fixed

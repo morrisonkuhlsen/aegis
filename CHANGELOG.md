@@ -24,6 +24,7 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Added
 
+- `mkaegis-cli run --out-layer NAME` picks the layer `--out` writes (#3).
 - **Define Projection** (`management.defineProjection {layer, epsg}`, #6) says which coordinate
   system a layer's coordinates are in, without moving them. `layer.info` reports whether the
   coordinate system is known, and the `.prj` text of an unknown one.
@@ -40,6 +41,9 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Fixed
 
+- `mkaegis-cli run --out` wrote the top layer, not the one the commands made: `analysis.buffer`
+  on points with `--out buffers.geojson` wrote the points (#3). It now writes the layer the last
+  command made or added, and says which.
 - **Memory:** every map-changing command used to copy the whole map for Undo, and 50 steps had
   no byte limit: toggling a 1 GB layer's visibility 50 times held about 50 GB. Undo steps now
   share every layer they didn't change, and the steps kept are capped at 1 GB of what they

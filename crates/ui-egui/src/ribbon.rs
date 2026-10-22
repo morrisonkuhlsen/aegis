@@ -346,6 +346,8 @@ fn analysis_tab(app: &mut MapApp, ui: &mut Ui) {
             (Icon::Project, "Project", GpTool::Project),
             (Icon::Calculate, "Calculate Geometry", GpTool::CalculateGeometry),
             (Icon::Statistics, "Summary Statistics", GpTool::SummaryStatistics),
+            (Icon::Table, "Crosstabs", GpTool::Crosstabs),
+            (Icon::Statistics, "Correlations", GpTool::Correlations),
         ] {
             if button(ui, icon, label, layers, app.gp.tool == Some(tool) && app.pane == Some(Pane::Geoprocessing), tool.description()) {
                 app.gp.open(tool, active_id(app));

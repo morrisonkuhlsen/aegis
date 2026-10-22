@@ -3,7 +3,7 @@
 //!
 //! `cargo run -p mkaegis-ui-egui --example snapshot -- [--sample] [--in file.geojson|.shp|.aegis]
 //!  [--cmd 'id={json}']... [--tab map|analysis|statistics|edit|view|share] [--pane geoprocessing|symbology|history|charts]
-//!  [--tool buffer|project|calculate|attributes|location|statistics|weights|autocorrelation|join|xy] [--click LABEL]... [--chart histogram|box|scatter|moran]
+//!  [--tool buffer|project|calculate|attributes|location|statistics|weights|autocorrelation|join|xy|crosstabs|correlations] [--click LABEL]... [--chart histogram|box|scatter|moran]
 //!  [--table] [--select] [--dark]
 //!  [--splash] [--icon] [--backstage home|new|open|info|export] [--size 1280x800] out.png`
 
@@ -119,6 +119,8 @@ fn main() -> Result<(), String> {
             "weights" => T::SpatialWeights,
             "autocorrelation" => T::SpatialAutocorrelation,
             "join" => T::JoinField,
+            "crosstabs" => T::Crosstabs,
+            "correlations" => T::Correlations,
             "xy" => T::XyTableToPoint,
             _ => T::Buffer,
         };

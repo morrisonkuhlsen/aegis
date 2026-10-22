@@ -9,23 +9,23 @@ WebAssembly (`cargo xtask wasm`).
 
 ## Layers
 
-| Layer | Crate              | What it holds                                                                                    |
-|-------|--------------------|--------------------------------------------------------------------------------------------------|
-| L0    | `mkaegis-core`     | The error type every crate returns, attribute values, colours                                    |
-| L0    | `mkaegis-geom`     | Planar geometry: coordinates, envelopes, point/multipoint/polyline/polygon, algorithms, WKT      |
-| L0    | `mkaegis-crs`      | Coordinate reference systems by EPSG code and the projection math (Snyder, Karney)               |
-| L1    | `mkaegis-model`    | The map document: feature classes, layers, the map, symbology, SQL `WHERE`, spatial weights      |
-| L2    | `mkaegis-geojson`  | GeoJSON (RFC 7946) in and out                                                                    |
-| L2    | `mkaegis-csv`      | Delimited text tables (CSV, TSV) in and out, with type inference, from RFC 4180                  |
-| L2    | `mkaegis-shp`      | Shapefile (`.shp/.shx/.dbf/.prj/.cpg`) in and out, from the public technical description         |
-| L2    | `mkaegis-render`   | Viewport, display list and a software rasteriser to PNG                                          |
-| L3    | `mkaegis-analysis` | Geoprocessing tools: Buffer, Project, Calculate Geometry, Select By Location, Summary Statistics |
-| L3    | `mkaegis-stats`    | Spatial statistics, clean-room from the literature: spatial weights, GAL/GWT                     |
-| L4    | `mkaegis-engine`   | The `Session`: the map, undo/redo, the history, and every command                                |
-| L5    | `mkaegis-ui-egui`  | The egui frontend and the control channel                                                        |
-| L5    | `mkaegis-mcp`      | The Model Context Protocol server (stdio)                                                        |
-| L6    | `mkaegis`          | The desktop app                                                                                  |
-| L6    | `mkaegis-cli`      | The headless command line, which also serves MCP                                                 |
+| Layer | Crate              | What it holds                                                                               |
+|-------|--------------------|---------------------------------------------------------------------------------------------|
+| L0    | `mkaegis-core`     | The error type every crate returns, attribute values, colours                               |
+| L0    | `mkaegis-geom`     | Planar geometry: coordinates, envelopes, point/multipoint/polyline/polygon, algorithms, WKT |
+| L0    | `mkaegis-crs`      | Coordinate reference systems by EPSG code and the projection math (Snyder, Karney)          |
+| L1    | `mkaegis-model`    | The map document: feature classes, layers, the map, symbology, SQL `WHERE`, spatial weights |
+| L2    | `mkaegis-geojson`  | GeoJSON (RFC 7946) in and out                                                               |
+| L2    | `mkaegis-csv`      | Delimited text tables (CSV, TSV) in and out, with type inference, from RFC 4180             |
+| L2    | `mkaegis-shp`      | Shapefile (`.shp/.shx/.dbf/.prj/.cpg`) in and out, from the public technical description    |
+| L2    | `mkaegis-render`   | Viewport, display list and a software rasteriser to PNG                                     |
+| L3    | `mkaegis-analysis` | Geoprocessing tools: Buffer, Project, Calculate Geometry, Select By Location, Join Field    |
+| L3    | `mkaegis-stats`    | Spatial statistics, clean-room from the literature: spatial weights, GAL/GWT                |
+| L4    | `mkaegis-engine`   | The `Session`: the map, undo/redo, the history, and every command                           |
+| L5    | `mkaegis-ui-egui`  | The egui frontend and the control channel                                                   |
+| L5    | `mkaegis-mcp`      | The Model Context Protocol server (stdio)                                                   |
+| L6    | `mkaegis`          | The desktop app                                                                             |
+| L6    | `mkaegis-cli`      | The headless command line, which also serves MCP                                            |
 
 `xtask` holds the project's tasks (`cargo xtask ci` runs every quality gate).
 

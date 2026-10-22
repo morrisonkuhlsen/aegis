@@ -5,6 +5,11 @@
 MK aeGIS is a statistical GIS: a geographic information system built for statisticians. This page
 is the one-page summary; the detail is in [`docs/`](docs/).
 
+**Positioning** ([ADR 0002](docs/adr/0002-positioning.md)): a spatial statistics workbench, with
+Brazil (Portuguese, SIRGAS 2000, SIGEF and INCRA surveying) as its vertical. Statistics come
+first; general map handling is kept "enough" for the analyses and talks to other GIS through
+files, rather than chasing their breadth.
+
 ## Stage
 
 **Alpha (0.x).** The map handling a statistician needs before any statistic works: open

@@ -124,6 +124,11 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Fixed
 
+- **The MCP server keeps going whatever a client sends** (#60). Bytes that aren't UTF-8 made it
+  exit; they now get a parse error (-32700), as a line over 16 MB does, which is no longer held
+  whole. A message that isn't a JSON object, or a request without a `method`, gets -32600
+  instead of nothing; a client's responses get no reply, as JSON-RPC requires (they got
+  -32601); an unknown tool is a -32602 error instead of a tool result.
 - **Command lines** (#63): `mkaegis a.shp --sample` drops the file no more (the sample goes
   under it, either way round); `--control abc`, a `--control` without a port and an unknown
   option are refused with the usage and exit code 2, as are `mkaegis-cli`'s usage errors (a

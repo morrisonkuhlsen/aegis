@@ -7,7 +7,7 @@
 //! - `assets`: every asset file has its row in `ATTRIBUTION.md`.
 //! - `panics`: every crate's root denies unwrap, expect, panic, todo, unimplemented and
 //!   unreachable outside tests.
-//! - `wasm`: the engine and the UI still build for WebAssembly.
+//! - `wasm`: the engine, the UI and the web app still build for WebAssembly.
 //! - `parity [--check]`: regenerates `docs/parity-checklist.md` from the command registry, or
 //!   (`--check`, part of `ci`) fails when it is stale.
 //! - `stats`: the headline numbers for `ROADMAP.md`: Rust files, lines and tests per crate, and
@@ -24,7 +24,7 @@ use std::process::{Command, ExitCode};
 
 /// Each internal crate's layer: L0 `core`/`geom`/`crs` → L1 `model` → L2 `geojson`/`csv`/`shp`/`render`
 /// → L3 `analysis` → L4 `engine` → L5 `ui-egui`/`mcp` → L6 `apps/*`.
-const LAYERS: [(&str, u8); 15] = [
+const LAYERS: [(&str, u8); 16] = [
     ("mkaegis-core", 0),
     ("mkaegis-geom", 0),
     ("mkaegis-crs", 0),
@@ -40,6 +40,7 @@ const LAYERS: [(&str, u8); 15] = [
     ("mkaegis-mcp", 5),
     ("mkaegis", 6),
     ("mkaegis-cli", 6),
+    ("mkaegis-web", 6),
 ];
 
 /// The first layer allowed to use the UI toolkit.
@@ -155,7 +156,18 @@ fn cargo(args: &[&str]) -> Result<(), String> {
 }
 
 fn wasm() -> Result<(), String> {
-    cargo(&["build", "--quiet", "--package", "mkaegis-engine", "--package", "mkaegis-ui-egui", "--target", "wasm32-unknown-unknown"])
+    cargo(&[
+        "build",
+        "--quiet",
+        "--package",
+        "mkaegis-engine",
+        "--package",
+        "mkaegis-ui-egui",
+        "--package",
+        "mkaegis-web",
+        "--target",
+        "wasm32-unknown-unknown",
+    ])
 }
 
 /// The parity checklist, generated from the command registry.

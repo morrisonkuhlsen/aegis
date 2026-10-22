@@ -136,6 +136,15 @@ cargo run --release -p mkaegis -- --no-splash                    # skip the spla
 cargo xtask ci                                                    # fmt, clippy, tests, assets, layering, panics, wasm, parity
 ```
 
+In the browser (needs [trunk](https://trunk-rs.github.io/trunk/) and the `wasm32-unknown-unknown`
+target). Everything stays in the page: files you pick or drop are read in memory, and what you save
+or export downloads.
+
+```sh
+cd apps/mkaegis-web && trunk serve --release                     # http://127.0.0.1:8780/?sample
+cd apps/mkaegis-web && trunk build --release                     # → dist/web, for any static server
+```
+
 Offscreen screenshots, with no window and nothing captured from the desktop:
 
 ```sh

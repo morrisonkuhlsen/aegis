@@ -1882,6 +1882,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "mkaegis-web"
+version = "0.1.2"
+dependencies = [
+ "eframe",
+ "egui",
+ "js-sys",
+ "log",
+ "mkaegis-engine",
+ "mkaegis-ui-egui",
+ "rfd",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -294,8 +294,10 @@ pub const EXPORT: CommandSpec = CommandSpec {
         if opt_bool(p, "selectedOnly")?.unwrap_or(false) {
             data.features = layer.selection.iter().filter_map(|r| layer.data.features.get(*r).cloned()).collect();
         }
-        crate::io::write_data(&data, &file)?;
-        Ok(json!({ "message": format!("{} features written to {}", data.features.len(), file.display()) }))
+        let warnings = crate::io::write_data(&data, &file)?;
+        let message = format!("{} features written to {}", data.features.len(), file.display());
+        let message = if warnings.is_empty() { message } else { format!("{message}; {}", warnings.join("; ")) };
+        Ok(json!({ "message": message, "warnings": warnings }))
     },
 };
 

@@ -10,6 +10,12 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ## [Unreleased]
 
+### Changed results
+
+- **Shapefile integer columns 19 or 20 characters wide read as Integer** (#55). They used to
+  read as Double, so values past 2^53 (9,007,199,254,740,992) were rounded. Integer columns six
+  characters wide or narrower read as Short when every value fits 16 bits.
+
 ### Added
 
 - **The File backstage**, as in MK Sigma. File opens a page over the window with these places:
@@ -40,6 +46,15 @@ data and parameters. Read it before re-running an analysis with a new version.
   - What is safe to repair is repaired with a warning: the next layer id is moved past the ids
     in use (before, Add Data could give two layers one id), selected rows past the end are
     cleared, and spatial weights naming missing rows or layers are dropped.
+- **Lost data:** Export Features to a shapefile changed values (#55):
+  - Integers went through a double and were cut to 18 digits, so a 19-digit id came out wrong.
+    They are now written exactly, in a column up to 20 characters wide.
+  - Very large or very small doubles lost their exponent: `-1.2e23` came out as `-1.2`, and
+    `1e-15` as 0. They are now written in exponent notation when it is closer.
+  - Dates read from a `D` column were written back as text; they are written as dates again.
+  - Short fields read back as Integer.
+  - Text past 254 bytes, the dBASE limit, is still cut, but Export Features now says which
+    field and how many values.
 
 ## [0.1.2] - 2026-10-21
 

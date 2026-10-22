@@ -54,6 +54,10 @@ data and parameters. Read it before re-running an analysis with a new version.
   Esc or Back returns to the map. Recent projects are kept between runs. The control channel's
   `ui.set` takes `backstage`.
 
+### Changed
+
+- The right pane folds with a chevron (›), mirroring the one (‹) that opens it, instead of ×.
+
 ### Fixed
 
 - `mkaegis-cli run --out` wrote the top layer, not the one the commands made: `analysis.buffer`

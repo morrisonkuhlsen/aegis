@@ -26,6 +26,7 @@ WebAssembly (`cargo xtask wasm`).
 | L5    | `mkaegis-mcp`      | The Model Context Protocol server (stdio)                                                        |
 | L6    | `mkaegis`          | The desktop app                                                                                  |
 | L6    | `mkaegis-cli`      | The headless command line, which also serves MCP                                                 |
+| L6    | `mkaegis-web`      | The web app: the desktop's window in the browser, files kept in memory (`Disk::Memory`)          |
 
 `xtask` holds the project's tasks (`cargo xtask ci` runs every quality gate).
 

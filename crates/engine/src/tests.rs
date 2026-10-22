@@ -576,7 +576,7 @@ fn csv_tables_join_and_become_points() {
     // The code survives an export to CSV and back.
     let out = dir.join("cidades.csv");
     s.execute("layer.export", &json!({ "layer": "Cidades", "path": out.display().to_string() })).unwrap();
-    let back = crate::io::read_table(&out, &Default::default()).unwrap();
+    let back = crate::io::read_table(&Disk::Native, &out, &Default::default()).unwrap();
     let c = back.fields.iter().position(|f| f.name == "COD").unwrap();
     assert!(back.rows.iter().any(|r| r[c] == mkaegis_core::Value::Text("0012".into())));
     // Join from another layer, then refusals.
@@ -627,6 +627,39 @@ fn data_and_projects_round_trip_through_files() {
     s.execute("share.exportMap", &json!({ "path": png.display().to_string(), "width": 320, "height": 200 })).unwrap();
     assert!(std::fs::metadata(&png).unwrap().len() > 1000);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn files_in_memory_take_the_same_commands_as_files_on_disk() {
+    // The browser: what a person picks goes in, what commands write comes back out.
+    let mut s = Session { disk: Disk::Memory(Default::default()), ..Session::sample() };
+    let written =
+        |s: &mut Session| -> Vec<String> { s.disk.memory_mut().unwrap().take_written().into_iter().map(|(p, _)| p.display().to_string()).collect() };
+    s.execute("layer.export", &json!({ "layer": "Ilhas", "path": "ilhas.shp" })).unwrap();
+    assert_eq!(written(&mut s), ["ilhas.shp", "ilhas.shx", "ilhas.dbf", "ilhas.prj", "ilhas.cpg"]);
+    let r = s.execute("map.addData", &json!({ "path": "ilhas.shp" })).unwrap();
+    assert_eq!(s.map.layer(&r["layer"].to_string()).unwrap().data.features.len(), 3);
+
+    let geojson = mkaegis_geojson::write(&s.map.layer("Cidades").unwrap().data).unwrap();
+    s.disk.memory_mut().unwrap().put("picked.geojson", geojson.into_bytes()).unwrap();
+    let r = s.execute("map.addData", &json!({ "path": "picked.geojson" })).unwrap();
+    assert_eq!(s.map.layer(&r["layer"].to_string()).unwrap().data.features.len(), 23);
+    assert!(written(&mut s).is_empty(), "a picked file is the person's own, not a download");
+    assert!(s.execute("map.addData", &json!({ "path": "nowhere.geojson" })).is_err());
+
+    s.execute("stats.weights", &json!({ "layer": "Cidades" })).unwrap();
+    s.execute("stats.exportWeights", &json!({ "weights": "Cidades_knn", "path": "knn.gal" })).unwrap();
+    s.execute("stats.importWeights", &json!({ "layer": "Cidades", "path": "knn.gal" })).unwrap();
+    s.execute("share.exportMap", &json!({ "path": "map.png", "width": 320, "height": 200 })).unwrap();
+    s.execute("project.saveAs", &json!({ "path": "sample.aegis" })).unwrap();
+    assert_eq!(written(&mut s), ["knn.gal", "map.png", "sample.aegis"]);
+    // Save writes the project again, under its name; Open reads it back.
+    s.execute("project.save", &json!({})).unwrap();
+    assert_eq!(written(&mut s), ["sample.aegis"]);
+    let map = s.map.clone();
+    s.execute("project.new", &json!({})).unwrap();
+    s.execute("project.open", &json!({ "path": "sample.aegis" })).unwrap();
+    assert_eq!(s.map, map);
 }
 
 #[test]

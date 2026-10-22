@@ -4,6 +4,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 pub mod cmd;
+pub mod disk;
 pub mod io;
 pub mod sample;
 
@@ -15,6 +16,7 @@ pub use mkaegis_model::Map;
 use serde_json::Value as Json;
 
 pub use cmd::{COMMANDS, CommandSpec, Kind};
+pub use disk::Disk;
 /// The exploratory views' statistics, for the UI's charts (they draw what this computes).
 pub use mkaegis_stats::explore;
 
@@ -40,6 +42,8 @@ pub struct HistoryEntry {
 pub struct Session {
     pub map: Map,
     pub path: Option<PathBuf>,
+    /// Where commands read and write files: the file system, or memory in the browser.
+    pub disk: Disk,
     pub modified: bool,
     /// Bumped whenever a command asks the view to move (zoom to layer, open…): the UI refits.
     pub view_serial: u64,

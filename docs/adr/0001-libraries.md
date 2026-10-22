@@ -1,6 +1,6 @@
 # ADR 0001: Libraries we may depend on
 
-*Status: accepted. Updated 2026-10-21.*
+*Status: accepted. Updated 2026-10-22.*
 
 ## Context
 
@@ -39,7 +39,10 @@ so a weak-copyleft crate deep in a test tool's tree (today `colored`, MPL-2.0, t
 | `png`                    | MIT OR Apache-2.0         | render, UI       | Export Map, snapshots, the splash wordmark |
 | `zune-jpeg`, `zune-core` | MIT OR Apache-2.0 OR Zlib | UI               | The splash artwork                         |
 | `egui`, `eframe`         | MIT OR Apache-2.0         | UI, desktop app  | The interface (L5+)                        |
-| `rfd`                    | MIT                       | desktop app      | Native file dialogs (L6)                   |
+| `rfd`                    | MIT                       | desktop, web app | File dialogs; the browser's picker (L6)    |
+| `wasm-bindgen`, `js-sys` | MIT OR Apache-2.0         | web app          | The browser's APIs from Rust (L6, wasm32)  |
+| `wasm-bindgen-futures`   | MIT OR Apache-2.0         | web app          | Awaiting the browser's promises            |
+| `web-sys`                | MIT OR Apache-2.0         | web app          | Downloads, the canvas, leaving the page    |
 | `egui_kittest`           | MIT OR Apache-2.0         | UI tests         | Headless UI tests                          |
 
 egui embeds its default fonts (`epaint_default_fonts`: Ubuntu Light under the Ubuntu Font

@@ -110,7 +110,7 @@ pub struct GpState {
     correction: &'static str,
     /// Join Field and XY Table To Point: the table's path, its columns (read when the path
     /// changes), and the key, X and Y columns chosen.
-    path: String,
+    pub(crate) path: String,
     columns: Vec<String>,
     columns_of: String,
     join_key: String,
@@ -339,17 +339,21 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             // the path by a guess at the button's width overflowed the row, and the pane, which
             // fits its content, widened a little on every frame.
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Browse…").clicked()
-                    && let Some(pick) = &app.services.open_file
-                    && let Some(p) = pick("Table", &["csv", "tsv", "txt"])
-                {
-                    g.path = p.display().to_string();
+                if ui.button("Browse…").clicked() {
+                    match &app.services.open_file {
+                        Some(pick) => {
+                            if let Some(p) = pick("Table", &crate::TABLE_EXTENSIONS) {
+                                g.path = p.display().to_string();
+                            }
+                        }
+                        None => app.pick_table(),
+                    }
                 }
                 ui.add(egui::TextEdit::singleline(&mut g.path).hint_text("path to a .csv file").desired_width(ui.available_width()));
             });
             if g.columns_of != g.path {
                 g.columns_of = g.path.clone();
-                g.columns = mkaegis_engine::io::read_table(std::path::Path::new(g.path.trim()), &Default::default())
+                g.columns = mkaegis_engine::io::read_table(&app.session.disk, std::path::Path::new(g.path.trim()), &Default::default())
                     .map(|t| t.fields.into_iter().map(|f| f.name).collect())
                     .unwrap_or_default();
             }

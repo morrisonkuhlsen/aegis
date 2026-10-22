@@ -21,7 +21,8 @@ pub mod splash;
 mod table;
 pub mod theme;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use mkaegis_engine::Session;
 use serde_json::{Value as Json, json};
@@ -33,6 +34,10 @@ pub use pane::{Pane, Tool as GpTool};
 pub use ribbon::Tab;
 use theme::Tokens;
 
+/// What Add Data picks in the browser: the data files, and a shapefile's sidecars with it.
+const DATA_AND_SIDECARS: [&str; 7] = ["geojson", "json", "shp", "shx", "dbf", "prj", "cpg"];
+/// The delimited text tables Join Field and XY Table To Point read.
+pub const TABLE_EXTENSIONS: [&str; 3] = ["csv", "tsv", "txt"];
 const STATUS_HEIGHT: f32 = 26.0;
 const RAIL_WIDTH: f32 = 44.0;
 const PANE_STRIP: f32 = 30.0;
@@ -47,8 +52,11 @@ pub enum Tool {
     Select,
 }
 
-/// Platform services the app crate provides (native file dialogs); without them the app asks
-/// for paths in its own dialogs.
+/// Files that arrived since the last frame (the browser's picker and drops), for the app to take.
+pub type Inbox = Arc<Mutex<Vec<Arrival>>>;
+
+/// Platform services the app crate provides (native file dialogs, or the browser's picker and
+/// downloads); without them the app asks for paths in its own dialogs.
 #[derive(Default)]
 pub struct Services {
     /// Pick a file to open: (title, extensions).
@@ -57,6 +65,32 @@ pub struct Services {
     pub save_file: Option<Box<dyn Fn(&str, &[&str], &str) -> Option<PathBuf>>>,
     /// Keep the recent projects for later runs.
     pub save_recent: Option<Box<dyn Fn(&[PathBuf])>>,
+    /// Pick files without waiting (the browser): (title, extensions, several). What is picked
+    /// arrives later in `inbox`; nothing does when the person cancels.
+    pub pick_files: Option<Box<dyn Fn(&str, &[&str], bool)>>,
+    /// Hand over a file a command wrote to memory (the browser downloads it): (name, bytes).
+    pub download: Option<Box<dyn Fn(&str, &[u8])>>,
+    /// Where picked and dropped files arrive.
+    pub inbox: Option<Inbox>,
+}
+
+/// Files that arrived together: one pick, or one drop on the window.
+#[derive(Debug, Clone, Default)]
+pub struct Arrival {
+    /// Each file's name and bytes.
+    pub files: Vec<(String, Vec<u8>)>,
+    /// Dropped on the window, rather than picked for what the app asked: opened by extension.
+    pub dropped: bool,
+}
+
+/// What the browser's file picker is open for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Awaiting {
+    AddData,
+    OpenProject,
+    ImportWeights(u32),
+    /// The Join Field or XY Table To Point pane's table.
+    Table,
 }
 
 /// The whole window's state.
@@ -93,6 +127,7 @@ pub struct MapApp {
     pub backstage: Option<BackstagePage>,
     /// Projects opened or saved, newest first (the backstage lists them).
     pub recent: Vec<PathBuf>,
+    awaiting: Option<Awaiting>,
     view: mapview::State,
     themed: bool,
     title: String,
@@ -131,6 +166,7 @@ impl MapApp {
             close_confirmed: false,
             backstage: None,
             recent: Vec::new(),
+            awaiting: None,
             view: mapview::State::default(),
             themed: false,
             title: String::new(),
@@ -156,6 +192,7 @@ impl MapApp {
                 }
                 self.fix_active();
                 self.autosave_after(id);
+                self.hand_over_written();
                 if matches!(id, "project.open" | "project.save" | "project.saveAs")
                     && let Some(path) = self.session.path.clone()
                 {
@@ -170,12 +207,23 @@ impl MapApp {
         }
     }
 
-    /// With AutoSave on, an edit is written to the project file at once.
+    /// Files a command wrote to memory go to the person (the browser downloads them).
+    fn hand_over_written(&mut self) {
+        let (Some(download), Some(memory)) = (&self.services.download, self.session.disk.memory_mut()) else { return };
+        for (path, bytes) in memory.take_written() {
+            let name = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
+            download(&name, &bytes);
+        }
+    }
+
+    /// With AutoSave on, an edit is written to the project file at once. Not in the browser,
+    /// where every save is a download.
     fn autosave_after(&mut self, id: &str) {
         let edit =
             matches!(id, "edit.undo" | "edit.redo") || mkaegis_engine::Session::command(id).is_some_and(|c| c.kind == mkaegis_engine::Kind::Edit);
         if self.autosave
             && edit
+            && !self.session.disk.is_memory()
             && self.session.path.is_some()
             && id != "project.open"
             && id != "project.new"
@@ -292,7 +340,87 @@ impl MapApp {
                     self.run("map.addData", json!({ "path": path.display().to_string() }));
                 }
             }
-            None => self.dialog = Some(Dialog::Path { title: "Add Data", command: "map.addData", path: String::new() }),
+            // A shapefile is several files: they are picked together.
+            None => {
+                if !self.pick_async(Awaiting::AddData, "Add Data", &DATA_AND_SIDECARS, true) {
+                    self.dialog = Some(Dialog::Path { title: "Add Data", command: "map.addData", path: String::new() });
+                }
+            }
+        }
+    }
+
+    /// The Join Field or XY Table To Point pane's Browse, in the browser.
+    pub(crate) fn pick_table(&mut self) {
+        self.pick_async(Awaiting::Table, "Table", &TABLE_EXTENSIONS, false);
+    }
+
+    /// Opens the browser's picker, when there is one, for `then`.
+    fn pick_async(&mut self, then: Awaiting, title: &str, extensions: &[&str], several: bool) -> bool {
+        let Some(pick) = &self.services.pick_files else { return false };
+        pick(title, extensions, several);
+        self.awaiting = Some(then);
+        true
+    }
+
+    /// Takes the files that arrived: into memory, then opened for what the picker was open for,
+    /// or, dropped on the window, by extension.
+    fn take_arrivals(&mut self) {
+        let Some(inbox) = &self.services.inbox else { return };
+        let arrivals = std::mem::take(&mut *inbox.lock().unwrap_or_else(PoisonError::into_inner));
+        for arrival in arrivals {
+            self.arrive(arrival);
+        }
+    }
+
+    fn arrive(&mut self, arrival: Arrival) {
+        let Some(memory) = self.session.disk.memory_mut() else { return };
+        let mut names = Vec::new();
+        for (name, bytes) in arrival.files {
+            // Only the name: a browser gives no folder, and a name never reaches outside memory.
+            let Some(name) = Path::new(&name).file_name().map(|n| n.to_string_lossy().into_owned()) else { continue };
+            if let Err(e) = memory.put(&name, bytes) {
+                self.status = Some((e.to_string(), true));
+                return;
+            }
+            names.push(name);
+        }
+        let with = |extensions: &[&str]| -> Vec<String> {
+            names.iter().filter(|n| Path::new(n).extension().is_some_and(|e| extensions.iter().any(|x| e.eq_ignore_ascii_case(x)))).cloned().collect()
+        };
+        let data = with(&mkaegis_engine::io::DATA_EXTENSIONS);
+        let project = with(&[mkaegis_engine::io::PROJECT_EXTENSION]).into_iter().next();
+        let then = if arrival.dropped { None } else { self.awaiting.take() };
+        match then {
+            Some(Awaiting::AddData) => self.add_files(&data),
+            Some(Awaiting::OpenProject) => {
+                if let Some(project) = project {
+                    self.run("project.open", json!({ "path": project }));
+                }
+            }
+            Some(Awaiting::ImportWeights(layer)) => {
+                if let Some(file) = with(&["gal", "gwt"]).first() {
+                    self.run("stats.importWeights", json!({ "layer": layer, "path": file }));
+                }
+            }
+            Some(Awaiting::Table) => {
+                if let Some(table) = with(&TABLE_EXTENSIONS).first() {
+                    self.gp.path = table.clone();
+                }
+            }
+            None => match project {
+                Some(project) => self.discard_or_ask(Discard::OpenFile(PathBuf::from(project))),
+                None if data.is_empty() => {
+                    self.status = Some(("Drop a project (.aegis) or data (.geojson, .json, or a .shp with its .dbf and .shx)".into(), true));
+                }
+                None => self.add_files(&data),
+            },
+        }
+    }
+
+    /// Adds each data file as a layer.
+    fn add_files(&mut self, files: &[String]) {
+        for file in files {
+            self.run("map.addData", json!({ "path": file }));
         }
     }
 
@@ -447,7 +575,11 @@ impl MapApp {
                     self.run("project.open", json!({ "path": path.display().to_string() }));
                 }
             }
-            None => self.dialog = Some(Dialog::Path { title: "Open Project", command: "project.open", path: String::new() }),
+            None => {
+                if !self.pick_async(Awaiting::OpenProject, "Open Project", &[mkaegis_engine::io::PROJECT_EXTENSION], false) {
+                    self.dialog = Some(Dialog::Path { title: "Open Project", command: "project.open", path: String::new() });
+                }
+            }
         }
     }
 
@@ -475,6 +607,9 @@ impl MapApp {
                 }
             }
             None => {
+                if self.pick_async(Awaiting::ImportWeights(layer), "Import Weights", &["gal", "gwt"], false) {
+                    return;
+                }
                 self.dialog = Some(Dialog::SavePath {
                     title: "Import Weights",
                     command: "stats.importWeights",
@@ -554,6 +689,7 @@ impl MapApp {
         }
         #[cfg(not(target_arch = "wasm32"))]
         control::poll(self, &ctx);
+        self.take_arrivals();
         self.shortcuts(&ctx);
         self.guard_close(&ctx);
         self.fix_active();
@@ -1167,6 +1303,74 @@ mod tests {
         assert_eq!(harness.state().session.path.as_deref(), Some(path.as_path()));
         assert!(harness.state().session.map.layer("Cidades").is_ok());
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_browser_picks_files_then_downloads_what_is_saved() {
+        let (mut app, picked, downloads, inbox) = browser(Session::default());
+        // A shapefile, written by another page, arrives as the files picked for Add Data.
+        let mut other = Session::sample();
+        other.disk = mkaegis_engine::Disk::Memory(Default::default());
+        other.execute("layer.export", &json!({ "layer": "Ilhas", "path": "ilhas.shp" })).unwrap();
+        let files: Vec<(String, Vec<u8>)> =
+            other.disk.memory_mut().unwrap().take_written().into_iter().map(|(p, b)| (p.display().to_string(), b)).collect();
+
+        app.add_data();
+        assert_eq!(*picked.borrow(), [("Add Data".to_string(), true)], "several files: a shapefile and its sidecars");
+        inbox.lock().unwrap().push(Arrival { files, dropped: false });
+        app.take_arrivals();
+        assert_eq!(app.session.map.layers.len(), 1, "{:?}", app.status);
+        assert_eq!(app.session.map.layers[0].data.features.len(), 3);
+        assert!(downloads.borrow().is_empty(), "nothing written yet");
+
+        app.run("project.saveAs", json!({ "path": "ilhas.aegis" }));
+        app.run("share.exportMap", json!({ "path": "map.png", "width": 320, "height": 200 }));
+        let names: Vec<String> = downloads.borrow().iter().map(|(n, _)| n.clone()).collect();
+        assert_eq!(names, ["ilhas.aegis", "map.png"]);
+
+        // The project dropped on another page opens there.
+        let project = downloads.borrow()[0].clone();
+        let (mut fresh, _, _, inbox) = browser(Session::default());
+        inbox.lock().unwrap().push(Arrival { files: vec![project], dropped: true });
+        fresh.take_arrivals();
+        assert_eq!(fresh.session.map, app.session.map);
+        assert_eq!(fresh.session.path.as_deref(), Some(Path::new("ilhas.aegis")));
+    }
+
+    #[test]
+    fn dropped_files_open_by_extension_and_others_are_refused() {
+        let (mut app, _, _, inbox) = browser(Session::sample());
+        app.session.modified = true;
+        inbox.lock().unwrap().push(Arrival { files: vec![("map.aegis".into(), b"{}".to_vec())], dropped: true });
+        app.take_arrivals();
+        assert!(matches!(app.dialog, Some(Dialog::UnsavedChanges { .. })), "a project replaces the map only once asked");
+        app.dialog = None;
+        // A dropped file never waits for the picker: what the picker was open for is untouched.
+        app.awaiting = Some(Awaiting::OpenProject);
+        inbox.lock().unwrap().push(Arrival { files: vec![("notes.txt".into(), b"hello".to_vec())], dropped: true });
+        app.take_arrivals();
+        assert!(app.status.as_ref().is_some_and(|(m, error)| *error && m.contains("Drop a project")));
+        assert_eq!(app.awaiting, Some(Awaiting::OpenProject));
+        // A folder in a name never reaches past it.
+        inbox.lock().unwrap().push(Arrival { files: vec![("../../etc/towns.geojson".into(), b"{}".to_vec())], dropped: true });
+        app.take_arrivals();
+        assert!(app.session.disk.read(Path::new("towns.geojson")).is_ok());
+    }
+
+    /// A browser-like app: files in memory, and records of what it picked and downloaded.
+    fn browser(
+        session: Session,
+    ) -> (MapApp, std::rc::Rc<std::cell::RefCell<Vec<(String, bool)>>>, std::rc::Rc<std::cell::RefCell<Vec<(String, Vec<u8>)>>>, Inbox) {
+        let mut app = MapApp::new(session);
+        app.session.disk = mkaegis_engine::Disk::Memory(Default::default());
+        let picked: std::rc::Rc<std::cell::RefCell<Vec<(String, bool)>>> = std::rc::Rc::default();
+        let downloads: std::rc::Rc<std::cell::RefCell<Vec<(String, Vec<u8>)>>> = std::rc::Rc::default();
+        let inbox = Inbox::default();
+        let (p, d) = (std::rc::Rc::clone(&picked), std::rc::Rc::clone(&downloads));
+        app.services.pick_files = Some(Box::new(move |title: &str, _: &[&str], several: bool| p.borrow_mut().push((title.to_string(), several))));
+        app.services.download = Some(Box::new(move |name: &str, bytes: &[u8]| d.borrow_mut().push((name.to_string(), bytes.to_vec()))));
+        app.services.inbox = Some(Inbox::clone(&inbox));
+        (app, picked, downloads, inbox)
     }
 
     fn harness(app: MapApp) -> egui_kittest::Harness<'static, MapApp> {

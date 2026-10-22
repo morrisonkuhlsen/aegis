@@ -108,6 +108,12 @@ the version, and `SHA256SUMS.txt` has a checksum for every file. Each archive ho
 | Windows 10 or 11, x64                  | `mkaegis-<ver>-windows-x64.zip`        | nothing else        |
 | macOS 11 or later, Apple silicon/Intel | `mkaegis-<ver>-macos-universal.tar.gz` | nothing else        |
 | Linux x86_64                           | `mkaegis-<ver>-linux-x86_64.tar.gz`    | glibc 2.39 or later |
+| Any, in a browser                      | `mkaegis-web-<ver>.zip`                | WebGPU or WebGL2    |
+
+**Nothing to install:** from the next release on, the web app runs at
+<https://morrisonkuhlsen.github.io/mkaegis/> (add `?sample` for the sample map). Your files stay
+on your computer: they are read in the page, and what you save downloads. The zip is the same site,
+for your own web server.
 
 The builds aren't code-signed yet, so the first launch asks for confirmation:
 
@@ -134,6 +140,15 @@ cargo run --release -p mkaegis -- data.shp                       # open a shapef
 cargo run --release -p mkaegis -- --sample --control 7979        # + JSON control channel
 cargo run --release -p mkaegis -- --no-splash                    # skip the splash screen
 cargo xtask ci                                                    # fmt, clippy, tests, assets, layering, panics, wasm, parity
+```
+
+In the browser (needs [trunk](https://trunk-rs.github.io/trunk/) and the `wasm32-unknown-unknown`
+target). Everything stays in the page: files you pick or drop are read in memory, and what you save
+or export downloads.
+
+```sh
+cd apps/mkaegis-web && trunk serve --release                     # http://127.0.0.1:8780/?sample
+cd apps/mkaegis-web && trunk build --release                     # → dist/web, for any static server
 ```
 
 Offscreen screenshots, with no window and nothing captured from the desktop:

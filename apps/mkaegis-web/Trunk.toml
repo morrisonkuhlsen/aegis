@@ -1,0 +1,11 @@
+# Build with `trunk build --release` in apps/mkaegis-web; serve with `trunk serve --release`.
+# Relative URLs only, so the site works under any path (GitHub Pages serves it under /mkaegis/).
+[build]
+target = "index.html"
+dist = "../../dist/web"
+public_url = "./"
+filehash = true
+
+[serve]
+addresses = ["127.0.0.1"]
+port = 8780

@@ -32,7 +32,7 @@ pub const OPEN: CommandSpec = CommandSpec {
     enabled: always,
     run: |s, p| {
         let file = path(p, "path")?;
-        let (map, warnings) = crate::io::open_project(&file)?;
+        let (map, warnings) = crate::io::open_project(&s.disk, &file)?;
         s.map = map;
         s.path = Some(file);
         s.view_serial += 1;
@@ -42,7 +42,7 @@ pub const OPEN: CommandSpec = CommandSpec {
 
 fn save_to(s: &mut Session, file: std::path::PathBuf) -> Result<Json> {
     let file = if file.extension().is_none() { file.with_extension(crate::io::PROJECT_EXTENSION) } else { file };
-    crate::io::save_project(&s.map, &file)?;
+    crate::io::save_project(&mut s.disk, &s.map, &file)?;
     let shown = file.display().to_string();
     s.path = Some(file);
     s.modified = false;

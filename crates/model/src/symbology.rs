@@ -7,6 +7,8 @@ use mkaegis_geom::GeometryType;
 use serde::{Deserialize, Serialize};
 
 use crate::FeatureClass;
+pub use crate::classify::Classification;
+use crate::classify::{self, Classes, Options};
 
 /// The most classes a renderer may have.
 pub const MAX_CLASSES: usize = 256;
@@ -184,44 +186,6 @@ pub fn categorical(i: usize) -> Color {
     Color::rgb(f(r), f(g), f(b))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Classification {
-    #[default]
-    EqualInterval,
-    Quantile,
-}
-
-impl Classification {
-    pub fn parse(text: &str) -> Option<Classification> {
-        match text.to_ascii_lowercase().replace([' ', '_'], "").as_str() {
-            "" | "equalinterval" => Some(Classification::EqualInterval),
-            "quantile" => Some(Classification::Quantile),
-            _ => None,
-        }
-    }
-}
-
-/// The upper bound of each of `k` classes of `values` (finite ones only); the last is the maximum.
-pub fn class_breaks(values: &[f64], k: usize, method: Classification) -> Vec<f64> {
-    let mut v: Vec<f64> = values.iter().copied().filter(|x| x.is_finite()).collect();
-    if v.is_empty() || k == 0 {
-        return Vec::new();
-    }
-    v.sort_by(f64::total_cmp);
-    let k = k.min(MAX_CLASSES);
-    let (min, max) = (v.first().copied().unwrap_or(0.0), v.last().copied().unwrap_or(0.0));
-    let mut breaks: Vec<f64> = match method {
-        Classification::EqualInterval => (1..=k).map(|i| min + (max - min) * i as f64 / k as f64).collect(),
-        Classification::Quantile => (1..=k).map(|i| v.get((i * v.len()).div_ceil(k).saturating_sub(1)).copied().unwrap_or(max)).collect(),
-    };
-    breaks.dedup();
-    if let Some(last) = breaks.last_mut() {
-        *last = max;
-    }
-    breaks
-}
-
 /// One class of a unique-values renderer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UniqueClass {
@@ -234,8 +198,21 @@ pub struct UniqueClass {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Renderer {
     Single(Symbol),
-    UniqueValues { field: String, classes: Vec<UniqueClass>, other: Symbol },
-    GraduatedColors { field: String, breaks: Vec<f64>, symbols: Vec<Symbol>, method: Classification },
+    UniqueValues {
+        field: String,
+        classes: Vec<UniqueClass>,
+        other: Symbol,
+    },
+    GraduatedColors {
+        field: String,
+        breaks: Vec<f64>,
+        symbols: Vec<Symbol>,
+        method: Classification,
+        /// Names of the classes, for methods whose classes have them (box map, percentile and
+        /// standard deviation maps); empty when classes are labelled by their range.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        labels: Vec<String>,
+    },
 }
 
 impl Renderer {
@@ -272,17 +249,58 @@ impl Renderer {
         }
     }
 
-    /// Graduated colours: `k` classes of a numeric field, coloured along `ramp`.
-    pub fn graduated(fc: &FeatureClass, field: &str, k: usize, method: Classification, ramp: Ramp, base: Symbol) -> Result<Renderer> {
+    /// Graduated colours: a numeric field classified by `method`, coloured along `ramp`; with
+    /// the classification, for its fit.
+    pub fn graduated(
+        fc: &FeatureClass,
+        field: &str,
+        method: Classification,
+        options: &Options,
+        ramp: Ramp,
+        base: Symbol,
+    ) -> Result<(Renderer, Classes)> {
         let i = fc.field_index(field).ok_or_else(|| Error::NotFound(format!("field `{field}`")))?;
         let values: Vec<f64> = fc.features.iter().filter_map(|f| f.values.get(i)?.as_f64()).collect();
         if values.is_empty() {
             return Err(Error::param("field", format!("`{field}` has no numeric values")));
         }
-        let breaks = class_breaks(&values, k.clamp(1, MAX_CLASSES), method);
-        let symbols = ramp.colors(breaks.len()).into_iter().map(|c| base.with_fill(c)).collect();
+        let classes = classify::classify(&values, method, options)?;
+        let symbols = ramp.colors(classes.breaks.len()).into_iter().map(|c| base.with_fill(c)).collect();
         let field = fc.fields.get(i).map(|f| f.name.clone()).unwrap_or_default();
-        Ok(Renderer::GraduatedColors { field, breaks, symbols, method })
+        let renderer = Renderer::GraduatedColors { field, breaks: classes.breaks.clone(), symbols, method, labels: classes.labels.clone() };
+        Ok((renderer, classes))
+    }
+
+    /// How many features fall in each legend row (no row for other values).
+    pub fn class_counts(&self, fc: &FeatureClass) -> Vec<usize> {
+        match self {
+            Renderer::Single(_) => vec![fc.features.len()],
+            Renderer::UniqueValues { field, classes, .. } => {
+                let mut counts = vec![0; classes.len()];
+                let i = fc.field_index(field);
+                for row in 0..fc.features.len() {
+                    let value = i.and_then(|i| fc.value(row, i)).filter(|v| !v.is_null()).map(Value::to_string);
+                    if let Some(c) = value.and_then(|v| classes.iter().position(|c| c.value == v))
+                        && let Some(n) = counts.get_mut(c)
+                    {
+                        *n += 1;
+                    }
+                }
+                counts
+            }
+            Renderer::GraduatedColors { field, breaks, .. } => {
+                let mut counts = vec![0; breaks.len()];
+                let i = fc.field_index(field);
+                for row in 0..fc.features.len() {
+                    if let Some(x) = i.and_then(|i| fc.value(row, i)).and_then(Value::as_f64)
+                        && let Some(n) = counts.get_mut(classify::class_of(breaks, x))
+                    {
+                        *n += 1;
+                    }
+                }
+                counts
+            }
+        }
     }
 
     /// The symbol for row `row` of `fc`.
@@ -298,8 +316,7 @@ impl Renderer {
                 let Some(x) = fc.field_index(field).and_then(|i| fc.value(row, i)).and_then(Value::as_f64) else {
                     return fallback.with_fill(Color::rgb(0xc8, 0xc8, 0xc8));
                 };
-                let class = breaks.iter().position(|b| x <= *b).unwrap_or(breaks.len().saturating_sub(1));
-                symbols.get(class).copied().unwrap_or(fallback)
+                symbols.get(classify::class_of(breaks, x)).copied().unwrap_or(fallback)
             }
         }
     }
@@ -312,6 +329,9 @@ impl Renderer {
                 let mut rows: Vec<(String, Symbol)> = classes.iter().map(|c| (c.value.clone(), c.symbol)).collect();
                 rows.push(("<all other values>".into(), *other));
                 rows
+            }
+            Renderer::GraduatedColors { breaks, symbols, labels, .. } if labels.len() == breaks.len() => {
+                labels.iter().cloned().zip(symbols.iter().copied()).collect()
             }
             Renderer::GraduatedColors { breaks, symbols, .. } => {
                 let mut low: Option<f64> = None;
@@ -367,10 +387,11 @@ mod tests {
     #[test]
     fn breaks() {
         let v = [1.0, 2.0, 3.0, 10.0, f64::NAN];
-        assert_eq!(class_breaks(&v, 3, Classification::EqualInterval), vec![4.0, 7.0, 10.0]);
-        assert_eq!(class_breaks(&v, 2, Classification::Quantile), vec![2.0, 10.0]);
-        assert!(class_breaks(&[], 3, Classification::Quantile).is_empty());
-        assert_eq!(class_breaks(&[5.0, 5.0], 4, Classification::EqualInterval), vec![5.0]);
+        let breaks = |v: &[f64], k, m| classify::classify(v, m, &Options { classes: k, ..Options::default() }).map(|c| c.breaks);
+        assert_eq!(breaks(&v, 3, Classification::EqualInterval).unwrap(), vec![4.0, 7.0, 10.0]);
+        assert_eq!(breaks(&v, 2, Classification::Quantile).unwrap(), vec![2.0, 10.0]);
+        assert!(breaks(&[], 3, Classification::Quantile).is_err());
+        assert_eq!(breaks(&[5.0, 5.0], 4, Classification::EqualInterval).unwrap(), vec![5.0]);
     }
 
     #[test]
@@ -382,11 +403,17 @@ mod tests {
         assert_eq!(classes.iter().map(|c| c.value.as_str()).collect::<Vec<_>>(), ["a", "b", "c"]);
         assert_eq!(r.symbol_for(&fc, 0), r.symbol_for(&fc, 2));
         assert_eq!(r.symbol_for(&fc, 4), *other);
-        let g = Renderer::graduated(&fc, "V", 3, Classification::EqualInterval, Ramp::Ember, base).unwrap();
+        let three = Options { classes: 3, ..Options::default() };
+        let (g, fit) = Renderer::graduated(&fc, "V", Classification::EqualInterval, &three, Ramp::Ember, base).unwrap();
+        assert!(fit.gvf > 0.0 && fit.gvf <= 1.0);
+        assert_eq!(g.class_counts(&fc), vec![3, 0, 1]);
         assert_eq!(g.symbol_for(&fc, 0).fill, Ramp::Ember.at(0.0));
         assert_eq!(g.symbol_for(&fc, 3).fill, Ramp::Ember.at(1.0));
         assert_eq!(g.legend().len(), 3);
-        assert!(Renderer::graduated(&fc, "K", 3, Classification::Quantile, Ramp::Meadow, base).is_err());
+        assert!(Renderer::graduated(&fc, "K", Classification::Quantile, &three, Ramp::Meadow, base).is_err());
+        // Named classes label the legend.
+        let (b, _) = Renderer::graduated(&fc, "V", Classification::BoxMap, &Options::default(), Ramp::Balance, base).unwrap();
+        assert_eq!(b.legend().first().map(|l| l.0.as_str()), Some("Lower outlier"));
         assert!(Renderer::unique_values(&fc, "nope", base).is_err());
     }
 

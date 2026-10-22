@@ -9,6 +9,9 @@ use serde_json::json;
 use crate::theme::{Tokens, color};
 use crate::{Dialog, MapApp, Pane};
 
+/// The most features a layer may have for Contents to count its classes every frame.
+const MAX_COUNTED: usize = 200_000;
+
 /// A symbol swatch: a square patch, a line or a marker, by geometry type.
 fn swatch(ui: &mut Ui, kind: GeometryType, s: &Symbol) {
     let (rect, _) = ui.allocate_exact_size(vec2(18.0, 14.0), Sense::hover());
@@ -40,6 +43,9 @@ fn row(app: &mut MapApp, ui: &mut Ui, index: usize, last: usize) {
     let (id, mut visible, name) = (layer.id, layer.visible, layer.name.clone());
     let kind = layer.data.geometry_type;
     let legend = layer.renderer.legend();
+    // Each class's feature count, as statisticians read a choropleth; skipped on very large
+    // layers, where counting every frame would cost more than it tells.
+    let counts = if layer.data.features.len() <= MAX_COUNTED { layer.renderer.class_counts(&layer.data) } else { Vec::new() };
     let selected = layer.selection.len();
     let crs_known = layer.data.crs.is_known();
     let active = app.active == Some(id);
@@ -122,11 +128,14 @@ fn row(app: &mut MapApp, ui: &mut Ui, index: usize, last: usize) {
                 ui.label(egui::RichText::new(field).size(10.5).color(t.muted));
             });
         }
-        for (label, s) in legend.iter().take(40) {
+        for (k, (label, s)) in legend.iter().enumerate().take(40) {
             ui.horizontal(|ui| {
                 ui.add_space(30.0);
                 swatch(ui, kind, s);
                 ui.label(egui::RichText::new(label).size(11.0).color(t.text));
+                if let Some(n) = counts.get(k) {
+                    ui.label(egui::RichText::new(format!("({n})")).size(10.5).color(t.muted));
+                }
             });
         }
         if legend.len() > 40 {

@@ -32,6 +32,15 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Added
 
+- **Statistical classification** (#26, in part) in Symbology and `layer.symbology`:
+  - **Natural breaks**: Fisher's exact optimal classes, which Jenks's method approximates.
+    Above 4,000 values it classifies a quantile sample, and says so.
+  - **Standard deviation map**, **box map** and **percentile map**: six named classes on a
+    diverging ramp. The box map's hinges are 1.5 × IQR, or `hinge` (3 for extreme outliers).
+  - **Geometric interval** and **manual** `breaks`.
+  - Quartiles and percentiles use linear interpolation (Hyndman and Fan's definition 7).
+  - Every classification reports its goodness of variance fit (GVF), and Contents shows how many
+    features each class holds.
 - **Local statistics** (#24), written as fields on the layer and mapped at once:
   - Cluster and Outlier Analysis (`stats.localMoran`, Statistics ▸ Cluster Map (LISA)): local
     Moran's Iᵢ (Anselin 1995), its z-score under randomisation, and a pseudo p-value from

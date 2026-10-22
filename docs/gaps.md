@@ -17,23 +17,23 @@ None open: the six known ones were fixed in 0.1.2 (see [`CHANGELOG.md`](../CHANG
 
 ## 3. Wrong geometry, coordinates and data
 
-| Issue | Gap                                                                               | Priority |
-|-------|-----------------------------------------------------------------------------------|----------|
-| #54   | Projection edge cases return clamped values or NaN                                | medium   |
-| #57   | One bad feature aborts the whole GeoJSON or Shapefile read                        | medium   |
+| Issue | Gap                                                        | Priority |
+|-------|------------------------------------------------------------|----------|
+| #54   | Projection edge cases return clamped values or NaN         | medium   |
+| #57   | One bad feature aborts the whole GeoJSON or Shapefile read | medium   |
 
 ## 4. Statistics: the road to beta
 
-| Issue | Feature                                                                        | Priority |
-|-------|--------------------------------------------------------------------------------|----------|
-| #26   | Statistical classification: natural breaks, std dev, box map, percentile map   | high     |
-| #25   | Linked exploratory views and brushing                                          | high     |
-| #27   | CSV import with types; join by key with a join report                          | high     |
-| #28   | Full descriptive statistics                                                    | high     |
-| #29   | Rates: excess risk, Empirical Bayes and spatial EB smoothing                   | medium   |
-| #30   | Spatial regression: OLS diagnostics, lag and error models                      | medium   |
-| #31   | Point pattern analysis                                                         | medium   |
-| #32   | Reproducible analyses: history as a script, seeds, report                      | medium   |
+| Issue | Feature                                                                    | Priority |
+|-------|----------------------------------------------------------------------------|----------|
+| #26   | Classification, the rest: diverging ramps on a chosen centre, rate legends | medium   |
+| #25   | Linked exploratory views and brushing                                      | high     |
+| #27   | CSV import with types; join by key with a join report                      | high     |
+| #28   | Full descriptive statistics                                                | high     |
+| #29   | Rates: excess risk, Empirical Bayes and spatial EB smoothing               | medium   |
+| #30   | Spatial regression: OLS diagnostics, lag and error models                  | medium   |
+| #31   | Point pattern analysis                                                     | medium   |
+| #32   | Reproducible analyses: history as a script, seeds, report                  | medium   |
 
 ## 5. Everything else
 
@@ -54,3 +54,4 @@ interop, the web app, project hygiene) are ranked by their `priority:` label on
 | 2026-10-21 | #53 removed                               |
 | 2026-10-21 | #23 removed (the Moran scatter plot: #25) |
 | 2026-10-21 | #24 removed                               |
+| 2026-10-21 | #26 narrowed to what remains              |

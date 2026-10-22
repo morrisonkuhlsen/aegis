@@ -494,6 +494,36 @@ fn local_statistics_write_fields_and_map_them() {
     assert!(s.execute("stats.localMoran", &json!({ "weights": "w", "field": "POP", "alpha": 1.5 })).is_err());
 }
 
+/// #26: every classification reports its fit and class counts; named classes survive a project.
+#[test]
+fn classifications_report_their_fit() {
+    let mut s = Session::sample();
+    for method in ["equalInterval", "quantile", "naturalBreaks", "geometricInterval", "standardDeviation", "boxMap", "percentile"] {
+        let r = s
+            .execute("layer.symbology", &json!({ "layer": "Cidades", "renderer": "graduatedColors", "field": "POP", "method": method, "classes": 4 }))
+            .unwrap();
+        let gvf = r["gvf"].as_f64().unwrap();
+        assert!((0.0..=1.0).contains(&gvf), "{method}: {gvf}");
+        let counts: u64 = r["counts"].as_array().unwrap().iter().map(|c| c.as_u64().unwrap()).sum();
+        assert_eq!(counts, 23, "{method}: every city in a class");
+    }
+    let manual = s.execute("layer.symbology", &json!({ "layer": "Cidades", "method": "manual", "breaks": [10000, 100000] })).unwrap();
+    assert_eq!(manual["classes"], json!(3));
+    assert!(s.execute("layer.symbology", &json!({ "layer": "Cidades", "method": "manual" })).is_err());
+    assert!(s.execute("layer.symbology", &json!({ "layer": "Cidades", "method": "manual", "breaks": [5, 1] })).is_err());
+    assert!(s.execute("layer.symbology", &json!({ "layer": "Cidades", "method": "jenkins" })).is_err());
+    s.execute("layer.symbology", &json!({ "layer": "Cidades", "method": "boxMap", "hinge": 3 })).unwrap();
+    let info = s.execute("layer.info", &json!({ "layer": "Cidades" })).unwrap();
+    assert_eq!(info["legend"][0]["label"], json!("Lower outlier"));
+    let dir = scratch("classes");
+    let file = dir.join("box.aegis");
+    s.execute("project.saveAs", &json!({ "path": file.display().to_string() })).unwrap();
+    let mut t = Session::default();
+    t.execute("project.open", &json!({ "path": file.display().to_string() })).unwrap();
+    assert_eq!(t.map, s.map);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn data_and_projects_round_trip_through_files() {
     let dir = scratch("files");

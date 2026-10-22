@@ -101,7 +101,8 @@ fn great_circle(a: Coord, b: Coord) -> f64 {
     2.0 * h.sqrt().clamp(0.0, 1.0).asin()
 }
 
-/// A coordinate reference system, by its EPSG code.
+/// A coordinate reference system, by its EPSG code, or [`Crs::UNKNOWN`] (code 0) for data whose
+/// coordinate system MK aeGIS can't tell: drawn as it is, never reprojected or measured (#6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "u32", into = "u32")]
 pub struct Crs(u32);
@@ -109,7 +110,7 @@ pub struct Crs(u32);
 impl TryFrom<u32> for Crs {
     type Error = Error;
     fn try_from(code: u32) -> Result<Crs> {
-        Crs::from_epsg(code)
+        if code == 0 { Ok(Crs::UNKNOWN) } else { Crs::from_epsg(code) }
     }
 }
 
@@ -122,9 +123,17 @@ impl From<Crs> for u32 {
 /// What a CRS is, resolved from its code.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Kind {
-    Geographic { datum: Datum },
+    /// A coordinate system MK aeGIS doesn't know (an unrecognised `.prj`).
+    Unknown,
+    Geographic {
+        datum: Datum,
+    },
     WebMercator,
-    Utm { datum: Datum, zone: u8, south: bool },
+    Utm {
+        datum: Datum,
+        zone: u8,
+        south: bool,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -153,6 +162,8 @@ impl Crs {
     pub const WGS84: Crs = Crs(4326);
     pub const SIRGAS2000: Crs = Crs(4674);
     pub const WEB_MERCATOR: Crs = Crs(3857);
+    /// A coordinate system MK aeGIS can't tell. Its coordinates are kept as they are.
+    pub const UNKNOWN: Crs = Crs(0);
 
     /// The CRS with this EPSG code, if MK aeGIS knows it.
     pub fn from_epsg(code: u32) -> Result<Crs> {
@@ -179,6 +190,7 @@ impl Crs {
 
     pub fn kind(self) -> Kind {
         match self.0 {
+            0 => Kind::Unknown,
             4674 => Kind::Geographic { datum: Datum::Sirgas2000 },
             3857 => Kind::WebMercator,
             c @ 32601..=32660 => Kind::Utm { datum: Datum::Wgs84, zone: (c - 32600) as u8, south: false },
@@ -190,6 +202,7 @@ impl Crs {
 
     pub fn name(self) -> String {
         match self.kind() {
+            Kind::Unknown => "Unknown coordinate system".into(),
             Kind::Geographic { datum: Datum::Wgs84 } => "WGS 84".into(),
             Kind::Geographic { datum: Datum::Sirgas2000 } => "SIRGAS 2000".into(),
             Kind::WebMercator => "WGS 84 / Pseudo-Mercator".into(),
@@ -203,7 +216,7 @@ impl Crs {
     pub fn ellipsoid(self) -> Ellipsoid {
         match self.kind() {
             Kind::Geographic { datum } | Kind::Utm { datum, .. } => datum.ellipsoid(),
-            Kind::WebMercator => WGS84,
+            Kind::WebMercator | Kind::Unknown => WGS84,
         }
     }
 
@@ -212,13 +225,22 @@ impl Crs {
         self.ellipsoid().distance(self.to_geographic(a)?, self.to_geographic(b)?)
     }
 
+    /// Whether MK aeGIS knows this coordinate system, and so can project and measure in it.
+    pub fn is_known(self) -> bool {
+        self != Crs::UNKNOWN
+    }
+
     pub fn is_geographic(self) -> bool {
         matches!(self.kind(), Kind::Geographic { .. })
     }
 
-    /// The unit coordinates are in: "degree" or "metre".
+    /// The unit coordinates are in: "degree", "metre", or "unknown".
     pub fn unit(self) -> &'static str {
-        if self.is_geographic() { "degree" } else { "metre" }
+        match self.kind() {
+            Kind::Unknown => "unknown",
+            Kind::Geographic { .. } => "degree",
+            Kind::WebMercator | Kind::Utm { .. } => "metre",
+        }
     }
 
     /// Metres in one coordinate unit near latitude `lat` (Web Mercator's scale grows with latitude).
@@ -227,7 +249,8 @@ impl Crs {
         match self.kind() {
             Kind::Geographic { .. } => WGS84.a * PI / 180.0 * lat.cos().max(1e-6),
             Kind::WebMercator => lat.cos(),
-            Kind::Utm { .. } => 1.0,
+            // Unknown units are taken as metres, for the scale bar only.
+            Kind::Utm { .. } | Kind::Unknown => 1.0,
         }
     }
 
@@ -237,6 +260,7 @@ impl Crs {
             return Err(Error::Projection("non-finite coordinate".into()));
         }
         match self.kind() {
+            Kind::Unknown => Err(unknown()),
             Kind::Geographic { .. } => Ok(c),
             Kind::WebMercator => {
                 let lon = (c.x / WEB_MERCATOR_R).to_degrees();
@@ -258,6 +282,7 @@ impl Crs {
             return Err(Error::Projection(format!("not a longitude/latitude: {}, {}", g.x, g.y)));
         }
         match self.kind() {
+            Kind::Unknown => Err(unknown()),
             Kind::Geographic { .. } => Ok(g),
             Kind::WebMercator => {
                 let lat = g.y.clamp(-WEB_MERCATOR_MAX_LAT, WEB_MERCATOR_MAX_LAT).to_radians();
@@ -284,8 +309,8 @@ impl Crs {
         to.from_geographic(self.to_geographic(c)?)
     }
 
-    /// The CRS as Esri-flavoured WKT, for a shapefile's `.prj`.
-    pub fn to_prj(self) -> String {
+    /// The CRS as Esri-flavoured WKT, for a shapefile's `.prj`; none for an unknown one.
+    pub fn to_prj(self) -> Option<String> {
         let gcs = |datum: Datum| {
             let (g, d) = datum.esri();
             let e = datum.ellipsoid();
@@ -294,7 +319,8 @@ impl Crs {
                 e.name, e.a, e.inv_f
             )
         };
-        match self.kind() {
+        Some(match self.kind() {
+            Kind::Unknown => return None,
             Kind::Geographic { datum } => gcs(datum),
             Kind::WebMercator => format!(
                 "PROJCS[\"WGS_1984_Web_Mercator_Auxiliary_Sphere\",{},PROJECTION[\"Mercator_Auxiliary_Sphere\"],PARAMETER[\"False_Easting\",0.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",0.0],PARAMETER[\"Standard_Parallel_1\",0.0],PARAMETER[\"Auxiliary_Sphere_Type\",0.0],UNIT[\"Meter\",1.0]]",
@@ -308,7 +334,7 @@ impl Crs {
                 if south { UTM_FALSE_NORTHING_SOUTH } else { 0.0 },
                 central_meridian(zone)
             ),
-        }
+        })
     }
 
     /// Recognises a CRS in WKT (a `.prj`, Esri or OGC flavour): by its EPSG authority, else by name.
@@ -354,6 +380,11 @@ impl Crs {
         out.extend((32701..=32760).map(Crs));
         out
     }
+}
+
+/// The error for projecting or measuring data in an unknown coordinate system.
+fn unknown() -> Error {
+    Error::Projection("the layer's coordinate system is unknown: set it with Define Projection first".into())
 }
 
 fn central_meridian(zone: u8) -> f64 {
@@ -520,11 +551,27 @@ mod tests {
     #[test]
     fn prj_round_trips() {
         for crs in Crs::known() {
-            assert_eq!(Crs::from_wkt(&crs.to_prj()), Some(crs), "{}", crs.name());
+            assert_eq!(Crs::from_wkt(&crs.to_prj().unwrap()), Some(crs), "{}", crs.name());
         }
         let ogc = r#"PROJCS["WGS 84 / UTM zone 23S",GEOGCS["WGS 84",AUTHORITY["EPSG","4326"]],AUTHORITY["EPSG","32723"]]"#;
         assert_eq!(Crs::from_wkt(ogc).map(Crs::epsg), Some(32723));
         assert_eq!(Crs::from_wkt(r#"PROJCS["Lambert_Conformal_Conic",GEOGCS["GCS_WGS_1984"]]"#), None);
         assert_eq!(Crs::from_wkt(""), None);
+    }
+
+    /// #6: an unknown coordinate system keeps its coordinates and refuses to project or measure.
+    #[test]
+    fn unknown_crs_is_never_projected() {
+        let c = Coord::new(4_321_000.0, 3_210_000.0);
+        assert_eq!(Crs::UNKNOWN.transform(Crs::UNKNOWN, c).unwrap(), c);
+        assert!(Crs::UNKNOWN.transform(Crs::WGS84, c).is_err());
+        assert!(Crs::WGS84.transform(Crs::UNKNOWN, Coord::new(10.0, 50.0)).is_err());
+        assert!(Crs::UNKNOWN.distance(c, Coord::new(0.0, 0.0)).is_err());
+        assert_eq!(Crs::UNKNOWN.to_prj(), None);
+        assert!(!Crs::UNKNOWN.is_known() && !Crs::UNKNOWN.is_geographic());
+        assert!(!Crs::known().contains(&Crs::UNKNOWN));
+        // Projects store it as code 0; user input can't name it.
+        assert_eq!(Crs::try_from(0).unwrap(), Crs::UNKNOWN);
+        assert!(Crs::from_epsg(0).is_err());
     }
 }

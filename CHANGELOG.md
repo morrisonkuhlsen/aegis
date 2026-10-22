@@ -15,9 +15,18 @@ data and parameters. Read it before re-running an analysis with a new version.
 - **Shapefile integer columns 19 or 20 characters wide read as Integer** (#55). They used to
   read as Double, so values past 2^53 (9,007,199,254,740,992) were rounded. Integer columns six
   characters wide or narrower read as Short when every value fits 16 bits.
+- **A `.prj` MK aeGIS doesn't recognise no longer means WGS 84** (#6). The layer's coordinate
+  system is now unknown: it is drawn as it is, not reprojected, and marked `CRS?` in Contents.
+  Measurements, Buffer and Project refuse it until Define Projection sets it. Before, projected
+  coordinates were read as degrees, so the features landed far away and every measurement on
+  them was wrong. The `.prj` is kept, and exporting the layer to a shapefile writes it back.
+  Projected data without a `.prj` now opens the same way, where it used to be refused.
 
 ### Added
 
+- **Define Projection** (`management.defineProjection {layer, epsg}`, #6) says which coordinate
+  system a layer's coordinates are in, without moving them. `layer.info` reports whether the
+  coordinate system is known, and the `.prj` text of an unknown one.
 - **The File backstage**, as in MK Sigma. File opens a page over the window with these places:
   - Home: a new map, the sample map, opening a project, adding data, and the recent projects.
   - New and Open.

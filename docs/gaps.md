@@ -20,7 +20,6 @@ None open: the six known ones were fixed in 0.1.2 (see [`CHANGELOG.md`](../CHANG
 | Issue | Gap                                                                               | Priority |
 |-------|-----------------------------------------------------------------------------------|----------|
 | #52   | Buffer of a multipoint: overlapping circles aren't unioned (rings fixed in 0.1.2) | high     |
-| #6    | An unrecognised `.prj` is silently assumed to be WGS 84                           | high     |
 | #3    | `mkaegis-cli --out` writes the top layer, not the command's output                | high     |
 | #53   | The `.prj` name fallback ignores the datum (SAD69, ED50, Córrego Alegre)          | medium   |
 | #54   | Projection edge cases return clamped values or NaN                                | medium   |
@@ -54,3 +53,4 @@ interop, the web app, project hygiene) are ranked by their `priority:` label on
 | 2026-10-21 | First version, from the open issues (#62) |
 | 2026-10-21 | Fixed issues removed after 0.1.2          |
 | 2026-10-21 | #58, #59 and #55 removed                  |
+| 2026-10-21 | #6 removed                                |

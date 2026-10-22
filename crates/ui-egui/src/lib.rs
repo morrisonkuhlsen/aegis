@@ -35,7 +35,7 @@ pub use ribbon::Tab;
 use theme::Tokens;
 
 /// What Add Data picks in the browser: the data files, and a shapefile's sidecars with it.
-const DATA_AND_SIDECARS: [&str; 7] = ["geojson", "json", "shp", "shx", "dbf", "prj", "cpg"];
+const DATA_AND_SIDECARS: [&str; 8] = ["geojson", "json", "kml", "shp", "shx", "dbf", "prj", "cpg"];
 /// The delimited text tables Join Field and XY Table To Point read.
 pub const TABLE_EXTENSIONS: [&str; 3] = ["csv", "tsv", "txt"];
 const STATUS_HEIGHT: f32 = 26.0;
@@ -305,7 +305,7 @@ impl MapApp {
             "layer.export" => {
                 if let Some(l) = self.active_layer() {
                     let (layer, name) = (l.id, format!("{}.geojson", l.name));
-                    self.save_to("Export Features", "layer.export", &["geojson", "shp", "csv"], &name, json!({ "layer": layer }));
+                    self.save_to("Export Features", "layer.export", &["geojson", "kml", "shp", "csv"], &name, json!({ "layer": layer }));
                 }
             }
             "map.describe" | "feature.setValue" | "map.setExtent" => self.show_table = true,
@@ -410,7 +410,7 @@ impl MapApp {
             None => match project {
                 Some(project) => self.discard_or_ask(Discard::OpenFile(PathBuf::from(project))),
                 None if data.is_empty() => {
-                    self.status = Some(("Drop a project (.aegis) or data (.geojson, .json, or a .shp with its .dbf and .shx)".into(), true));
+                    self.status = Some(("Drop a project (.aegis) or data (.geojson, .json, .kml, or a .shp with its .dbf and .shx)".into(), true));
                 }
                 None => self.add_files(&data),
             },

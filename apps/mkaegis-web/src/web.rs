@@ -150,6 +150,7 @@ fn media_type(name: &str) -> &'static str {
     match name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).as_deref() {
         Some("png") => "image/png",
         Some("geojson") => "application/geo+json",
+        Some("kml") => "application/vnd.google-earth.kml+xml",
         Some("json" | "aegis") => "application/json",
         Some("csv") => "text/csv",
         Some("gal" | "gwt" | "prj" | "cpg") => "text/plain",

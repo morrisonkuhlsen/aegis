@@ -1785,6 +1785,7 @@ dependencies = [
  "mkaegis-csv",
  "mkaegis-geojson",
  "mkaegis-geom",
+ "mkaegis-kml",
  "mkaegis-model",
  "mkaegis-render",
  "mkaegis-shp",
@@ -1810,6 +1811,17 @@ version = "0.2.0"
 dependencies = [
  "mkaegis-core",
  "serde",
+]
+
+[[package]]
+name = "mkaegis-kml"
+version = "0.2.0"
+dependencies = [
+ "mkaegis-core",
+ "mkaegis-crs",
+ "mkaegis-geom",
+ "mkaegis-model",
+ "quick-xml",
 ]
 
 [[package]]

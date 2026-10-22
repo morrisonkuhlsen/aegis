@@ -37,6 +37,7 @@ so a weak-copyleft crate deep in a test tool's tree (today `colored`, MPL-2.0, t
 | `serde`, `serde_json`    | MIT OR Apache-2.0         | most crates      | Projects, GeoJSON, command params, MCP     |
 | `log`                    | MIT OR Apache-2.0         | engine, UI, apps | Logging instead of `println!`              |
 | `png`                    | MIT OR Apache-2.0         | render, UI       | Export Map, snapshots, the splash wordmark |
+| `quick-xml`              | MIT                       | kml              | XML for KML; no DTD entities expanded      |
 | `zune-jpeg`, `zune-core` | MIT OR Apache-2.0 OR Zlib | UI               | The splash artwork                         |
 | `egui`, `eframe`         | MIT OR Apache-2.0         | UI, desktop app  | The interface (L5+)                        |
 | `rfd`                    | MIT                       | desktop, web app | File dialogs; the browser's picker (L6)    |

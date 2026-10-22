@@ -1,4 +1,4 @@
-//! Files in and out: data by extension (GeoJSON, shapefile; CSV tables) and the project file (`.aegis`,
+//! Files in and out: data by extension (GeoJSON, KML, shapefile; CSV tables) and the project file (`.aegis`,
 //! the map as JSON), through the session's [`Disk`]. On the file system every file is written with
 //! [`write_atomic`], so a failed write never leaves a truncated file in place of a good one.
 
@@ -20,7 +20,7 @@ const MAX_PROJECT_BYTES: u64 = 1 << 30;
 const MAX_TABLE_BYTES: u64 = 512 << 20;
 
 /// The data file extensions Add Data opens.
-pub const DATA_EXTENSIONS: [&str; 3] = ["geojson", "json", "shp"];
+pub const DATA_EXTENSIONS: [&str; 4] = ["geojson", "json", "kml", "shp"];
 
 fn extension(path: &Path) -> String {
     path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()
@@ -30,8 +30,9 @@ fn stem(path: &Path) -> String {
     path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "layer".into())
 }
 
-/// A feature class from a data file, and any warnings.
-pub fn read_data(disk: &Disk, path: &Path) -> Result<(FeatureClass, Vec<String>)> {
+/// The feature classes in a data file (one, except a KML document mixing geometry types), and
+/// any warnings.
+pub fn read_data(disk: &Disk, path: &Path) -> Result<(Vec<FeatureClass>, Vec<String>)> {
     match extension(path).as_str() {
         "geojson" | "json" => {
             // Refused by its size before it is read: the text is held in memory whole (#57).
@@ -39,11 +40,18 @@ pub fn read_data(disk: &Disk, path: &Path) -> Result<(FeatureClass, Vec<String>)
                 return Err(Error::format("GeoJSON", format!("larger than {} MB", mkaegis_geojson::MAX_BYTES >> 20)));
             }
             let r = mkaegis_geojson::read(&disk.read_text(path)?, &stem(path))?;
-            Ok((r.data, r.warnings))
+            Ok((vec![r.data], r.warnings))
+        }
+        "kml" => {
+            if disk.len(path)? > mkaegis_kml::MAX_BYTES as u64 {
+                return Err(Error::format("KML", format!("larger than {} MB", mkaegis_kml::MAX_BYTES >> 20)));
+            }
+            let r = mkaegis_kml::read(&disk.read_text(path)?, &stem(path))?;
+            Ok((r.layers, r.warnings))
         }
         "shp" => {
             let r = mkaegis_shp::read_with(path, |p| disk.read(p))?;
-            Ok((r.data, r.warnings))
+            Ok((vec![r.data], r.warnings))
         }
         other => Err(Error::NotAvailable(format!("reading `.{other}` files"))),
     }
@@ -53,6 +61,7 @@ pub fn read_data(disk: &Disk, path: &Path) -> Result<(FeatureClass, Vec<String>)
 /// the format couldn't hold.
 pub fn write_data(disk: &mut Disk, fc: &FeatureClass, path: &Path) -> Result<Vec<String>> {
     match extension(path).as_str() {
+        "kml" => disk.write(path, mkaegis_kml::write(fc)?.as_bytes()).map(|()| Vec::new()),
         "geojson" | "json" => disk.write(path, mkaegis_geojson::write(fc)?.as_bytes()).map(|()| Vec::new()),
         // The attributes only: a table, for spreadsheets and statistics packages.
         "csv" => {

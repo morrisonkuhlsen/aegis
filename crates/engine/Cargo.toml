@@ -14,6 +14,7 @@ mkaegis-geom = { workspace = true }
 mkaegis-crs = { workspace = true }
 mkaegis-model = { workspace = true }
 mkaegis-geojson = { workspace = true }
+mkaegis-kml = { workspace = true }
 mkaegis-csv = { workspace = true }
 mkaegis-shp = { workspace = true }
 mkaegis-render = { workspace = true }

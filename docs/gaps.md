@@ -26,7 +26,6 @@ None open: the six known ones were fixed in 0.1.2 (see [`CHANGELOG.md`](../CHANG
 
 | Issue | Feature                                                                        | Priority |
 |-------|--------------------------------------------------------------------------------|----------|
-| #23   | Global autocorrelation: Moran's I, Geary's C, General G, permutation inference | high     |
 | #24   | LISA cluster maps and Getis-Ord Gi* hot spots, with FDR/Bonferroni             | high     |
 | #26   | Statistical classification: natural breaks, std dev, box map, percentile map   | high     |
 | #25   | Linked exploratory views and brushing                                          | high     |
@@ -54,3 +53,4 @@ interop, the web app, project hygiene) are ranked by their `priority:` label on
 | 2026-10-21 | #3 removed                                |
 | 2026-10-21 | #52 removed                               |
 | 2026-10-21 | #53 removed                               |
+| 2026-10-21 | #23 removed (the Moran scatter plot: #25) |

@@ -1850,6 +1850,7 @@ dependencies = [
  "mkaegis-crs",
  "mkaegis-geom",
  "mkaegis-model",
+ "serde",
 ]
 
 [[package]]

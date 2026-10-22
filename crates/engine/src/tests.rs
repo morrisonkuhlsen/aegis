@@ -414,6 +414,45 @@ fn an_unknown_coordinate_system_is_kept_until_defined() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// #23: global autocorrelation of a field, by the weights' layer.
+#[test]
+fn global_autocorrelation_reports_its_inference() {
+    let mut s = Session::sample();
+    let r = s.execute("stats.weights", &json!({ "layer": "Cidades", "method": "knn", "k": 4, "name": "w" })).unwrap();
+    assert_eq!(r["name"], json!("w"));
+    let moran = s.execute("stats.globalMoran", &json!({ "weights": "w", "field": "POP" })).unwrap();
+    // The same numbers as the statistics crate gives directly.
+    let layer = s.map.layer("Cidades").unwrap();
+    let pop: Vec<f64> = layer.data.features.iter().map(|f| f.values[1].as_f64().unwrap()).collect();
+    let direct =
+        mkaegis_stats::autocorrelation::global(mkaegis_stats::autocorrelation::Statistic::MoranI, &pop, &s.map.weights[0].neighbours, 999, 12_345)
+            .unwrap();
+    assert_eq!(moran["value"], json!(direct.value));
+    assert_eq!(moran["expected"], json!(-1.0 / (pop.len() as f64 - 1.0)));
+    assert_eq!((moran["permutation"]["permutations"].clone(), moran["permutation"]["seed"].clone()), (json!(999), json!(12_345)));
+    assert!(moran["normality"]["p"].as_f64().is_some() && moran["randomization"]["z"].as_f64().is_some());
+    assert!(moran["message"].as_str().unwrap().starts_with("Moran's I of POP = "), "{}", moran["message"]);
+    // Reproducible, and a different seed draws differently.
+    assert_eq!(s.execute("stats.globalMoran", &json!({ "weights": "w", "field": "POP" })).unwrap(), moran);
+    let other = s.execute("stats.globalMoran", &json!({ "weights": "w", "field": "POP", "seed": 7 })).unwrap();
+    assert_ne!(other["permutation"], moran["permutation"]);
+    let none = s.execute("stats.globalMoran", &json!({ "weights": "w", "field": "POP", "permutations": 0 })).unwrap();
+    assert_eq!(none["permutation"], Json::Null);
+    let geary = s.execute("stats.gearyC", &json!({ "weights": "w", "field": "POP" })).unwrap();
+    assert_eq!((geary["statistic"].clone(), geary["expected"].clone()), (json!("Geary's C"), json!(1.0)));
+    let g = s.execute("stats.generalG", &json!({ "weights": "w", "field": "POP" })).unwrap();
+    assert_eq!(g["normality"], Json::Null);
+
+    // Refused: a text field, a NULL, too many permutations, unknown weights.
+    assert!(s.execute("stats.globalMoran", &json!({ "weights": "w", "field": "NOME" })).is_err());
+    assert!(s.execute("stats.globalMoran", &json!({ "weights": "w", "field": "POP", "permutations": 100_000 })).is_err());
+    assert!(s.execute("stats.globalMoran", &json!({ "weights": "nope", "field": "POP" })).is_err());
+    s.execute("map.selectByAttributes", &json!({ "layer": "Cidades", "where": "NOME = 'Rochedo'" })).unwrap();
+    s.execute("layer.calculateField", &json!({ "layer": "Cidades", "field": "POP", "expression": "NULL", "selectedOnly": true })).unwrap();
+    let err = s.execute("stats.globalMoran", &json!({ "weights": "w", "field": "POP" })).unwrap_err().to_string();
+    assert!(err.contains("1 features have no `POP`"), "{err}");
+}
+
 #[test]
 fn data_and_projects_round_trip_through_files() {
     let dir = scratch("files");

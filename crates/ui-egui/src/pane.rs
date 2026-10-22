@@ -26,10 +26,11 @@ pub enum Tool {
     SelectByLocation,
     SummaryStatistics,
     SpatialWeights,
+    SpatialAutocorrelation,
 }
 
 impl Tool {
-    const ALL: [Tool; 7] = [
+    const ALL: [Tool; 8] = [
         Tool::Buffer,
         Tool::Project,
         Tool::CalculateGeometry,
@@ -37,6 +38,7 @@ impl Tool {
         Tool::SelectByLocation,
         Tool::SummaryStatistics,
         Tool::SpatialWeights,
+        Tool::SpatialAutocorrelation,
     ];
 
     pub fn name(self) -> &'static str {
@@ -48,6 +50,7 @@ impl Tool {
             Tool::SelectByLocation => "Select Layer By Location (Data Management Tools)",
             Tool::SummaryStatistics => "Summary Statistics (Analysis Tools)",
             Tool::SpatialWeights => "Spatial Weights (Spatial Statistics Tools)",
+            Tool::SpatialAutocorrelation => "Spatial Autocorrelation (Spatial Statistics Tools)",
         }
     }
 
@@ -60,6 +63,9 @@ impl Tool {
             Tool::SelectByLocation => "Selects features by their spatial relation to another layer's.",
             Tool::SummaryStatistics => "Count, sum, mean, minimum, maximum and standard deviation of a field.",
             Tool::SpatialWeights => "Who neighbours whom: contiguity, nearest neighbours, distance bands or kernels, for the spatial statistics.",
+            Tool::SpatialAutocorrelation => {
+                "Is a field clustered, dispersed or random in space? Global Moran's I, Geary's C or General G, with z-scores, p-values and a permutation test."
+            }
         }
     }
 }
@@ -85,6 +91,11 @@ pub struct GpState {
     order: String,
     threshold: String,
     standardize: &'static str,
+    /// Spatial Autocorrelation: the weights, the statistic's command, permutations and seed.
+    weights: String,
+    pub statistic: &'static str,
+    permutations: String,
+    seed: String,
     selected_only: bool,
     result: Option<Json>,
 }
@@ -105,6 +116,9 @@ impl GpState {
             k: "4".into(),
             order: "1".into(),
             standardize: "row",
+            statistic: "stats.globalMoran",
+            permutations: "999".into(),
+            seed: "12345".into(),
             ..GpState::default()
         };
     }
@@ -293,6 +307,35 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
                 }),
             )
         }
+        Tool::SpatialAutocorrelation => {
+            let names: Vec<(String, u32)> = app.session.map.weights.iter().map(|w| (w.name.clone(), w.layer)).collect();
+            if !names.iter().any(|(n, _)| *n == g.weights) {
+                g.weights = names.last().map(|(n, _)| n.clone()).unwrap_or_default();
+            }
+            ui.label("Spatial Weights");
+            egui::ComboBox::from_id_salt("gp-weights").width(ui.available_width()).selected_text(g.weights.as_str()).show_ui(ui, |ui| {
+                for (n, _) in &names {
+                    ui.selectable_value(&mut g.weights, n.clone(), n);
+                }
+            });
+            if names.is_empty() {
+                ui.label(egui::RichText::new("Build spatial weights first (Statistics › Spatial Weights).").size(11.0).color(t.muted));
+            }
+            let layer = names.iter().find(|(n, _)| *n == g.weights).map(|(_, l)| *l);
+            field_combo(ui, app, layer, "Input Field (numeric)", "gp-field", &mut g.field, true);
+            ui.label("Statistic");
+            egui::ComboBox::from_id_salt("gp-stat").width(ui.available_width()).selected_text(statistic_label(g.statistic)).show_ui(ui, |ui| {
+                for c in ["stats.globalMoran", "stats.gearyC", "stats.generalG"] {
+                    ui.selectable_value(&mut g.statistic, c, statistic_label(c));
+                }
+            });
+            ui.label("Permutations (0 for none)");
+            ui.add(egui::TextEdit::singleline(&mut g.permutations).desired_width(f32::INFINITY));
+            ui.label("Seed");
+            ui.add(egui::TextEdit::singleline(&mut g.seed).desired_width(f32::INFINITY));
+            let number = |t: &str| t.trim().parse::<u64>().ok();
+            (g.statistic, json!({ "weights": g.weights, "field": g.field, "permutations": number(&g.permutations), "seed": number(&g.seed) }))
+        }
     };
     ui.add_space(8.0);
     if ui.add(egui::Button::new(egui::RichText::new("Run").strong()).min_size(egui::vec2(80.0, 26.0))).clicked() {
@@ -339,7 +382,70 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             }
         });
     }
+    if let Some(r) = &g.result
+        && tool == Tool::SpatialAutocorrelation
+        && r.get("statistic").is_some()
+    {
+        autocorrelation_report(ui, r);
+    }
     app.gp = g;
+}
+
+fn statistic_label(command: &str) -> &'static str {
+    match command {
+        "stats.gearyC" => "Geary's C",
+        "stats.generalG" => "Getis-Ord General G",
+        _ => "Global Moran's I",
+    }
+}
+
+/// A global statistic's report: the value against its expectation, then each inference.
+fn autocorrelation_report(ui: &mut Ui, r: &Json) {
+    let t = Tokens::get(ui.ctx());
+    let num = |path: &str| r.pointer(path).and_then(Json::as_f64);
+    let show =
+        |x: Option<f64>| x.map_or_else(|| "—".to_string(), |x| if x != 0.0 && x.abs() < 1e-4 { format!("{x:.3e}") } else { format!("{x:.4}") });
+    ui.separator();
+    ui.label(
+        egui::RichText::new(format!(
+            "{} — {} by {}",
+            r.get("statistic").and_then(Json::as_str).unwrap_or(""),
+            r.get("field").and_then(Json::as_str).unwrap_or(""),
+            r.get("weights").and_then(Json::as_str).unwrap_or("")
+        ))
+        .strong(),
+    );
+    egui::Grid::new("autocorrelation").striped(true).num_columns(2).show(ui, |ui| {
+        let mut row = |label: &str, value: String| {
+            ui.label(egui::RichText::new(label).strong());
+            ui.label(value);
+            ui.end_row();
+        };
+        row("Value", show(num("/value")));
+        row("Expected", show(num("/expected")));
+        row("Features", r.get("n").map(Json::to_string).unwrap_or_default());
+        for (label, key) in [("normality", "/normality"), ("randomization", "/randomization")] {
+            if r.pointer(key).is_some_and(|v| !v.is_null()) {
+                row(&format!("z ({label})"), show(num(&format!("{key}/z"))));
+                row(&format!("p ({label}, two-sided)"), show(num(&format!("{key}/p"))));
+            }
+        }
+        if r.get("permutation").is_some_and(|v| !v.is_null()) {
+            row("Pseudo p (one-sided)", show(num("/permutation/p")));
+            row("z (permutation)", show(num("/permutation/z")));
+            row(
+                "Permutations",
+                format!(
+                    "{} (seed {})",
+                    r.pointer("/permutation/permutations").unwrap_or(&Json::Null),
+                    r.pointer("/permutation/seed").unwrap_or(&Json::Null)
+                ),
+            );
+        }
+    });
+    if let Some(n) = r.get("islands").and_then(Json::as_u64).filter(|n| *n > 0) {
+        ui.label(egui::RichText::new(format!("{n} features have no neighbours.")).size(11.0).color(t.muted));
+    }
 }
 
 fn symbology(app: &mut MapApp, ui: &mut Ui) {

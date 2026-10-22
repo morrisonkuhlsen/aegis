@@ -355,7 +355,7 @@ fn analysis_tab(app: &mut MapApp, ui: &mut Ui) {
     });
 }
 
-/// The Statistics tab: spatial weights first; the statistics that use them come next.
+/// The Statistics tab: spatial weights, then the statistics that use them.
 fn statistics_tab(app: &mut MapApp, ui: &mut Ui) {
     let layers = has_layers(app);
     let weights = app.session.enabled("stats.weightsInfo");
@@ -387,6 +387,13 @@ fn statistics_tab(app: &mut MapApp, ui: &mut Ui) {
             && let Some(name) = app.session.map.weights.last().map(|w| w.name.clone())
         {
             app.save_to("Export Weights", "stats.exportWeights", &["gal", "gwt"], &format!("{name}.gal"), json!({ "weights": name }));
+        }
+    });
+    group(ui, "Autocorrelation", |ui| {
+        let open = app.gp.tool == Some(GpTool::SpatialAutocorrelation) && app.pane == Some(Pane::Geoprocessing);
+        if button(ui, Icon::Statistics, "Global Moran's I", weights, open, GpTool::SpatialAutocorrelation.description()) {
+            app.gp.open(GpTool::SpatialAutocorrelation, active_id(app));
+            app.pane = Some(Pane::Geoprocessing);
         }
     });
 }

@@ -3,9 +3,11 @@
 //!
 //! `cargo run -p mkaegis-ui-egui --example snapshot -- [--sample] [--in file.geojson|.shp|.aegis]
 //!  [--cmd 'id={json}']... [--tab map|analysis|statistics|edit|view|share] [--pane geoprocessing|symbology|history]
-//!  [--tool buffer|project|calculate|attributes|location|statistics|weights] [--table] [--select] [--dark]
+//!  [--tool buffer|project|calculate|attributes|location|statistics|weights|autocorrelation] [--click LABEL]...
+//!  [--table] [--select] [--dark]
 //!  [--splash] [--icon] [--backstage home|new|open|info|export] [--size 1280x800] out.png`
 
+use egui_kittest::kittest::Queryable;
 use mkaegis_engine::Session;
 use mkaegis_ui_egui::{MapApp, Pane, Tab, Tool};
 use serde_json::json;
@@ -20,6 +22,7 @@ fn main() -> Result<(), String> {
     let mut backstage = None;
     let mut icon = false;
     let mut cmds = Vec::new();
+    let mut clicks = Vec::new();
     let mut i = 0;
     while let Some(arg) = args.get(i) {
         let mut value = || {
@@ -52,6 +55,8 @@ fn main() -> Result<(), String> {
                 }
             }
             "--tool" => gp = Some(value()?),
+            // Clicks the widget with this label once the window is drawn (`--click Run`).
+            "--click" => clicks.push(value()?),
             "--table" => table = true,
             "--select" => select = true,
             "--dark" => dark = true,
@@ -97,6 +102,7 @@ fn main() -> Result<(), String> {
             "location" => T::SelectByLocation,
             "statistics" => T::SummaryStatistics,
             "weights" => T::SpatialWeights,
+            "autocorrelation" => T::SpatialAutocorrelation,
             _ => T::Buffer,
         };
         let active = app.active;
@@ -137,6 +143,10 @@ fn main() -> Result<(), String> {
         .build_ui_state(|ui, app: &mut MapApp| app.ui(ui), app);
     harness.ctx.set_theme(if dark { egui::Theme::Dark } else { egui::Theme::Light });
     harness.run_steps(6);
+    for label in &clicks {
+        harness.get_by_label(label).click();
+        harness.run_steps(4);
+    }
     let image = harness.render().map_err(|e| e.to_string())?;
     image.save(&out).map_err(|e| e.to_string())?;
     println!("{out}");

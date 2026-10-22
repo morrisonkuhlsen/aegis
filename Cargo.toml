@@ -39,9 +39,9 @@ zune-jpeg = "0.5"
 zune-core = "0.5"
 
 # ui
-egui = "0.36"
-eframe = { version = "0.36", default-features = false }
-egui_kittest = "0.36"
+egui = "0.37"
+eframe = { version = "0.37", default-features = false }
+egui_kittest = "0.37"
 rfd = "0.17"
 
 # web app (apps/mkaegis-web, wasm32 only): the browser's APIs, which eframe uses too

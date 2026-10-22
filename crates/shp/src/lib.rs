@@ -29,6 +29,8 @@ pub struct Files {
     pub dbf: Vec<u8>,
     pub prj: Option<String>,
     pub cpg: Option<String>,
+    /// What writing had to change (text cut to the dBASE limit); empty for files read.
+    pub warnings: Vec<String>,
 }
 
 /// A feature class read from a shapefile, with anything the reader had to work around.
@@ -199,6 +201,7 @@ pub fn read_path(path: &Path) -> Result<Read> {
         dbf: sidecar("dbf").ok_or_else(|| Error::NotFound(format!("{}", path.with_extension("dbf").display())))?,
         prj: sidecar("prj").map(|b| String::from_utf8_lossy(&b).into_owned()),
         cpg: sidecar("cpg").map(|b| String::from_utf8_lossy(&b).into_owned()),
+        warnings: Vec::new(),
     };
     let name = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "shapefile".into());
     read(&files, &name)
@@ -314,7 +317,8 @@ pub fn write(fc: &FeatureClass) -> Result<Files> {
     header(&mut shx, HEADER + index.len(), code, extent);
     shx.extend_from_slice(&index);
     let rows: Vec<&[Value]> = fc.features.iter().map(|f| f.values.as_slice()).collect();
-    Ok(Files { shp, shx, dbf: dbf::write(&fc.fields, &rows)?, prj: Some(fc.crs.to_prj()), cpg: Some("UTF-8".into()) })
+    let dbf = dbf::write(&fc.fields, &rows)?;
+    Ok(Files { shp, shx, dbf: dbf.bytes, prj: Some(fc.crs.to_prj()), cpg: Some("UTF-8".into()), warnings: dbf.warnings })
 }
 
 #[cfg(test)]

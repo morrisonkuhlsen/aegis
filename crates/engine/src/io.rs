@@ -43,10 +43,11 @@ pub fn read_data(path: &Path) -> Result<(FeatureClass, Vec<String>)> {
     }
 }
 
-/// Writes a feature class to a data file chosen by extension.
-pub fn write_data(fc: &FeatureClass, path: &Path) -> Result<()> {
+/// Writes a feature class to a data file chosen by extension, and returns warnings about what
+/// the format couldn't hold.
+pub fn write_data(fc: &FeatureClass, path: &Path) -> Result<Vec<String>> {
     match extension(path).as_str() {
-        "geojson" | "json" => write_atomic(path, mkaegis_geojson::write(fc)?.as_bytes()),
+        "geojson" | "json" => write_atomic(path, mkaegis_geojson::write(fc)?.as_bytes()).map(|()| Vec::new()),
         "shp" => {
             let files = mkaegis_shp::write(fc)?;
             write_atomic(&path.with_extension("shp"), &files.shp)?;
@@ -58,7 +59,7 @@ pub fn write_data(fc: &FeatureClass, path: &Path) -> Result<()> {
             if let Some(cpg) = &files.cpg {
                 write_atomic(&path.with_extension("cpg"), cpg.as_bytes())?;
             }
-            Ok(())
+            Ok(files.warnings)
         }
         other => Err(Error::NotAvailable(format!("writing `.{other}` files"))),
     }

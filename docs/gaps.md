@@ -9,10 +9,7 @@ a GitHub issue, where the detail and the acceptance criteria are.
 
 ## 1. Lost work and crashes
 
-| Issue | Gap                                                                        | Priority |
-|-------|----------------------------------------------------------------------------|----------|
-| #59   | Undo clones the whole map before every Edit command, with no memory budget | medium   |
-| #58   | Opening a project does no validation                                       | medium   |
+None open: #58 and #59 were fixed after 0.1.2 (see [`CHANGELOG.md`](../CHANGELOG.md)).
 
 ## 2. Wrong statistical results
 
@@ -23,7 +20,6 @@ None open: the six known ones were fixed in 0.1.2 (see [`CHANGELOG.md`](../CHANG
 | Issue | Gap                                                                               | Priority |
 |-------|-----------------------------------------------------------------------------------|----------|
 | #52   | Buffer of a multipoint: overlapping circles aren't unioned (rings fixed in 0.1.2) | high     |
-| #55   | The dBASE writer loses data                                                       | high     |
 | #6    | An unrecognised `.prj` is silently assumed to be WGS 84                           | high     |
 | #3    | `mkaegis-cli --out` writes the top layer, not the command's output                | high     |
 | #53   | The `.prj` name fallback ignores the datum (SAD69, ED50, Córrego Alegre)          | medium   |
@@ -57,3 +53,4 @@ interop, the web app, project hygiene) are ranked by their `priority:` label on
 |------------|-------------------------------------------|
 | 2026-10-21 | First version, from the open issues (#62) |
 | 2026-10-21 | Fixed issues removed after 0.1.2          |
+| 2026-10-21 | #58, #59 and #55 removed                  |

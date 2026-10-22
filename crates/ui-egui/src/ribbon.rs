@@ -396,6 +396,12 @@ fn statistics_tab(app: &mut MapApp, ui: &mut Ui) {
             open_statistic(app, "stats.globalMoran");
         }
     });
+    group(ui, "Explore", |ui| {
+        let open = app.pane == Some(Pane::Charts);
+        if button(ui, Icon::Statistics, "Charts", layers, open, "Histogram, box plot, scatter and Moran scatter plots, linked to the map") {
+            app.pane = Some(Pane::Charts);
+        }
+    });
     group(ui, "Local", |ui| {
         let open = app.gp.tool == Some(GpTool::SpatialAutocorrelation) && app.pane == Some(Pane::Geoprocessing);
         let tip = "Where the clusters and outliers are: local Moran's I (LISA), mapped High-High, Low-Low, High-Low, Low-High";

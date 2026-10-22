@@ -1,5 +1,5 @@
 //! The right-hand pane: Geoprocessing (find a tool, fill its parameters, run it), Symbology of
-//! the active layer, and the geoprocessing History.
+//! the active layer, the geoprocessing History, and the linked Charts.
 
 use egui::Ui;
 use mkaegis_geom::GeometryType;
@@ -14,6 +14,7 @@ pub enum Pane {
     Geoprocessing,
     Symbology,
     History,
+    Charts,
 }
 
 /// The tools the Geoprocessing pane offers.
@@ -718,9 +719,13 @@ fn history(app: &mut MapApp, ui: &mut Ui) {
 pub fn show(app: &mut MapApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     ui.horizontal(|ui| {
-        for (p, label) in [(Pane::Geoprocessing, "Geoprocessing"), (Pane::Symbology, "Symbology"), (Pane::History, "History")] {
+        // Four tabs and the chevron share the pane's width.
+        ui.spacing_mut().item_spacing.x = 2.0;
+        for (p, label) in
+            [(Pane::Geoprocessing, "Geoprocessing"), (Pane::Symbology, "Symbology"), (Pane::History, "History"), (Pane::Charts, "Charts")]
+        {
             let sel = app.pane == Some(p);
-            if ui.selectable_label(sel, egui::RichText::new(label).color(if sel { t.accent } else { t.text })).clicked() {
+            if ui.selectable_label(sel, egui::RichText::new(label).size(12.5).color(if sel { t.accent } else { t.text })).clicked() {
                 app.pane = Some(p);
             }
         }
@@ -742,6 +747,7 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
         Some(Pane::Geoprocessing) => gp(app, ui),
         Some(Pane::Symbology) => symbology(app, ui),
         Some(Pane::History) => history(app, ui),
+        Some(Pane::Charts) => crate::charts::show(app, ui),
         None => {}
     });
 }

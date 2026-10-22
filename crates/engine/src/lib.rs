@@ -17,6 +17,8 @@ use serde_json::Value as Json;
 
 pub use cmd::{COMMANDS, CommandSpec, Kind};
 pub use disk::Disk;
+/// Calculate Geometry's properties, so the UI offers only those a layer's shapes have.
+pub use mkaegis_analysis::Property;
 /// The exploratory views' statistics, for the UI's charts (they draw what this computes).
 pub use mkaegis_stats::explore;
 

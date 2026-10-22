@@ -106,6 +106,17 @@ pub enum Property {
 }
 
 impl Property {
+    /// Every property, by the name commands take.
+    pub const ALL: [(&'static str, Property); 7] = [
+        ("area", Property::Area),
+        ("areaHectares", Property::AreaHectares),
+        ("areaKm2", Property::AreaKm2),
+        ("length", Property::Length),
+        ("lengthKm", Property::LengthKm),
+        ("centroidX", Property::CentroidX),
+        ("centroidY", Property::CentroidY),
+    ];
+
     pub fn parse(text: &str) -> Option<Property> {
         match text.to_ascii_lowercase().replace(['_', ' '], "").as_str() {
             "area" | "areasqm" | "aream2" => Some(Property::Area),
@@ -116,6 +127,25 @@ impl Property {
             "centroidx" | "x" => Some(Property::CentroidX),
             "centroidy" | "y" => Some(Property::CentroidY),
             _ => None,
+        }
+    }
+
+    /// Whether features of this type have the property: an area needs polygons, a length lines
+    /// or polygons (their perimeter); every shape has a centroid.
+    pub fn fits(self, kind: GeometryType) -> bool {
+        match self {
+            Property::Area | Property::AreaHectares | Property::AreaKm2 => kind == GeometryType::Polygon,
+            Property::Length | Property::LengthKm => matches!(kind, GeometryType::Polyline | GeometryType::Polygon),
+            Property::CentroidX | Property::CentroidY => true,
+        }
+    }
+
+    /// What a layer needs for this property, for the error that refuses it.
+    fn needs(self) -> &'static str {
+        match self {
+            Property::Area | Property::AreaHectares | Property::AreaKm2 => "an area needs a polygon layer",
+            Property::Length | Property::LengthKm => "a length needs a polyline or polygon layer",
+            Property::CentroidX | Property::CentroidY => "every layer has centroids",
         }
     }
 }
@@ -141,8 +171,12 @@ pub fn measure(g: &Geometry, crs: Crs, p: Property) -> Result<f64> {
 }
 
 /// Calculate Geometry Attributes: writes `property` into `field` (added as Double if missing).
-/// Returns how many rows were computed.
+/// Returns how many rows were computed. A property the layer's shapes don't have (an area of
+/// points) is refused before anything is written (#5).
 pub fn calculate_geometry(fc: &mut FeatureClass, field: &str, property: Property) -> Result<usize> {
+    if !property.fits(fc.geometry_type) {
+        return Err(Error::param("property", property.needs()));
+    }
     let i = match fc.field_index(field) {
         Some(i) => {
             if !matches!(fc.fields.get(i).map(|f| f.kind), Some(FieldType::Double | FieldType::Integer)) {
@@ -422,6 +456,23 @@ mod tests {
         let ha = fc.features[0].values[0].as_f64().unwrap();
         assert!((ha - 123.1).abs() < 0.5, "{ha}");
         assert!(calculate_geometry(&mut fc, "bad name", Property::Area).is_err());
+    }
+
+    /// #5: an area of points used to report "rows calculated" and leave a column of nulls.
+    #[test]
+    fn calculate_geometry_refuses_what_the_shapes_dont_have() {
+        let mut points = cities();
+        let fields = points.fields.len();
+        for p in [Property::Area, Property::AreaHectares, Property::AreaKm2, Property::Length, Property::LengthKm] {
+            let e = calculate_geometry(&mut points, "M", p).unwrap_err().to_string();
+            assert!(e.contains("property") && e.contains("needs a"), "{e}");
+        }
+        assert_eq!(points.fields.len(), fields, "nothing written when refused");
+        assert_eq!(calculate_geometry(&mut points, "X", Property::CentroidX).unwrap(), 3);
+        // Lines have lengths but no area; polygons have all of it.
+        assert!(Property::Length.fits(GeometryType::Polyline) && !Property::Area.fits(GeometryType::Polyline));
+        assert!(Property::ALL.iter().all(|(_, p)| p.fits(GeometryType::Polygon)));
+        assert!(Property::ALL.iter().all(|(name, p)| Property::parse(name) == Some(*p)));
     }
 
     #[test]

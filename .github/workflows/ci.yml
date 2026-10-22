@@ -1,6 +1,6 @@
 # The AGENTS.md quality gate (`cargo xtask ci`: fmt, clippy -D warnings, tests, assets, layers,
-# panics, wasm, parity --check) on every pull request and every push to main, so nothing lands on
-# a red tree.
+# panics, wasm, parity --check) on Linux, Windows and macOS, on every pull request and every push
+# to main, so nothing lands on a red tree on any of the three (#19).
 name: CI
 
 on:
@@ -18,9 +18,16 @@ concurrency:
 
 jobs:
   gate:
-    name: cargo xtask ci
-    runs-on: ubuntu-24.04
+    name: cargo xtask ci (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    defaults:
+      run:
+        shell: bash
     env:
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: "0"
@@ -28,6 +35,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Linux build dependencies (winit, wgpu, rfd)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \

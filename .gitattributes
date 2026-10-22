@@ -1,0 +1,3 @@
+# Text files are LF in the repository and in every checkout, Windows included: generated files
+# (`cargo xtask parity`) are written with LF, and `--check` compares them byte for byte (#19).
+* text=auto eol=lf

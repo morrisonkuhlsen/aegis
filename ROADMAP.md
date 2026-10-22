@@ -1,6 +1,6 @@
 # MK aeGIS roadmap
 
-*Updated 2026-10-22, at version 0.3.0.*
+*Updated 2026-10-22, at version 0.4.0.*
 
 MK aeGIS is a statistical GIS: a geographic information system built for statisticians. This page
 is the one-page summary; the detail is in [`docs/`](docs/).
@@ -24,12 +24,12 @@ From `cargo xtask stats` and `cargo xtask parity`:
 
 | Measure                | Value  |
 |------------------------|--------|
-| Commands               | 56     |
-| Rust lines (17 crates) | 22,280 |
-| Tests (`#[test]`)      | 221    |
-| Releases               | 5      |
+| Commands               | 57     |
+| Rust lines (17 crates) | 23,199 |
+| Tests (`#[test]`)      | 229    |
+| Releases               | 6      |
 | Open issues (bugs)     | 0      |
-| Open issues (features) | 40     |
+| Open issues (features) | 39     |
 
 ## Dimensions
 
@@ -47,6 +47,7 @@ From `cargo xtask stats` and `cargo xtask parity`:
 
 | Date       | Version | What landed                                                                                    |
 |------------|---------|------------------------------------------------------------------------------------------------|
+| 2026-10-22 | 0.4.0   | Basemaps: OpenStreetMap and NASA GIBS imagery, attributed on screen and in exports (#15)       |
 | 2026-10-22 | 0.3.0   | Portuguese (Brazil) interface (#37); KML in and out (#14)                                      |
 | 2026-10-22 | 0.2.0   | The web app (#38); bad features kept (#57); projection edges (#54); CI on 3 OSes (#19)         |
 | 2026-10-21 | 0.1.2   | 14 bugs fixed: lost work and crashes, SQL NULL logic, weights, measures, Select By Location    |

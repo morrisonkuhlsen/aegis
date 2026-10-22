@@ -416,6 +416,121 @@ pub fn circle(center: Coord, radius: f64, segments: usize) -> Vec<Coord> {
     ring
 }
 
+/// The union of convex rings (closed, counter-clockwise, such as [`circle`]s) as the rings of
+/// one polygon: shells counter-clockwise, holes clockwise. Each ring's edges are split where they
+/// cross the others; the pieces inside no other ring are the union's boundary, linked end to
+/// start. Each crossing is computed once and shared by both edges, so the pieces meet exactly.
+/// `None` when the boundary doesn't close (degenerate input), rather than a wrong shape.
+pub fn union_convex(rings: &[Vec<Coord>]) -> Option<Vec<Vec<Coord>>> {
+    let mut rings: Vec<&Vec<Coord>> = rings.iter().filter(|r| r.len() >= 4).collect();
+    // Equal rings would keep each other's edges, which lie on the other's boundary.
+    rings.sort_by(|a, b| a.iter().flat_map(|c| [c.x, c.y]).partial_cmp(b.iter().flat_map(|c| [c.x, c.y])).unwrap_or(std::cmp::Ordering::Equal));
+    rings.dedup();
+    let envelopes: Vec<Envelope> = rings.iter().map(|r| Envelope::of(r.iter().copied())).collect::<Option<_>>()?;
+    // Neighbours: rings whose envelopes meet, by a sweep along x.
+    let mut order: Vec<usize> = (0..rings.len()).collect();
+    order.sort_by(|a, b| envelopes[*a].min_x.total_cmp(&envelopes[*b].min_x));
+    let mut neighbours: Vec<Vec<usize>> = vec![Vec::new(); rings.len()];
+    for (k, &i) in order.iter().enumerate() {
+        for &j in order.iter().skip(k + 1) {
+            if envelopes[j].min_x > envelopes[i].max_x {
+                break;
+            }
+            if envelopes[i].intersects(&envelopes[j]) {
+                neighbours[i].push(j);
+                neighbours[j].push(i);
+            }
+        }
+    }
+    // Where each edge is cut: (parameter along the edge, point).
+    let mut cuts: Vec<Vec<Vec<(f64, Coord)>>> = rings.iter().map(|r| vec![Vec::new(); r.len() - 1]).collect();
+    for i in 0..rings.len() {
+        for &j in neighbours[i].iter().filter(|j| **j > i) {
+            for (a, ea) in rings[i].windows(2).enumerate() {
+                let [p, q] = ea else { continue };
+                for (b, eb) in rings[j].windows(2).enumerate() {
+                    let [r, t] = eb else { continue };
+                    if let Some((u, v, x)) = crossing(*p, *q, *r, *t) {
+                        cuts[i][a].push((u, x));
+                        cuts[j][b].push((v, x));
+                    }
+                }
+            }
+        }
+    }
+    // The pieces of boundary outside every other ring.
+    let mut pieces: Vec<(Coord, Coord)> = Vec::new();
+    for (i, ring) in rings.iter().enumerate() {
+        for (a, edge) in ring.windows(2).enumerate() {
+            let [p, q] = edge else { continue };
+            let mut points = std::mem::take(&mut cuts[i][a]);
+            points.sort_by(|x, y| x.0.total_cmp(&y.0));
+            let points: Vec<Coord> = std::iter::once(*p).chain(points.into_iter().map(|c| c.1)).chain(std::iter::once(*q)).collect();
+            for w in points.windows(2) {
+                let [s, e] = w else { continue };
+                if s == e {
+                    continue;
+                }
+                let mid = Coord::new((s.x + e.x) / 2.0, (s.y + e.y) / 2.0);
+                if !neighbours[i].iter().any(|&j| strictly_inside_convex(rings[j], mid)) {
+                    pieces.push((*s, *e));
+                }
+            }
+        }
+    }
+    link(pieces)
+}
+
+/// Where segments p–q and r–t cross: the parameters along each and the point. Parallel
+/// segments don't cross (equal rings were removed).
+fn crossing(p: Coord, q: Coord, r: Coord, t: Coord) -> Option<(f64, f64, Coord)> {
+    let (dx1, dy1, dx2, dy2) = (q.x - p.x, q.y - p.y, t.x - r.x, t.y - r.y);
+    let den = dx1 * dy2 - dy1 * dx2;
+    if den == 0.0 || !den.is_finite() {
+        return None;
+    }
+    let u = ((r.x - p.x) * dy2 - (r.y - p.y) * dx2) / den;
+    let v = ((r.x - p.x) * dy1 - (r.y - p.y) * dx1) / den;
+    ((0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v)).then(|| (u, v, Coord::new(p.x + u * dx1, p.y + u * dy1)))
+}
+
+/// Whether `p` is inside a counter-clockwise convex ring and not on its boundary.
+fn strictly_inside_convex(ring: &[Coord], p: Coord) -> bool {
+    ring.windows(2).all(|w| match w {
+        [a, b] => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x) > 0.0,
+        _ => true,
+    })
+}
+
+/// Directed pieces of boundary linked end to start into closed rings.
+fn link(pieces: Vec<(Coord, Coord)>) -> Option<Vec<Vec<Coord>>> {
+    let key = |c: Coord| (c.x.to_bits(), c.y.to_bits());
+    let mut starts: std::collections::HashMap<(u64, u64), Vec<usize>> = std::collections::HashMap::new();
+    for (k, (s, _)) in pieces.iter().enumerate() {
+        starts.entry(key(*s)).or_default().push(k);
+    }
+    let mut used = vec![false; pieces.len()];
+    let mut rings = Vec::new();
+    for first in 0..pieces.len() {
+        if used[first] {
+            continue;
+        }
+        used[first] = true;
+        let (start, mut end) = pieces[first];
+        let mut ring = vec![start, end];
+        while end != start {
+            let next = starts.get(&key(end))?.iter().copied().find(|k| !used[*k])?;
+            used[next] = true;
+            end = pieces[next].1;
+            ring.push(end);
+        }
+        if ring.len() >= 4 {
+            rings.push(ring);
+        }
+    }
+    Some(rings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -554,5 +669,71 @@ mod tests {
         assert_eq!(ring.first(), ring.last());
         let a = area(&Geometry::Polygon(vec![circle(Coord::default(), 1.0, 720)]));
         assert!((a - std::f64::consts::PI).abs() < 1e-4);
+    }
+
+    mod union {
+        use super::*;
+
+        /// #52: overlapping circles of a multipoint's buffer were rings of one polygon, so they
+        /// cut holes in each other.
+        #[test]
+        fn overlapping_circles_become_one_shell() {
+            let (a, b) = (circle(Coord::new(0.0, 0.0), 1.0, 72), circle(Coord::new(1.0, 0.0), 1.0, 72));
+            let rings = union_convex(&[a.clone(), b.clone()]).unwrap();
+            assert_eq!(rings.len(), 1);
+            let one = area(&Geometry::Polygon(vec![a]));
+            let lens = 2.0 * std::f64::consts::FRAC_PI_3 - 3f64.sqrt() / 2.0;
+            let union = area(&Geometry::Polygon(rings.clone()));
+            // Two unit disks 1 apart: 2π − the lens (2π/3 − √3/2), within the 72-gon's error.
+            let exact = 2.0 * std::f64::consts::PI - lens;
+            assert!((union - exact).abs() / exact < 0.005, "{union} vs {exact}");
+            assert!(union > one && union < 2.0 * one);
+            assert!(ring_area2(&rings[0]) > 0.0);
+            // The same circle twice is the circle.
+            let twice = union_convex(&[b.clone(), b.clone()]).unwrap();
+            assert!((area(&Geometry::Polygon(twice)) - one).abs() < 1e-9);
+        }
+
+        #[test]
+        fn apart_inside_and_ringed_circles() {
+            let c = |x: f64, y: f64, r: f64| circle(Coord::new(x, y), r, 72);
+            // Apart: two shells.
+            assert_eq!(union_convex(&[c(0.0, 0.0, 1.0), c(5.0, 0.0, 1.0)]).unwrap().len(), 2);
+            // One inside another: the outer one.
+            let inner = union_convex(&[c(0.0, 0.0, 3.0), c(0.5, 0.0, 1.0)]).unwrap();
+            assert_eq!(inner.len(), 1);
+            assert!((area(&Geometry::Polygon(inner)) - area(&Geometry::Polygon(vec![c(0.0, 0.0, 3.0)]))).abs() < 1e-9);
+            // A ring of circles around an empty middle: a shell and a clockwise hole.
+            let around: Vec<Vec<Coord>> = (0..12)
+                .map(|k| {
+                    let t = std::f64::consts::TAU * f64::from(k) / 12.0;
+                    c(10.0 * t.cos(), 10.0 * t.sin(), 3.0)
+                })
+                .collect();
+            let rings = union_convex(&around).unwrap();
+            assert_eq!(rings.len(), 2);
+            assert_eq!(rings.iter().filter(|r| ring_area2(r) < 0.0).count(), 1);
+            let g = Geometry::Polygon(rings);
+            assert!(!contains_point(&g, Coord::new(0.0, 0.0)) && contains_point(&g, Coord::new(10.0, 0.0)));
+        }
+
+        /// Clusters of overlapping circles: the boundary always closes, and the area is at least
+        /// the largest circle's and at most their sum.
+        #[test]
+        fn clusters_close_and_have_a_sane_area() {
+            let mut seed = 12_345u64;
+            let mut next = || {
+                seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+                (seed >> 11) as f64 / (1u64 << 53) as f64
+            };
+            for n in [2, 3, 5, 20, 60] {
+                let circles: Vec<Vec<Coord>> = (0..n).map(|_| circle(Coord::new(next() * 10.0, next() * 10.0), 1.0 + next() * 3.0, 72)).collect();
+                let rings = union_convex(&circles).unwrap_or_else(|| panic!("{n} circles did not close"));
+                let union = area(&Geometry::Polygon(rings));
+                let each: Vec<f64> = circles.iter().map(|c| area(&Geometry::Polygon(vec![c.clone()]))).collect();
+                let (max, sum) = (each.iter().copied().fold(0.0, f64::max), each.iter().sum::<f64>());
+                assert!(union >= max - 1e-9 && union <= sum + 1e-9, "{n}: {union} not in {max}..{sum}");
+            }
+        }
     }
 }

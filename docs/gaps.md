@@ -19,7 +19,6 @@ None open: the six known ones were fixed in 0.1.2 (see [`CHANGELOG.md`](../CHANG
 
 | Issue | Gap                                                                               | Priority |
 |-------|-----------------------------------------------------------------------------------|----------|
-| #52   | Buffer of a multipoint: overlapping circles aren't unioned (rings fixed in 0.1.2) | high     |
 | #53   | The `.prj` name fallback ignores the datum (SAD69, ED50, Córrego Alegre)          | medium   |
 | #54   | Projection edge cases return clamped values or NaN                                | medium   |
 | #57   | One bad feature aborts the whole GeoJSON or Shapefile read                        | medium   |
@@ -54,3 +53,4 @@ interop, the web app, project hygiene) are ranked by their `priority:` label on
 | 2026-10-21 | #58, #59 and #55 removed                  |
 | 2026-10-21 | #6 removed                                |
 | 2026-10-21 | #3 removed                                |
+| 2026-10-21 | #52 removed                               |

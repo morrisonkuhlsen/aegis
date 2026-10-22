@@ -32,6 +32,18 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Added
 
+- **Descriptive statistics** (#28):
+  - **Summary Statistics** gives N, missing, sum, mean, variance, SD, SE of the mean, CV,
+    minimum, Q1, median, Q3, maximum, IQR, skewness, excess kurtosis and any percentiles. It
+    takes several fields at once, a case field (group by) and a weight field (frequency
+    weights), and writes the table to CSV with `path`.
+  - **Frequencies** (`analysis.frequencies`).
+  - **Crosstabs** (`analysis.crossTabulation`): Pearson's χ², df, p and Cramér's V, with a
+    warning when expected counts fall below 5.
+  - **Correlations** (`analysis.correlation`): Pearson or Spearman, each pair with its n and
+    two-sided p.
+  - The definitions are stated in the output: sample variance and SD (n − 1), skewness G1 and
+    excess kurtosis G2, quantiles by Hyndman and Fan's type 7 by default (any of 1–9).
 - **Tables** (#27, in part):
   - **Join Field** (`management.joinField`): copies a CSV table's columns, or another layer's,
     onto a layer by a common key. It reports the features matched and unmatched, the table rows

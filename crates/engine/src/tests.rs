@@ -601,6 +601,61 @@ fn csv_tables_join_and_become_points() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// #28: Summary Statistics by case and weight, written as a table; frequencies, crosstabs and
+/// correlations. #4: a Text field is refused and an empty sum is +0.
+#[test]
+fn descriptive_statistics() {
+    let dir = scratch("describe");
+    let mut s = Session::sample();
+    let one = s.execute("analysis.summaryStatistics", &json!({ "layer": "Cidades", "field": "POP" })).unwrap();
+    assert_eq!(one["count"], json!(23));
+    assert_eq!(one["statistics"][0]["quantile_type"], json!(7));
+    let err = s.execute("analysis.summaryStatistics", &json!({ "layer": "Cidades", "field": "NOME" })).unwrap_err().to_string();
+    assert!(err.contains("Text") && err.contains("numeric"), "{err}");
+    s.execute("layer.addField", &json!({ "layer": "Cidades", "name": "EMPTY", "type": "double" })).unwrap();
+    let empty = s.execute("analysis.summaryStatistics", &json!({ "layer": "Cidades", "field": "EMPTY" })).unwrap();
+    assert!(empty["sum"].as_f64().unwrap().is_sign_positive() && empty["mean"].is_null());
+
+    // By island, weighted by CAPITAL + 1, with the 10th and 90th percentiles, to a CSV.
+    s.execute("layer.addField", &json!({ "layer": "Cidades", "name": "W", "type": "double" })).unwrap();
+    s.execute("layer.calculateField", &json!({ "layer": "Cidades", "field": "W", "expression": "CAPITAL + 1" })).unwrap();
+    let out = dir.join("summary.csv");
+    let r = s
+        .execute(
+            "analysis.summaryStatistics",
+            &json!({ "layer": "Cidades", "fields": ["POP"], "caseField": "ILHA", "weightField": "W", "percentiles": [10, 90], "path": out.display().to_string() }),
+        )
+        .unwrap();
+    let rows = r["statistics"].as_array().unwrap();
+    assert!(rows.len() >= 2 && rows.iter().all(|row| row["weighted"] == json!(true) && row["case"].is_string()));
+    let n: f64 = rows.iter().map(|row| row["n"].as_f64().unwrap()).sum();
+    let w: f64 = s
+        .map
+        .layer("Cidades")
+        .unwrap()
+        .data
+        .features
+        .iter()
+        .map(|f| f.values[s.map.layer("Cidades").unwrap().data.field_index("W").unwrap()].as_f64().unwrap())
+        .sum();
+    assert_eq!(n, w, "cases cover every city, by weight");
+    let table = crate::io::read_table(&out, &Default::default()).unwrap();
+    assert_eq!(table.rows.len(), rows.len());
+    assert!(table.fields.iter().any(|f| f.name == "P90") && table.fields.iter().any(|f| f.name == "ILHA"));
+
+    let f = s.execute("analysis.frequencies", &json!({ "layer": "Cidades", "field": "ILHA" })).unwrap();
+    let total: u64 = f["frequencies"].as_array().unwrap().iter().map(|r| r["count"].as_u64().unwrap()).sum();
+    assert_eq!(total, 23);
+    let t = s.execute("analysis.crossTabulation", &json!({ "layer": "Cidades", "rows": "ILHA", "columns": "CAPITAL" })).unwrap();
+    assert_eq!(t["total"], json!(23));
+    assert!(t["p"].as_f64().unwrap() <= 1.0 && t["warnings"].as_array().is_some());
+    let c = s.execute("analysis.correlation", &json!({ "layer": "Cidades", "fields": ["POP", "W"], "method": "spearman" })).unwrap();
+    assert_eq!(c["r"][0][0], json!(1.0));
+    assert!(s.execute("analysis.correlation", &json!({ "layer": "Cidades", "fields": ["POP", "NOME"] })).is_err());
+    assert!(s.execute("analysis.summaryStatistics", &json!({ "layer": "Cidades", "field": "POP", "quantileType": 10 })).is_err());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn data_and_projects_round_trip_through_files() {
     let dir = scratch("files");

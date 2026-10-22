@@ -30,16 +30,20 @@ pub enum Tool {
     SpatialAutocorrelation,
     JoinField,
     XyTableToPoint,
+    Crosstabs,
+    Correlations,
 }
 
 impl Tool {
-    const ALL: [Tool; 10] = [
+    const ALL: [Tool; 12] = [
         Tool::Buffer,
         Tool::Project,
         Tool::CalculateGeometry,
         Tool::SelectByAttributes,
         Tool::SelectByLocation,
         Tool::SummaryStatistics,
+        Tool::Crosstabs,
+        Tool::Correlations,
         Tool::SpatialWeights,
         Tool::SpatialAutocorrelation,
         Tool::JoinField,
@@ -54,6 +58,8 @@ impl Tool {
             Tool::SelectByAttributes => "Select Layer By Attribute (Data Management Tools)",
             Tool::SelectByLocation => "Select Layer By Location (Data Management Tools)",
             Tool::SummaryStatistics => "Summary Statistics (Analysis Tools)",
+            Tool::Crosstabs => "Crosstabs (Statistics)",
+            Tool::Correlations => "Correlations (Statistics)",
             Tool::SpatialWeights => "Spatial Weights (Spatial Statistics Tools)",
             Tool::SpatialAutocorrelation => "Spatial Autocorrelation (Spatial Statistics Tools)",
             Tool::JoinField => "Join Field (Data Management Tools)",
@@ -68,7 +74,9 @@ impl Tool {
             Tool::CalculateGeometry => "Writes area, length or centroid coordinates into a field.",
             Tool::SelectByAttributes => "Selects features with a SQL clause.",
             Tool::SelectByLocation => "Selects features by their spatial relation to another layer's.",
-            Tool::SummaryStatistics => "Count, sum, mean, minimum, maximum and standard deviation of a field.",
+            Tool::SummaryStatistics => "A field's distribution: mean, SD, quartiles, skewness, kurtosis, percentiles; by case and weighted if asked.",
+            Tool::Crosstabs => "Counts of two categorical fields, with Pearson's χ² of independence and Cramér's V.",
+            Tool::Correlations => "Pearson or Spearman correlations of numeric fields, with n and p for each pair.",
             Tool::SpatialWeights => "Who neighbours whom: contiguity, nearest neighbours, distance bands or kernels, for the spatial statistics.",
             Tool::JoinField => "Copies a CSV table's columns onto a layer by a common key, with a report of what matched.",
             Tool::XyTableToPoint => "Makes a point layer from a CSV table's X and Y columns (or a WKT column).",
@@ -116,6 +124,15 @@ pub struct GpState {
     join_key: String,
     x: String,
     y: String,
+    /// Summary Statistics' case and weight fields ("" for none), percentiles and quantile type;
+    /// Crosstabs' column field; Correlations' fields and method.
+    case: String,
+    weight: String,
+    percentiles: String,
+    quantile: u8,
+    columns_field: String,
+    picked: Vec<String>,
+    spearman: bool,
     selected_only: bool,
     result: Option<Json>,
 }
@@ -140,6 +157,7 @@ impl GpState {
             permutations: "999".into(),
             seed: "12345".into(),
             alpha: "0.05".into(),
+            quantile: 7,
             correction: "none",
             ..GpState::default()
         };
@@ -273,8 +291,61 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
         Tool::SummaryStatistics => {
             layer_combo(ui, app, "Input Table", "gp-in", &mut g.layer, |_| true);
             field_combo(ui, app, g.layer, "Field (numeric)", "gp-field", &mut g.field, true);
+            optional_field(ui, app, g.layer, "Case Field (group by)", "gp-case", &mut g.case, false);
+            optional_field(ui, app, g.layer, "Weight Field (frequency weights)", "gp-weight", &mut g.weight, true);
+            ui.label("Percentiles (e.g. 5, 95)");
+            ui.add(egui::TextEdit::singleline(&mut g.percentiles).hint_text("none").desired_width(f32::INFINITY));
+            ui.horizontal(|ui| {
+                ui.label("Quantile type");
+                egui::ComboBox::from_id_salt("gp-qtype").selected_text(quantile_label(g.quantile)).show_ui(ui, |ui| {
+                    for k in 1..=9 {
+                        ui.selectable_value(&mut g.quantile, k, quantile_label(k));
+                    }
+                });
+            });
             ui.checkbox(&mut g.selected_only, "Selected records only");
-            ("analysis.summaryStatistics", json!({ "layer": g.layer, "field": g.field, "selectedOnly": g.selected_only }))
+            let percentiles: Vec<f64> = g.percentiles.split([',', ';', ' ']).filter_map(|p| p.trim().parse().ok()).collect();
+            (
+                "analysis.summaryStatistics",
+                json!({
+                    "layer": g.layer, "field": g.field, "selectedOnly": g.selected_only, "percentiles": percentiles, "quantileType": g.quantile,
+                    "caseField": (!g.case.is_empty()).then_some(&g.case), "weightField": (!g.weight.is_empty()).then_some(&g.weight),
+                }),
+            )
+        }
+        Tool::Crosstabs => {
+            layer_combo(ui, app, "Input Table", "gp-in", &mut g.layer, |_| true);
+            field_combo(ui, app, g.layer, "Rows", "gp-field", &mut g.field, false);
+            field_combo(ui, app, g.layer, "Columns", "gp-cols", &mut g.columns_field, false);
+            ui.checkbox(&mut g.selected_only, "Selected records only");
+            ("analysis.crossTabulation", json!({ "layer": g.layer, "rows": g.field, "columns": g.columns_field, "selectedOnly": g.selected_only }))
+        }
+        Tool::Correlations => {
+            layer_combo(ui, app, "Input Table", "gp-in", &mut g.layer, |_| true);
+            let numeric: Vec<String> = g
+                .layer
+                .and_then(|l| app.session.map.layers.iter().find(|x| x.id == l))
+                .map(|l| l.data.fields.iter().filter(|f| f.kind.is_numeric()).map(|f| f.name.clone()).collect())
+                .unwrap_or_default();
+            g.picked.retain(|f| numeric.contains(f));
+            ui.label("Fields (two or more)");
+            for f in &numeric {
+                let mut on = g.picked.contains(f);
+                if ui.checkbox(&mut on, f).changed() {
+                    if on {
+                        g.picked.push(f.clone());
+                    } else {
+                        g.picked.retain(|x| x != f);
+                    }
+                }
+            }
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut g.spearman, false, "Pearson");
+                ui.selectable_value(&mut g.spearman, true, "Spearman");
+            });
+            ui.checkbox(&mut g.selected_only, "Selected records only");
+            let method = if g.spearman { "spearman" } else { "pearson" };
+            ("analysis.correlation", json!({ "layer": g.layer, "fields": g.picked, "method": method, "selectedOnly": g.selected_only }))
         }
         Tool::SpatialWeights => {
             layer_combo(ui, app, "Input Features", "gp-in", &mut g.layer, |_| true);
@@ -470,17 +541,13 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
         });
         ui.label(egui::RichText::new("Select a feature, then Statistics › Neighbors, to see its neighbours on the map.").size(11.0).color(t.muted));
     }
-    if let Some(r) = &g.result
-        && tool == Tool::SummaryStatistics
-    {
-        ui.separator();
-        egui::Grid::new("stats").striped(true).num_columns(2).show(ui, |ui| {
-            for k in ["count", "nulls", "sum", "mean", "min", "max", "std"] {
-                ui.label(egui::RichText::new(k).strong());
-                ui.label(r.get(k).map(|v| v.as_f64().map_or(v.to_string(), |x| mkaegis_core::Value::Float(x).to_string())).unwrap_or_default());
-                ui.end_row();
-            }
-        });
+    if let Some(r) = &g.result {
+        match tool {
+            Tool::SummaryStatistics => summary_report(ui, r),
+            Tool::Crosstabs => crosstab_report(ui, r),
+            Tool::Correlations => correlation_report(ui, r),
+            _ => {}
+        }
     }
     if let Some(r) = &g.result
         && tool == Tool::JoinField
@@ -519,6 +586,138 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
         }
     }
     app.gp = g;
+}
+
+/// A field picker with "none" first, for optional fields.
+fn optional_field(ui: &mut Ui, app: &MapApp, layer: Option<u32>, label: &str, id: &str, value: &mut String, numeric_only: bool) {
+    let fields: Vec<String> = layer
+        .and_then(|l| app.session.map.layers.iter().find(|x| x.id == l))
+        .map(|l| l.data.fields.iter().filter(|f| !numeric_only || f.kind.is_numeric()).map(|f| f.name.clone()).collect())
+        .unwrap_or_default();
+    if !value.is_empty() && !fields.contains(value) {
+        value.clear();
+    }
+    ui.label(label);
+    let shown = if value.is_empty() { "none".to_string() } else { value.clone() };
+    egui::ComboBox::from_id_salt(id).width(ui.available_width()).selected_text(shown).show_ui(ui, |ui| {
+        ui.selectable_value(value, String::new(), "none");
+        for f in &fields {
+            ui.selectable_value(value, f.clone(), f);
+        }
+    });
+}
+
+fn quantile_label(kind: u8) -> String {
+    match kind {
+        6 => "6 (SPSS, Minitab)".into(),
+        7 => "7 (R, NumPy; default)".into(),
+        k => k.to_string(),
+    }
+}
+
+/// A number in a report: four significant decimals, or exponent notation when tiny or huge.
+fn stat(v: Option<&Json>) -> String {
+    match v.and_then(Json::as_f64) {
+        None => "—".into(),
+        Some(x) if x != 0.0 && (x.abs() < 1e-4 || x.abs() >= 1e9) => format!("{x:.4e}"),
+        Some(x) if x.fract() == 0.0 && x.abs() < 1e15 => format!("{x:.0}"),
+        Some(x) => format!("{x:.4}"),
+    }
+}
+
+fn summary_report(ui: &mut Ui, r: &Json) {
+    let t = Tokens::get(ui.ctx());
+    for (k, row) in r.get("statistics").and_then(Json::as_array).into_iter().flatten().enumerate().take(50) {
+        ui.separator();
+        let case = row.get("case").and_then(Json::as_str).map(|c| format!(" — {c}")).unwrap_or_default();
+        ui.label(egui::RichText::new(format!("{}{case}", row.get("field").and_then(Json::as_str).unwrap_or(""))).strong());
+        egui::Grid::new(("summary", k)).striped(true).num_columns(2).show(ui, |ui| {
+            for (label, key) in [
+                ("N", "n"),
+                ("Missing", "missing"),
+                ("Mean", "mean"),
+                ("SD", "sd"),
+                ("SE of the mean", "se_mean"),
+                ("Minimum", "min"),
+                ("Q1", "q1"),
+                ("Median", "median"),
+                ("Q3", "q3"),
+                ("Maximum", "max"),
+                ("IQR", "iqr"),
+                ("Skewness (G1)", "skewness"),
+                ("Kurtosis (excess, G2)", "kurtosis"),
+                ("CV", "cv"),
+                ("Sum", "sum"),
+            ] {
+                ui.label(egui::RichText::new(label).strong());
+                ui.label(stat(row.get(key)));
+                ui.end_row();
+            }
+            for p in row.get("percentiles").and_then(Json::as_array).into_iter().flatten() {
+                ui.label(egui::RichText::new(format!("P{}", stat(p.get(0)))).strong());
+                ui.label(stat(p.get(1)));
+                ui.end_row();
+            }
+        });
+    }
+    ui.label(egui::RichText::new(r.get("definitions").and_then(Json::as_str).unwrap_or("")).size(11.0).color(t.muted));
+}
+
+fn crosstab_report(ui: &mut Ui, r: &Json) {
+    let t = Tokens::get(ui.ctx());
+    ui.separator();
+    let names =
+        |k: &str| -> Vec<String> { r.get(k).and_then(Json::as_array).into_iter().flatten().filter_map(Json::as_str).map(str::to_string).collect() };
+    let (rows, cols) = (names("rows"), names("columns"));
+    egui::ScrollArea::horizontal().id_salt("crosstab").show(ui, |ui| {
+        egui::Grid::new("crosstab-grid").striped(true).num_columns(cols.len() + 1).show(ui, |ui| {
+            ui.label("");
+            for c in cols.iter().take(30) {
+                ui.label(egui::RichText::new(c).strong());
+            }
+            ui.end_row();
+            for (i, name) in rows.iter().enumerate().take(100) {
+                ui.label(egui::RichText::new(name).strong());
+                for j in 0..cols.len().min(30) {
+                    ui.label(r.pointer(&format!("/counts/{i}/{j}")).map(Json::to_string).unwrap_or_default());
+                }
+                ui.end_row();
+            }
+        });
+    });
+    ui.label(r.get("message").and_then(Json::as_str).unwrap_or(""));
+    for w in r.get("warnings").and_then(Json::as_array).into_iter().flatten().filter_map(Json::as_str) {
+        ui.label(egui::RichText::new(w).size(11.0).color(t.error));
+    }
+}
+
+fn correlation_report(ui: &mut Ui, r: &Json) {
+    let t = Tokens::get(ui.ctx());
+    ui.separator();
+    let fields: Vec<String> = r.get("fields").and_then(Json::as_array).into_iter().flatten().filter_map(Json::as_str).map(str::to_string).collect();
+    egui::ScrollArea::horizontal().id_salt("corr").show(ui, |ui| {
+        egui::Grid::new("corr-grid").striped(true).num_columns(fields.len() + 1).show(ui, |ui| {
+            ui.label("");
+            for f in &fields {
+                ui.label(egui::RichText::new(f).strong());
+            }
+            ui.end_row();
+            for (i, f) in fields.iter().enumerate() {
+                ui.label(egui::RichText::new(f).strong());
+                for j in 0..fields.len() {
+                    let cell = format!("{}\np {}", stat(r.pointer(&format!("/r/{i}/{j}"))), stat(r.pointer(&format!("/p/{i}/{j}"))));
+                    ui.label(egui::RichText::new(cell).size(11.0))
+                        .on_hover_text(format!("n = {}", r.pointer(&format!("/n/{i}/{j}")).map(Json::to_string).unwrap_or_default()));
+                }
+                ui.end_row();
+            }
+        });
+    });
+    ui.label(
+        egui::RichText::new(format!("{} r and two-sided p; hover a cell for n.", r.get("method").and_then(Json::as_str).unwrap_or("")))
+            .size(11.0)
+            .color(t.muted),
+    );
 }
 
 fn statistic_label(command: &str) -> &'static str {

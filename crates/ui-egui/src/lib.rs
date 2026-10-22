@@ -216,6 +216,8 @@ impl MapApp {
             "management.project" => gp(self, T::Project),
             "management.calculateGeometry" => gp(self, T::CalculateGeometry),
             "analysis.summaryStatistics" => gp(self, T::SummaryStatistics),
+            "analysis.crossTabulation" => gp(self, T::Crosstabs),
+            "analysis.correlation" => gp(self, T::Correlations),
             "management.joinField" => gp(self, T::JoinField),
             "management.xyTableToPoint" => gp(self, T::XyTableToPoint),
             "stats.globalMoran" | "stats.gearyC" | "stats.generalG" | "stats.localMoran" | "stats.hotSpots" => {

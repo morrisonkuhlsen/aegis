@@ -7,6 +7,7 @@ Standards and learnings shared across the crafting apps live in `craftrules` (`.
 ## Start every session here
 1. Read `ROADMAP.md` (stage, headline numbers), then `docs/gaps.md` (the ranked work list: pick from the top), the issue you pick, and the relevant `docs/architecture.md` section.
 2. Library decisions: `docs/adr/0001-libraries.md` (what we may depend on, what is rejected for licence reasons).
+   Positioning: `docs/adr/0002-positioning.md` (a spatial statistics workbench with Brazil as its vertical; general GIS kept "enough", not chased).
 3. Work autonomously through the list. Stop to ask only for decisions that are the user's: a new dependency, a licence or clean-room question, a change of scope or of these rules, and anything outward-facing (pushing, releasing, commenting on issues).
 
 `plan/` is gitignored (local only): private notes, and behaviour references from observing ArcGIS Pro (`plan/arcgis/*.md`, where `observed-ui.md` holds measured observations of the running app; screenshots in `plan/arcgis/screenshots/`). Nothing a contributor needs lives only there.

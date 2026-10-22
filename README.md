@@ -114,6 +114,9 @@ the version, and `SHA256SUMS.txt` has a checksum for every file. Each archive ho
 `?sample` for the sample map). Your files stay on your computer: they are read in the page, and
 what you save downloads. The zip is the same site, for your own web server.
 
+**Em português:** View ▸ Language switches the interface to Português (Brasil), numbers
+included; the web app starts in your browser's language.
+
 The builds aren't code-signed yet, so the first launch asks for confirmation:
 
 - **Windows:** unzip and run `mkaegis.exe`. If SmartScreen says *Windows protected your PC*, choose

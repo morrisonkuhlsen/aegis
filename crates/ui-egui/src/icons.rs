@@ -44,6 +44,8 @@ pub enum Icon {
     /// The File backstage's Home.
     House,
     Info,
+    /// The interface language: a speech bubble with an A.
+    Language,
     Close,
 }
 
@@ -156,6 +158,11 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32, accent: Color3
             ring(0.5, 0.5, 0.38, line);
             poly(&[(0.5, 0.45), (0.5, 0.72)], hi, false);
             p.circle_filled(at(0.5, 0.31), 0.045 * s, accent);
+        }
+        Icon::Language => {
+            poly(&[(0.12, 0.18), (0.88, 0.18), (0.88, 0.66), (0.46, 0.66), (0.28, 0.84), (0.30, 0.66), (0.12, 0.66)], line, true);
+            poly(&[(0.36, 0.56), (0.5, 0.27), (0.64, 0.56)], hi, false);
+            poly(&[(0.42, 0.45), (0.58, 0.45)], hi, false);
         }
         Icon::Close => {
             poly(&[(0.22, 0.22), (0.78, 0.78)], line, false);

@@ -4,6 +4,7 @@
 use egui::Ui;
 use serde_json::json;
 
+use crate::i18n::tr;
 use crate::theme::Tokens;
 use crate::{Dialog, MapApp};
 
@@ -14,7 +15,7 @@ const COL_WIDTH: f32 = 120.0;
 pub fn show(app: &mut MapApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let Some(layer) = app.active_layer() else {
-        ui.label(egui::RichText::new("No layer selected in Contents.").color(t.muted));
+        ui.label(egui::RichText::new(tr("No layer selected in Contents.")).color(t.muted));
         return;
     };
     let id = layer.id;
@@ -26,22 +27,22 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
     ui.horizontal_wrapped(|ui| {
         crate::icons::square(ui, 16.0, crate::icons::Icon::Table);
         ui.label(egui::RichText::new(&name).strong().color(t.text));
-        ui.label(egui::RichText::new(format!("{selected} of {n} selected")).color(t.muted));
+        ui.label(egui::RichText::new(crate::trf("{selected} of {count} selected", &[("selected", &selected), ("count", &n)])).color(t.muted));
         ui.separator();
-        ui.toggle_value(&mut app.table_selected_only, "Show selected records");
-        if ui.add_enabled(selected > 0, egui::Button::new("Clear selection")).clicked() {
+        ui.toggle_value(&mut app.table_selected_only, tr("Show selected records"));
+        if ui.add_enabled(selected > 0, egui::Button::new(tr("Clear selection"))).clicked() {
             app.run("map.clearSelection", json!({ "layer": id }));
         }
-        if ui.add_enabled(selected > 0, egui::Button::new("Zoom to selection")).clicked() {
+        if ui.add_enabled(selected > 0, egui::Button::new(tr("Zoom to selection"))).clicked() {
             app.run("map.zoomToSelection", json!({}));
         }
-        if ui.button("Add Field").clicked() {
+        if ui.button(tr("Add Field")).clicked() {
             app.dialog = Some(Dialog::AddField { layer: id, name: String::new(), kind: "double" });
         }
-        if ui.button("Calculate Field").clicked() {
+        if ui.button(tr("Calculate Field")).clicked() {
             app.dialog = Some(Dialog::CalculateField { layer: id, field: fields.first().cloned().unwrap_or_default(), expression: String::new() });
         }
-        close = ui.button("×").on_hover_text("Close the table").clicked();
+        close = ui.button("×").on_hover_text(tr("Close the table")).clicked();
     });
     if close {
         app.show_table = false;
@@ -74,7 +75,7 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
                         fields
                             .iter()
                             .enumerate()
-                            .map(|(i, _)| (layer.data.value(r, i).map(|v| v.to_string()).unwrap_or_default(), COL_WIDTH, Some(i))),
+                            .map(|(i, _)| (layer.data.value(r, i).map(crate::i18n::value_text).unwrap_or_default(), COL_WIDTH, Some(i))),
                     );
                     for (text, w, field) in cells {
                         let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, ROW), egui::Sense::click());

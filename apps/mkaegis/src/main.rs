@@ -11,7 +11,7 @@ use std::path::Path;
 
 use eframe::egui_wgpu::{WgpuConfiguration, WgpuSetup, wgpu};
 use mkaegis_engine::Session;
-use mkaegis_ui_egui::{MapApp, Services};
+use mkaegis_ui_egui::{Language, MapApp, Services};
 use serde_json::json;
 
 const USAGE: &str = "usage: mkaegis [--sample] [--control PORT] [--no-splash] [project.aegis | data.geojson | data.shp]… | --help | --version";
@@ -79,6 +79,12 @@ fn services() -> Services {
                 let _ = std::fs::write(file, text.join("\n"));
             }
         })),
+        save_language: Some(Box::new(|language: Language| {
+            if let Some(file) = settings_file("language.txt") {
+                let _ = file.parent().map(std::fs::create_dir_all);
+                let _ = std::fs::write(file, language.code());
+            }
+        })),
         ..Default::default()
     }
 }
@@ -89,6 +95,14 @@ fn load_recent() -> Vec<std::path::PathBuf> {
         .and_then(|f| std::fs::read_to_string(f).ok())
         .map(|text| text.lines().filter(|l| !l.trim().is_empty()).map(std::path::PathBuf::from).collect())
         .unwrap_or_default()
+}
+
+/// The interface language chosen in an earlier run; else the system's (`LC_ALL`, `LC_MESSAGES`,
+/// `LANG`) when the interface has it; else English.
+fn load_language() -> Language {
+    let saved = settings_file("language.txt").and_then(|f| std::fs::read_to_string(f).ok());
+    let system = ["LC_ALL", "LC_MESSAGES", "LANG"].iter().filter_map(|v| std::env::var(v).ok()).find(|v| !v.is_empty());
+    saved.into_iter().chain(system).find_map(|code| Language::from_code(&code)).unwrap_or_default()
 }
 
 /// A file in the platform's per-user configuration folder, under `mkaegis`.
@@ -184,6 +198,9 @@ fn main() -> eframe::Result {
         println!("mkaegis {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
+    // The splash shows in it too.
+    let language = load_language();
+    language.set();
     let mut session = if args.sample { Session::sample() } else { Session::default() };
     let mut problems = Vec::new();
     for path in &args.files {
@@ -202,6 +219,7 @@ fn main() -> eframe::Result {
     let mut app = MapApp::new(session);
     app.services = services();
     app.recent = load_recent();
+    app.language = language;
     if let Some(p) = problems.first() {
         app.status = Some((p.clone(), true));
     }

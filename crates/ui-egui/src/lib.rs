@@ -13,6 +13,7 @@ mod contents;
 pub mod control;
 mod credits;
 mod dialogs;
+pub mod i18n;
 pub mod icons;
 mod mapview;
 mod pane;
@@ -30,6 +31,7 @@ use serde_json::{Value as Json, json};
 pub use backstage::Page as BackstagePage;
 pub use charts::Chart;
 pub use dialogs::{Dialog, Discard};
+pub use i18n::{Language, tr, trf};
 pub use pane::{Pane, Tool as GpTool};
 pub use ribbon::Tab;
 use theme::Tokens;
@@ -65,6 +67,8 @@ pub struct Services {
     pub save_file: Option<Box<dyn Fn(&str, &[&str], &str) -> Option<PathBuf>>>,
     /// Keep the recent projects for later runs.
     pub save_recent: Option<Box<dyn Fn(&[PathBuf])>>,
+    /// Keep the interface language for later runs.
+    pub save_language: Option<Box<dyn Fn(Language)>>,
     /// Pick files without waiting (the browser): (title, extensions, several). What is picked
     /// arrives later in `inbox`; nothing does when the person cancels.
     pub pick_files: Option<Box<dyn Fn(&str, &[&str], bool)>>,
@@ -128,6 +132,8 @@ pub struct MapApp {
     /// Projects opened or saved, newest first (the backstage lists them).
     pub recent: Vec<PathBuf>,
     awaiting: Option<Awaiting>,
+    /// The interface language (View ▸ Language); every frame shows in it.
+    pub language: Language,
     view: mapview::State,
     themed: bool,
     title: String,
@@ -167,6 +173,7 @@ impl MapApp {
             backstage: None,
             recent: Vec::new(),
             awaiting: None,
+            language: Language::default(),
             view: mapview::State::default(),
             themed: false,
             title: String::new(),
@@ -180,6 +187,7 @@ impl MapApp {
         match self.session.execute(id, &params) {
             Ok(v) => {
                 let label = mkaegis_engine::Session::command(id).map_or(id, |c| c.label);
+                let label = i18n::command_label(id, label);
                 let msg = v.get("message").and_then(Json::as_str).map_or_else(|| label.to_string(), |m| format!("{label}: {m}"));
                 if let Some(warnings) = v.get("warnings").and_then(Json::as_array).filter(|w| !w.is_empty()) {
                     let w: Vec<&str> = warnings.iter().filter_map(Json::as_str).collect();
@@ -229,13 +237,13 @@ impl MapApp {
             && id != "project.new"
             && let Err(e) = self.session.execute("project.save", &json!({}))
         {
-            self.status = Some((format!("AutoSave: {e}"), true));
+            self.status = Some((trf("AutoSave: {error}", &[("error", &e)]), true));
         }
     }
 
     /// The project's name for the title: its file's, or Untitled.
     pub fn document_name(&self) -> String {
-        self.session.path.as_ref().and_then(|p| p.file_stem()).map_or("Untitled".to_string(), |s| s.to_string_lossy().into_owned())
+        self.session.path.as_ref().and_then(|p| p.file_stem()).map_or(tr("Untitled").to_string(), |s| s.to_string_lossy().into_owned())
     }
 
     /// Runs a command the way its ribbon button does: commands that need parameters open their
@@ -301,11 +309,11 @@ impl MapApp {
                 }
             }
             "map.setCrs" => self.dialog = Some(Dialog::CoordinateSystem { epsg: self.session.map.crs.epsg().to_string() }),
-            "share.exportMap" => self.save_to("Export Map", "share.exportMap", &["png"], "map.png", json!({ "width": 1600, "height": 1000 })),
+            "share.exportMap" => self.save_to(tr("Export Map"), "share.exportMap", &["png"], "map.png", json!({ "width": 1600, "height": 1000 })),
             "layer.export" => {
                 if let Some(l) = self.active_layer() {
                     let (layer, name) = (l.id, format!("{}.geojson", l.name));
-                    self.save_to("Export Features", "layer.export", &["geojson", "kml", "shp", "csv"], &name, json!({ "layer": layer }));
+                    self.save_to(tr("Export Features"), "layer.export", &["geojson", "kml", "shp", "csv"], &name, json!({ "layer": layer }));
                 }
             }
             "map.describe" | "feature.setValue" | "map.setExtent" => self.show_table = true,
@@ -336,14 +344,14 @@ impl MapApp {
     pub fn add_data(&mut self) {
         match &self.services.open_file {
             Some(pick) => {
-                if let Some(path) = pick("Add Data", &mkaegis_engine::io::DATA_EXTENSIONS) {
+                if let Some(path) = pick(tr("Add Data"), &mkaegis_engine::io::DATA_EXTENSIONS) {
                     self.run("map.addData", json!({ "path": path.display().to_string() }));
                 }
             }
             // A shapefile is several files: they are picked together.
             None => {
-                if !self.pick_async(Awaiting::AddData, "Add Data", &DATA_AND_SIDECARS, true) {
-                    self.dialog = Some(Dialog::Path { title: "Add Data", command: "map.addData", path: String::new() });
+                if !self.pick_async(Awaiting::AddData, tr("Add Data"), &DATA_AND_SIDECARS, true) {
+                    self.dialog = Some(Dialog::Path { title: tr("Add Data"), command: "map.addData", path: String::new() });
                 }
             }
         }
@@ -351,7 +359,7 @@ impl MapApp {
 
     /// The Join Field or XY Table To Point pane's Browse, in the browser.
     pub(crate) fn pick_table(&mut self) {
-        self.pick_async(Awaiting::Table, "Table", &TABLE_EXTENSIONS, false);
+        self.pick_async(Awaiting::Table, tr("Table"), &TABLE_EXTENSIONS, false);
     }
 
     /// Opens the browser's picker, when there is one, for `then`.
@@ -410,7 +418,8 @@ impl MapApp {
             None => match project {
                 Some(project) => self.discard_or_ask(Discard::OpenFile(PathBuf::from(project))),
                 None if data.is_empty() => {
-                    self.status = Some(("Drop a project (.aegis) or data (.geojson, .json, .kml, or a .shp with its .dbf and .shx)".into(), true));
+                    self.status =
+                        Some((tr("Drop a project (.aegis) or data (.geojson, .json, .kml, or a .shp with its .dbf and .shx)").into(), true));
                 }
                 None => self.add_files(&data),
             },
@@ -469,6 +478,15 @@ impl MapApp {
         self.recent.truncate(backstage::RECENT);
         if let Some(save) = &self.services.save_recent {
             save(&self.recent);
+        }
+    }
+
+    /// Shows the interface in `language` from the next frame, and keeps it for later runs.
+    pub fn set_language(&mut self, language: Language) {
+        self.language = language;
+        language.set();
+        if let Some(save) = &self.services.save_language {
+            save(language);
         }
     }
 
@@ -571,13 +589,13 @@ impl MapApp {
     fn pick_project(&mut self) {
         match &self.services.open_file {
             Some(pick) => {
-                if let Some(path) = pick("Open Project", &[mkaegis_engine::io::PROJECT_EXTENSION]) {
+                if let Some(path) = pick(tr("Open Project"), &[mkaegis_engine::io::PROJECT_EXTENSION]) {
                     self.run("project.open", json!({ "path": path.display().to_string() }));
                 }
             }
             None => {
-                if !self.pick_async(Awaiting::OpenProject, "Open Project", &[mkaegis_engine::io::PROJECT_EXTENSION], false) {
-                    self.dialog = Some(Dialog::Path { title: "Open Project", command: "project.open", path: String::new() });
+                if !self.pick_async(Awaiting::OpenProject, tr("Open Project"), &[mkaegis_engine::io::PROJECT_EXTENSION], false) {
+                    self.dialog = Some(Dialog::Path { title: tr("Open Project"), command: "project.open", path: String::new() });
                 }
             }
         }
@@ -590,11 +608,11 @@ impl MapApp {
         }
         match &self.services.save_file {
             Some(pick) => {
-                if let Some(path) = pick("Save Project As", &[mkaegis_engine::io::PROJECT_EXTENSION], "map.aegis") {
+                if let Some(path) = pick(tr("Save Project As"), &[mkaegis_engine::io::PROJECT_EXTENSION], "map.aegis") {
                     self.run("project.saveAs", json!({ "path": path.display().to_string() }));
                 }
             }
-            None => self.dialog = Some(Dialog::Path { title: "Save Project As", command: "project.saveAs", path: "map.aegis".into() }),
+            None => self.dialog = Some(Dialog::Path { title: tr("Save Project As"), command: "project.saveAs", path: "map.aegis".into() }),
         }
     }
 
@@ -602,16 +620,16 @@ impl MapApp {
     pub fn import_weights(&mut self, layer: u32) {
         match &self.services.open_file {
             Some(pick) => {
-                if let Some(path) = pick("Import Weights", &["gal", "gwt"]) {
+                if let Some(path) = pick(tr("Import Weights"), &["gal", "gwt"]) {
                     self.run("stats.importWeights", json!({ "layer": layer, "path": path.display().to_string() }));
                 }
             }
             None => {
-                if self.pick_async(Awaiting::ImportWeights(layer), "Import Weights", &["gal", "gwt"], false) {
+                if self.pick_async(Awaiting::ImportWeights(layer), tr("Import Weights"), &["gal", "gwt"], false) {
                     return;
                 }
                 self.dialog = Some(Dialog::SavePath {
-                    title: "Import Weights",
+                    title: tr("Import Weights"),
                     command: "stats.importWeights",
                     path: String::new(),
                     params: json!({ "layer": layer }),
@@ -687,13 +705,14 @@ impl MapApp {
             theme::apply(&ctx);
             self.themed = true;
         }
+        self.language.set();
         #[cfg(not(target_arch = "wasm32"))]
         control::poll(self, &ctx);
         self.take_arrivals();
         self.shortcuts(&ctx);
         self.guard_close(&ctx);
         self.fix_active();
-        let name = self.session.path.as_ref().and_then(|p| p.file_stem()).map_or("Untitled".to_string(), |s| s.to_string_lossy().into_owned());
+        let name = self.session.path.as_ref().and_then(|p| p.file_stem()).map_or(tr("Untitled").to_string(), |s| s.to_string_lossy().into_owned());
         let title = format!("{}{name} — MK aeGIS", if self.session.modified { "• " } else { "" });
         if title != self.title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
@@ -781,10 +800,10 @@ impl MapApp {
         let t = Tokens::get(ui.ctx());
         let rect = ui.max_rect();
         let items = [
-            (icons::Icon::Layers, "Contents: the map's layers", self.show_contents),
-            (icons::Icon::Table, "Attribute Table (Ctrl+T)", self.show_table),
-            (icons::Icon::Explore, "Explore: pan, zoom and identify", self.tool == Tool::Explore),
-            (icons::Icon::Select, "Select features on the map", self.tool == Tool::Select),
+            (icons::Icon::Layers, tr("Contents: the map's layers"), self.show_contents),
+            (icons::Icon::Table, tr("Attribute Table (Ctrl+T)"), self.show_table),
+            (icons::Icon::Explore, tr("Explore: pan, zoom and identify"), self.tool == Tool::Explore),
+            (icons::Icon::Select, tr("Select features on the map"), self.tool == Tool::Select),
         ];
         for (k, (icon, tip, on)) in items.into_iter().enumerate() {
             let slot = egui::Rect::from_min_size(rect.min + egui::vec2(0.0, 4.0 + 42.0 * k as f32), egui::vec2(RAIL_WIDTH - 1.0, 40.0));
@@ -821,15 +840,15 @@ impl MapApp {
             t.accent,
             t.accent,
         );
-        if r.on_hover_text("Open the pane").clicked() {
+        if r.on_hover_text(tr("Open the pane")).clicked() {
             self.pane = Some(Pane::Geoprocessing);
         }
         let mut y = chevron.bottom() + 10.0;
         for (pane, name, icon) in [
-            (Pane::Geoprocessing, "Geoprocessing", icons::Icon::Tools),
-            (Pane::Symbology, "Symbology", icons::Icon::Symbology),
-            (Pane::History, "History", icons::Icon::History),
-            (Pane::Charts, "Charts", icons::Icon::Statistics),
+            (Pane::Geoprocessing, tr("Geoprocessing"), icons::Icon::Tools),
+            (Pane::Symbology, tr("Symbology"), icons::Icon::Symbology),
+            (Pane::History, tr("History"), icons::Icon::History),
+            (Pane::Charts, tr("Charts"), icons::Icon::Statistics),
         ] {
             let galley = ui.painter().layout_no_wrap(name.to_string(), egui::FontId::proportional(12.5), t.muted);
             let h = galley.size().x + 30.0;
@@ -848,7 +867,7 @@ impl MapApp {
                 t.muted,
                 t.accent,
             );
-            if r.on_hover_text(format!("Open {name}")).clicked() {
+            if r.on_hover_text(trf("Open {name}", &[("name", &name)])).clicked() {
                 self.pane = Some(pane);
             }
             y += h + 8.0;
@@ -862,14 +881,14 @@ impl MapApp {
         let mut chosen = None;
         let mut open = true;
         let at = egui::pos2(ctx.content_rect().right() - 432.0, ribbon::TITLE_HEIGHT);
-        egui::Window::new("Search")
+        egui::Window::new(tr("Search"))
             .id(egui::Id::new("search"))
             .title_bar(false)
             .resizable(false)
             .fixed_pos(at)
             .fixed_size(egui::vec2(420.0, 0.0))
             .show(ctx, |ui| {
-                let r = ui.add(egui::TextEdit::singleline(&mut query).hint_text("Search commands and tools").desired_width(f32::INFINITY));
+                let r = ui.add(egui::TextEdit::singleline(&mut query).hint_text(tr("Search commands and tools")).desired_width(f32::INFINITY));
                 r.request_focus();
                 if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                     open = false;
@@ -880,6 +899,7 @@ impl MapApp {
                     .filter(|c| {
                         q.is_empty()
                             || c.label.to_lowercase().contains(&q)
+                            || i18n::command_label(c.id, c.label).to_lowercase().contains(&q)
                             || c.id.to_lowercase().contains(&q)
                             || c.ribbon.to_lowercase().contains(&q)
                     })
@@ -891,7 +911,7 @@ impl MapApp {
                 ui.add_space(4.0);
                 for c in hits {
                     let enabled = self.session.enabled(c.id);
-                    let text = format!("{}   ·   {}", c.label, c.ribbon);
+                    let text = format!("{}   ·   {}", i18n::command_label(c.id, c.label), i18n::ribbon_path(c.ribbon));
                     if ui
                         .add_enabled(enabled, egui::Button::new(egui::RichText::new(text).color(t.text)).frame(false))
                         .on_hover_text(c.params)
@@ -917,24 +937,24 @@ impl MapApp {
         let layers = self.session.map.layers.len();
         let features: usize = self.session.map.layers.iter().map(|l| l.data.features.len()).sum();
         let selected: usize = self.session.map.layers.iter().map(|l| l.selection.len()).sum();
-        let mut facts = vec![format!("{layers} layers"), format!("{features} features")];
+        let mut facts = vec![trf("{count} layers", &[("count", &layers)]), trf("{count} features", &[("count", &i18n::grouped(features as f64))])];
         if selected > 0 {
-            facts.push(format!("{selected} selected"));
+            facts.push(trf("{count} selected", &[("count", &i18n::grouped(selected as f64))]));
         }
         let mut zoom = self.zoom;
         row.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             // Zoom: − slider + and the percentage (click it for 100%).
             let percent = ui.add(egui::Label::new(egui::RichText::new(format!("{zoom}%")).color(t.muted).size(12.0)).sense(egui::Sense::click()));
-            if percent.on_hover_text("Reset the zoom to 100%").clicked() {
+            if percent.on_hover_text(tr("Reset the zoom to 100%")).clicked() {
                 zoom = 100;
             }
-            if ribbon::icon_button(ui, icons::Icon::Plus, "Zoom in", true).clicked() {
+            if ribbon::icon_button(ui, icons::Icon::Plus, tr("Zoom in"), true).clicked() {
                 zoom = (zoom / 10 * 10 + 10).min(200);
             }
             ui.spacing_mut().slider_width = 110.0;
-            ui.add(egui::Slider::new(&mut zoom, 50..=200).show_value(false)).on_hover_text("Interface zoom");
-            if ribbon::icon_button(ui, icons::Icon::Minus, "Zoom out", true).clicked() {
+            ui.add(egui::Slider::new(&mut zoom, 50..=200).show_value(false)).on_hover_text(tr("Interface zoom"));
+            if ribbon::icon_button(ui, icons::Icon::Minus, tr("Zoom out"), true).clicked() {
                 zoom = (zoom.div_ceil(10) * 10).saturating_sub(10).max(50);
             }
             ui.add_space(16.0);
@@ -945,21 +965,21 @@ impl MapApp {
                 ui.add_space(12.0);
                 let text = match crs.to_geographic(pointer) {
                     Ok(g) => format!("{} {}", dms(g.x, 'E', 'W'), dms(g.y, 'N', 'S')),
-                    Err(_) => format!("{:.2} {:.2}", pointer.x, pointer.y),
+                    Err(_) => format!("{} {}", i18n::decimal(pointer.x, 2), i18n::decimal(pointer.y, 2)),
                 };
                 ui.label(egui::RichText::new(text).color(t.text).size(12.0).monospace());
             }
             if let Some(vp) = self.view.viewport() {
                 ui.add_space(12.0);
                 ui.label(egui::RichText::new(format!("1:{}", group_thousands(vp.scale(crs)))).color(t.text).size(12.0).monospace())
-                    .on_hover_text("Map scale");
+                    .on_hover_text(tr("Map scale"));
             }
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 let (text, color) = match &self.status {
                     Some((m, true)) => (m.as_str(), t.error),
                     Some((m, false)) => (m.as_str(), t.muted),
-                    None if layers == 0 => ("Empty map. Use File ▸ Add Data… or File ▸ Add Sample Data.", t.muted),
-                    None => ("Ready", t.muted),
+                    None if layers == 0 => (tr("Empty map. Use File ▸ Add Data… or File ▸ Add Sample Data."), t.muted),
+                    None => (tr("Ready"), t.muted),
                 };
                 ui.add(egui::Label::new(egui::RichText::new(text).color(color).size(12.0)).truncate());
             });
@@ -970,28 +990,17 @@ impl MapApp {
 
 /// 1234567.8 as "1.234.568" (thousands grouped by points, as pt-BR and the scale box show them).
 pub fn group_thousands(x: f64) -> String {
-    if !x.is_finite() {
-        return "—".into();
-    }
-    let digits = format!("{:.0}", x.abs());
-    let mut out = String::new();
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
-            out.push('.');
-        }
-        out.push(c);
-    }
-    if x < 0.0 { format!("-{out}") } else { out }
+    i18n::grouped(x)
 }
 
-/// Degrees, minutes and seconds: 46°37'59.9"W.
+/// Degrees, minutes and seconds: 46°37'59.9"W, or 46°37'59,9"O in Portuguese.
 pub fn dms(v: f64, pos: char, neg: char) -> String {
-    let h = if v < 0.0 { neg } else { pos };
+    let h = i18n::compass(if v < 0.0 { neg } else { pos });
     let a = v.abs();
     let d = a.floor();
     let m = ((a - d) * 60.0).floor();
     let s = ((a - d) * 60.0 - m) * 60.0;
-    format!("{d:.0}°{m:02.0}'{s:04.1}\"{h}")
+    i18n::localize(format!("{d:.0}°{m:02.0}'{s:04.1}\"{h}"))
 }
 
 #[cfg(test)]
@@ -1001,10 +1010,15 @@ mod tests {
 
     #[test]
     fn formats() {
-        assert_eq!(group_thousands(1_234_567.8), "1.234.568");
+        Language::English.set();
+        assert_eq!(group_thousands(1_234_567.8), "1,234,568");
         assert_eq!(group_thousands(999.0), "999");
         assert_eq!(group_thousands(f64::NAN), "—");
         assert_eq!(dms(-46.633_3, 'E', 'W'), "46°37'59.9\"W");
+        Language::PortugueseBrazil.set();
+        assert_eq!(group_thousands(1_234_567.8), "1.234.568");
+        assert_eq!((dms(-46.633_3, 'E', 'W'), dms(-23.5, 'N', 'S')), ("46°37'59,9\"O".to_string(), "23°30'00,0\"S".to_string()));
+        Language::English.set();
     }
 
     #[test]
@@ -1303,6 +1317,33 @@ mod tests {
         assert_eq!(harness.state().session.path.as_deref(), Some(path.as_path()));
         assert!(harness.state().session.map.layer("Cidades").is_ok());
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// #37: the window in Portuguese, and the View tab's button that switches it.
+    #[test]
+    fn the_interface_switches_to_portuguese_and_back() {
+        let kept = std::rc::Rc::new(std::cell::Cell::new(None));
+        let mut app = MapApp::new(Session::sample());
+        let sink = std::rc::Rc::clone(&kept);
+        app.services.save_language = Some(Box::new(move |l: Language| sink.set(Some(l))));
+        app.language = Language::PortugueseBrazil;
+        app.show_table = true;
+        app.pane = Some(Pane::Geoprocessing);
+        let mut harness = harness(app);
+        for shown in ["Adicionar dados", "Selecionar por atributos", "Tabela de atributos", "Geoprocessamento", "Conteúdo", "Pronto"] {
+            assert!(harness.query_by_label(shown).is_some(), "{shown}");
+        }
+        for gone in ["Add Data", "Select By Attributes", "Contents", "Ready"] {
+            assert!(harness.query_by_label(gone).is_none(), "{gone}");
+        }
+        harness.get_by_label("Exibir").click();
+        harness.run_steps(2);
+        harness.get_by_label("Português (Brasil)").click();
+        harness.run_steps(2);
+        assert_eq!(harness.state().language, Language::English);
+        assert_eq!(kept.get(), Some(Language::English), "kept for later runs");
+        assert!(harness.query_by_label("View").is_some() && harness.query_by_label("Exibir").is_none());
+        Language::English.set();
     }
 
     #[test]

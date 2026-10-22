@@ -12,6 +12,14 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Added
 
+- **The interface in Portuguese (Brazil)** (#37): View ▸ Language switches between English and
+  Português (Brasil), and the choice is kept for later runs; the web app starts in the browser's
+  language, the desktop in the one chosen before (on Linux and macOS, else the system's). Ribbon,
+  panes, forms, results, dialogs, the File backstage and the splash are translated, and numbers
+  on screen follow the language (decimal comma, thousands point; L and O for East and West).
+  Command ids, parameters, files, the CLI and MCP don't change. The messages commands return
+  are still in English (`docs/localization-parity.md`). `cargo xtask i18n` (part of `ci`) fails
+  on a string missing from the catalogue or shown without a translation lookup.
 - **KML** (#14, in part): Add Data reads `.kml` (KML 2.2) and Export Features writes it, on the
   desktop, in the CLI and in the web app. Placemarks in any Folder are read with their `name`,
   `description` and `ExtendedData` (`Data` and `SchemaData`), typed from their values. A document
@@ -20,6 +28,16 @@ data and parameters. Read it before re-running an analysis with a new version.
   keeps its attributes with a null geometry, and the warnings count it. Export writes WGS 84,
   with `name` and `description` from fields so named and the other fields as `ExtendedData`.
   `.kmz` is not read yet.
+
+### Changed
+
+- **English numbers on screen group thousands with a comma** (#37): the scale and the status
+  bar's counts read `1:2,983,532`, where they used to read `1:2.983.532` in English too. Files,
+  commands and exported values are unchanged.
+- **Form choices have names**: Buffer's units, Calculate Geometry's properties, Select By
+  Location's relations and the weights' standardization show `Area (ha)` or `Within a distance`
+  rather than the parameter value (`areaHectares`, `withinDistance`) the command takes.
+- **Ribbon buttons widen for their label**, so no word breaks across lines.
 
 ## [0.2.0] - 2026-10-22
 

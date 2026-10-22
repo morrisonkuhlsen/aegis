@@ -1,7 +1,7 @@
 //! MK aeGIS's project tasks, run with `cargo xtask <task>`:
 //!
 //! - `ci`: every quality gate before a commit: fmt, clippy (warnings are errors), tests,
-//!   assets, layers, panics, wasm, parity. Stops at the first that fails.
+//!   assets, layers, panics, wasm, parity, i18n. Stops at the first that fails.
 //! - `layers`: each crate depends only on crates at its layer or below, and nothing below the
 //!   UI layer on egui, eframe, winit, wgpu or rfd.
 //! - `assets`: every asset file has its row in `ATTRIBUTION.md`.
@@ -10,6 +10,8 @@
 //! - `wasm`: the engine, the UI and the web app still build for WebAssembly.
 //! - `parity [--check]`: regenerates `docs/parity-checklist.md` from the command registry, or
 //!   (`--check`, part of `ci`) fails when it is stale.
+//! - `i18n`: every string the UI translates is in the Portuguese catalogue, the catalogue holds
+//!   nothing unused, and no visible string skips `tr()` (`i18n.rs`).
 //! - `stats`: the headline numbers for `ROADMAP.md`: Rust files, lines and tests per crate, and
 //!   the commands in the registry.
 //! - `version [set X.Y.Z[-pre]]`: prints the workspace version, or sets it in the root
@@ -18,6 +20,8 @@
 //!   people by GitHub username (from their noreply address, else their author name) and the AI
 //!   models credited in `Co-Authored-By` trailers.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+
+mod i18n;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -404,7 +408,7 @@ fn count_rust(dir: &Path) -> Counts {
 }
 
 fn ci() -> Result<(), String> {
-    let steps: [(&str, Task); 8] = [
+    let steps: [(&str, Task); 9] = [
         ("fmt", || cargo(&["fmt", "--all", "--check"])),
         ("clippy", || cargo(&["clippy", "--quiet", "--workspace", "--all-targets", "--", "-D", "warnings"])),
         ("tests", || cargo(&["test", "--quiet", "--workspace"])),
@@ -413,6 +417,7 @@ fn ci() -> Result<(), String> {
         ("panics", panics),
         ("wasm", wasm),
         ("parity", || parity(true)),
+        ("i18n", || i18n::check(&root())),
     ];
     for (done, (name, step)) in steps.iter().enumerate() {
         eprintln!("xtask ci: {name}");
@@ -434,20 +439,20 @@ fn list(names: &[&str]) -> String {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let check = args.iter().any(|a| a == "--check");
-    let result =
-        match args.first().map(String::as_str).unwrap_or_default() {
-            "ci" => ci(),
-            "layers" => layers(),
-            "assets" => assets(),
-            "panics" => panics(),
-            "wasm" => wasm(),
-            "parity" => parity(check),
-            "contributors" => contributors(check),
-            "stats" => stats(),
-            "version" => version(args.get(1..).unwrap_or_default()),
-            _ => Err("usage: cargo xtask <ci|layers|assets|panics|wasm|parity [--check]|contributors [--check]|stats|version [set X.Y.Z[-pre]]>"
-                .to_string()),
-        };
+    let result = match args.first().map(String::as_str).unwrap_or_default() {
+        "ci" => ci(),
+        "layers" => layers(),
+        "assets" => assets(),
+        "panics" => panics(),
+        "wasm" => wasm(),
+        "parity" => parity(check),
+        "i18n" => i18n::check(&root()),
+        "contributors" => contributors(check),
+        "stats" => stats(),
+        "version" => version(args.get(1..).unwrap_or_default()),
+        _ => Err("usage: cargo xtask <ci|layers|assets|panics|wasm|parity [--check]|i18n|contributors [--check]|stats|version [set X.Y.Z[-pre]]>"
+            .to_string()),
+    };
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

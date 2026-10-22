@@ -4,7 +4,7 @@
 //! `cargo run -p mkaegis-ui-egui --example snapshot -- [--sample] [--in file.geojson|.shp|.aegis]
 //!  [--cmd 'id={json}']... [--tab map|analysis|statistics|edit|view|share] [--pane geoprocessing|symbology|history|charts]
 //!  [--tool buffer|project|calculate|attributes|location|statistics|weights|autocorrelation|join|xy] [--click LABEL]... [--chart histogram|box|scatter|moran]
-//!  [--table] [--select] [--dark]
+//!  [--table] [--select] [--dark] [--lang en|pt-BR]
 //!  [--splash] [--icon] [--backstage home|new|open|info|export] [--size 1280x800] out.png`
 
 use egui_kittest::kittest::Queryable;
@@ -15,6 +15,7 @@ use serde_json::json;
 fn main() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut session = Session::default();
+    let mut language = mkaegis_ui_egui::Language::English;
     let mut size = (1280.0f32, 800.0f32);
     let mut out = "snapshot.png".to_string();
     let (mut tab, mut pane, mut table, mut dark, mut select, mut gp) = (Tab::Map, None, false, false, false, None);
@@ -72,6 +73,7 @@ fn main() -> Result<(), String> {
             "--table" => table = true,
             "--select" => select = true,
             "--dark" => dark = true,
+            "--lang" => language = mkaegis_ui_egui::Language::from_code(&value()?).ok_or("--lang en or pt-BR")?,
             "--splash" => splash = true,
             "--backstage" => {
                 backstage = Some(match value()?.to_ascii_lowercase().as_str() {
@@ -97,7 +99,10 @@ fn main() -> Result<(), String> {
         let params: serde_json::Value = serde_json::from_str(params).map_err(|e| format!("{id}: {e}"))?;
         session.execute(id, &params).map_err(|e| format!("{id}: {e}"))?;
     }
+    // The splash shows in it too.
+    language.set();
     let mut app = MapApp::new(session);
+    app.language = language;
     app.tab = tab;
     app.backstage = backstage;
     app.pane = pane;

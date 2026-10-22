@@ -60,6 +60,7 @@ pub static COMMANDS: &[CommandSpec] = &[
     project::SAVE_AS,
     map::ADD_DATA,
     map::ADD_SAMPLE,
+    map::SET_BASEMAP,
     map::SELECT_BY_ATTRIBUTES,
     map::SELECT_BY_LOCATION,
     map::SELECT_BY_RECTANGLE,

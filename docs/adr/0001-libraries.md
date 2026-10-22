@@ -38,13 +38,20 @@ so a weak-copyleft crate deep in a test tool's tree (today `colored`, MPL-2.0, t
 | `log`                    | MIT OR Apache-2.0         | engine, UI, apps | Logging instead of `println!`              |
 | `png`                    | MIT OR Apache-2.0         | render, UI       | Export Map, snapshots, the splash wordmark |
 | `quick-xml`              | MIT                       | kml              | XML for KML; no DTD entities expanded      |
-| `zune-jpeg`, `zune-core` | MIT OR Apache-2.0 OR Zlib | UI               | The splash artwork                         |
+| `ureq`                   | MIT OR Apache-2.0         | desktop app      | Basemap tiles over HTTPS (L6, native only) |
+| `zune-jpeg`, `zune-core` | MIT OR Apache-2.0 OR Zlib | render, UI       | Basemap tiles (JPEG), the splash artwork   |
 | `egui`, `eframe`         | MIT OR Apache-2.0         | UI, desktop app  | The interface (L5+)                        |
 | `rfd`                    | MIT                       | desktop, web app | File dialogs; the browser's picker (L6)    |
 | `wasm-bindgen`, `js-sys` | MIT OR Apache-2.0         | web app          | The browser's APIs from Rust (L6, wasm32)  |
 | `wasm-bindgen-futures`   | MIT OR Apache-2.0         | web app          | Awaiting the browser's promises            |
 | `web-sys`                | MIT OR Apache-2.0         | web app          | Downloads, the canvas, leaving the page    |
 | `egui_kittest`           | MIT OR Apache-2.0         | UI tests         | Headless UI tests                          |
+
+`ureq` brings `rustls` with the `ring` crypto provider (ISC and Apache-2.0 style licences), whose
+core is C and assembly: the one dependency that isn't pure Rust. It is the desktop app's alone (L6,
+never wasm: the web app fetches through the browser), and it builds with the C compiler every
+Rust target already has. The alternative, the OS's TLS through `native-tls`, would need OpenSSL's
+headers on Linux.
 
 egui embeds its default fonts (`epaint_default_fonts`: Ubuntu Light under the Ubuntu Font
 Licence, Noto Emoji under the OFL 1.1, Hack and emoji-icon-font under MIT); `NOTICE` names them.

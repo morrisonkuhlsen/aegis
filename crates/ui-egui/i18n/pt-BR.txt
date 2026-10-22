@@ -477,3 +477,7 @@ Binary = Binária
 Variance-stabilizing = Estabilização da variância
 meters = metros
 kilometers = quilômetros
+Basemap = Mapa de fundo
+Basemaps are drawn in Web Mercator maps. = Mapas de fundo são desenhados em mapas Web Mercator.
+OpenStreetMap = OpenStreetMap
+Satellite (NASA, c. 2000) = Satélite (NASA, c. 2000)

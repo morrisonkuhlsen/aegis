@@ -19,7 +19,7 @@ WebAssembly (`cargo xtask wasm`).
 | L2    | `mkaegis-kml`      | KML 2.2 (OGC 07-147r2) in and out: a layer per geometry family                                   |
 | L2    | `mkaegis-csv`      | Delimited text tables (CSV, TSV) in and out, with type inference, from RFC 4180                  |
 | L2    | `mkaegis-shp`      | Shapefile (`.shp/.shx/.dbf/.prj/.cpg`) in and out, from the public technical description         |
-| L2    | `mkaegis-render`   | Viewport, display list and a software rasteriser to PNG                                          |
+| L2    | `mkaegis-render`   | Viewport, display list, web basemap tiles (no network) and a software rasteriser to PNG          |
 | L3    | `mkaegis-analysis` | Geoprocessing tools: Buffer, Project, Calculate Geometry, Select By Location, Summary Statistics |
 | L3    | `mkaegis-stats`    | Spatial statistics, clean-room from the literature: spatial weights, GAL/GWT                     |
 | L4    | `mkaegis-engine`   | The `Session`: the map, undo/redo, the history, and every command                                |

@@ -10,6 +10,18 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ## [Unreleased]
 
+### Added
+
+- **Basemaps** (#15): Contents › Basemap puts OpenStreetMap or satellite imagery under the
+  layers (`map.setBasemap`), saved with the project. The satellite imagery is NASA GIBS: Blue
+  Marble (about 500 m) to zoom 8, then the Landsat mosaic of about 2000 (30 m) to zoom 12; free,
+  open imagery doesn't go finer, and Google's, Esri's and Bing's can't be used. Tiles are fetched
+  as the map is viewed and nothing ahead; on the desktop through a client that names MK aeGIS,
+  with a seven-day disk cache, as OpenStreetMap's tile policy asks; in the browser through its
+  own cache. The attribution shows on the map, linked to the licence, and Export Map draws the
+  basemap from the tiles fetched so far with its attribution written in the corner. Basemaps
+  are drawn in Web Mercator maps. The web app takes `?basemap=openStreetMap` (or `satellite`).
+
 ## [0.3.0] - 2026-10-22
 
 ### Added

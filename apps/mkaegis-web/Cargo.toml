@@ -14,6 +14,7 @@ mkaegis-engine = { workspace = true }
 mkaegis-ui-egui = { workspace = true }
 egui = { workspace = true }
 log = { workspace = true }
+serde_json = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit"] }
@@ -32,6 +33,7 @@ web-sys = { workspace = true, features = [
     "HtmlElement",
     "Location",
     "Navigator",
+    "Response",
     "Storage",
     "Url",
     "UrlSearchParams",

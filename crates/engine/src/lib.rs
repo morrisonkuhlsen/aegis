@@ -46,6 +46,9 @@ pub struct Session {
     pub path: Option<PathBuf>,
     /// Where commands read and write files: the file system, or memory in the browser.
     pub disk: Disk,
+    /// The basemap tiles fetched so far (by the app, as the map is viewed), which Export Map
+    /// draws from: commands never fetch.
+    pub tiles: mkaegis_render::basemap::TileStore,
     pub modified: bool,
     /// Bumped whenever a command asks the view to move (zoom to layer, open…): the UI refits.
     pub view_serial: u64,

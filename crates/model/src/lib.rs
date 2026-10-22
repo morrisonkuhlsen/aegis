@@ -240,6 +240,32 @@ impl Layer {
     }
 }
 
+/// A web basemap drawn under the layers (#15): open data only, its tiles fetched when shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Basemap {
+    /// OpenStreetMap's standard map (ODbL).
+    OpenStreetMap,
+    /// NASA GIBS imagery: Blue Marble to zoom 8, the Landsat mosaic of about 2000 beyond (CC0).
+    Satellite,
+}
+
+impl Basemap {
+    pub const ALL: [Basemap; 2] = [Basemap::OpenStreetMap, Basemap::Satellite];
+
+    /// The name commands take.
+    pub fn id(self) -> &'static str {
+        match self {
+            Basemap::OpenStreetMap => "openStreetMap",
+            Basemap::Satellite => "satellite",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Basemap> {
+        Basemap::ALL.into_iter().find(|b| b.id().eq_ignore_ascii_case(id))
+    }
+}
+
 /// A map: its CRS, its layers (index 0 is the top of the Contents pane, drawn last) and the
 /// extent last shown.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -253,6 +279,9 @@ pub struct Map {
     /// Spatial weights, by name (projects saved before weights existed have none).
     #[serde(default)]
     pub weights: Vec<Arc<weights::Weights>>,
+    /// The web basemap under the layers, if any (projects saved before basemaps have none).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub basemap: Option<Basemap>,
 }
 
 impl Default for Map {
@@ -263,7 +292,16 @@ impl Default for Map {
 
 impl Map {
     pub fn new(name: &str, crs: Crs) -> Self {
-        Map { name: name.to_string(), crs, layers: Vec::new(), extent: None, background: Color::WHITE, next_id: 1, weights: Vec::new() }
+        Map {
+            name: name.to_string(),
+            crs,
+            layers: Vec::new(),
+            extent: None,
+            background: Color::WHITE,
+            next_id: 1,
+            weights: Vec::new(),
+            basemap: None,
+        }
     }
 
     /// Checks a map read from a project file, which is hostile input (#58), and repairs what is

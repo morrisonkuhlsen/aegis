@@ -4,6 +4,8 @@
 //! The UI paints the same display list with its own painter.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+pub mod basemap;
+mod font;
 pub mod raster;
 
 use mkaegis_core::{Color, Result, Value};
@@ -322,15 +324,24 @@ pub fn hit_test(map: &Map, vp: &Viewport, p: [f32; 2], tolerance_px: f64) -> Opt
     None
 }
 
-/// The map rendered to a PNG of `width`×`height` pixels showing `extent` (or the full extent).
-pub fn export_png(map: &Map, width: u32, height: u32, extent: Option<Envelope>) -> Result<Vec<u8>> {
+/// The map rendered to a PNG of `width`×`height` pixels showing `extent` (or the full extent):
+/// the basemap from `tiles` (what has been fetched; a lower zoom stretched where the export's own
+/// hasn't been) with its attribution, then the layers.
+pub fn export_png(map: &Map, width: u32, height: u32, extent: Option<Envelope>, tiles: Option<&basemap::TileStore>) -> Result<Vec<u8>> {
     let (w, h) = (width.clamp(1, 16_384), height.clamp(1, 16_384));
     let extent = extent.or(map.extent).or_else(|| map.full_extent()).unwrap_or(Envelope::new(Coord::new(-180.0, -90.0), Coord::new(180.0, 90.0)));
     let vp = Viewport::fit(extent, f64::from(w), f64::from(h));
     let shapes = display_list(map, &vp, &Options { labels: false, ..Options::default() });
     let mut canvas = raster::Canvas::new(w, h, map.background)?;
+    let basemap = match (map.basemap, tiles) {
+        (Some(b), Some(store)) if basemap::draw(&mut canvas, map, &vp, store) > 0 => Some(b),
+        _ => None,
+    };
     for s in &shapes {
         canvas.draw(s);
+    }
+    if let Some(b) = basemap {
+        basemap::attribute(&mut canvas, b);
     }
     canvas.png()
 }
@@ -385,7 +396,7 @@ mod tests {
 
     #[test]
     fn exports_a_png() {
-        let png = export_png(&map(), 64, 48, None).unwrap();
+        let png = export_png(&map(), 64, 48, None, None).unwrap();
         assert_eq!(png.get(1..4), Some(&b"PNG"[..]));
     }
 }

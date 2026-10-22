@@ -16,6 +16,8 @@ use crate::{MapApp, Tool};
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Key {
     revision: u64,
+    /// The basemap tiles' revision: a tile arriving redraws.
+    tiles: u64,
     center: (f64, f64),
     resolution: f64,
     size: (usize, usize),
@@ -130,11 +132,20 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
     }
     app.view.vp = Some(vp);
 
+    fetch_tiles(app, ui.ctx(), &vp);
+
     // Redraw the texture when something changed.
-    let key = Key { revision: app.session.revision, center: (vp.center.x, vp.center.y), resolution: vp.resolution, size: (w as usize, h as usize) };
+    let key = Key {
+        revision: app.session.revision,
+        tiles: app.session.tiles.revision(),
+        center: (vp.center.x, vp.center.y),
+        resolution: vp.resolution,
+        size: (w as usize, h as usize),
+    };
     if app.view.key != Some(key) || app.view.texture.is_none() {
         let shapes = mkaegis_render::display_list(&app.session.map, &vp, &Options { pixels_per_point: ppp, ..Options::default() });
         if let Ok(mut canvas) = mkaegis_render::raster::Canvas::new(w as u32, h as u32, app.session.map.background) {
+            mkaegis_render::basemap::draw(&mut canvas, &app.session.map, &vp, &app.session.tiles);
             app.view.labels.clear();
             for s in shapes {
                 if matches!(s, Shape::Label { .. }) {
@@ -177,6 +188,7 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
         painter.rect_stroke(r, 0.0, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Middle);
     }
     scale_bar(app, &painter, rect, &vp, ppp);
+    attribution(app, ui, rect);
     if app.session.map.layers.is_empty() {
         painter.text(
             rect.center(),
@@ -212,6 +224,52 @@ fn selection_mode(ui: &Ui) -> &'static str {
 }
 
 /// A scale bar of a round length, bottom left.
+/// Asks for the basemap tiles the view needs and nobody has fetched yet; each, once it arrives,
+/// redraws the view. Only what is on screen is fetched, as OpenStreetMap's tile policy asks.
+fn fetch_tiles(app: &MapApp, ctx: &egui::Context, vp: &Viewport) {
+    let Some(fetch) = &app.services.fetch else { return };
+    let wanted = mkaegis_render::basemap::wanted(&app.session.map, vp);
+    for key in app.session.tiles.claim(&wanted) {
+        let (store, ctx) = (app.session.tiles.clone(), ctx.clone());
+        fetch(
+            mkaegis_render::basemap::url(key),
+            Box::new(move |result| {
+                if let Err(e) = result.map_err(mkaegis_core::Error::Io).and_then(|bytes| store.arrive(key, &bytes)) {
+                    log::warn!("basemap tile {}/{}/{}: {e}", key.z, key.x, key.y);
+                    store.fail(key);
+                }
+                ctx.request_repaint();
+            }),
+        );
+    }
+}
+
+/// The basemap's attribution in the map's bottom-right corner, linking to its licence: shown
+/// whenever the basemap is, as its licence asks.
+fn attribution(app: &MapApp, ui: &mut Ui, rect: Rect) {
+    let Some(basemap) = app.session.map.basemap else { return };
+    let source = mkaegis_render::basemap::source(basemap);
+    let (text, url) = if app.session.map.crs == mkaegis_crs::Crs::WEB_MERCATOR {
+        (source.attribution, Some(source.attribution_url))
+    } else {
+        (tr("Basemaps are drawn in Web Mercator maps."), None)
+    };
+    let font = egui::FontId::proportional(11.0);
+    let width = ui.painter().layout_no_wrap(text.to_string(), font.clone(), Color32::BLACK).size().x + 10.0;
+    let r = Rect::from_min_size(egui::pos2(rect.right() - width - 4.0, rect.bottom() - 22.0), egui::vec2(width, 18.0));
+    ui.painter().rect_filled(r, 2.0, Color32::from_white_alpha(210));
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(egui::vec2(5.0, 1.0))));
+    let shown = egui::RichText::new(text).font(font);
+    match url {
+        Some(url) => {
+            child.hyperlink_to(shown.color(Color32::from_rgb(40, 60, 110)), url);
+        }
+        None => {
+            child.add(egui::Label::new(shown.color(Color32::from_gray(60))));
+        }
+    }
+}
+
 fn scale_bar(app: &MapApp, painter: &egui::Painter, rect: Rect, vp: &Viewport, ppp: f32) {
     let crs = app.session.map.crs;
     let lat = crs.to_geographic(vp.center).map_or(0.0, |g| g.y);

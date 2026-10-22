@@ -1,6 +1,6 @@
 # Localization parity
 
-*Updated 2026-10-22, after 0.2.0.*
+*Updated 2026-10-22, at 0.3.0.*
 
 MK aeGIS speaks English and Brazilian Portuguese (#37). The interface language is chosen in
 **View ▸ Language** and kept for later runs; the web app starts in the browser's language. This

@@ -2,6 +2,7 @@
 //! Labeling) and the attribute table's Add Field / Calculate Field.
 
 use mkaegis_core::{Color, Error};
+use mkaegis_model::classify::Options;
 use mkaegis_model::query::Query;
 use mkaegis_model::symbology::{Classification, Ramp};
 use mkaegis_model::{Field, FieldType, Labels, Marker, Renderer, Symbol};
@@ -128,7 +129,10 @@ pub const SYMBOLOGY: CommandSpec = CommandSpec {
     label: "Symbology",
     ribbon: "Feature Layer ▸ Appearance",
     shortcut: None,
-    params: "{layer, renderer?: single|uniqueValues|graduatedColors, field?, classes?, method?: equalInterval|quantile, ramp?: meadow|ember|depth|balance, fill?, outline?, width?, size?, marker?: circle|square|triangle|diamond}",
+    params: "{layer, renderer?: single|uniqueValues|graduatedColors, field?, classes?, method?: equalInterval|quantile|naturalBreaks|\
+             geometricInterval|manual|standardDeviation|boxMap|percentile, breaks? (manual: upper bounds), hinge? (box map, default 1.5), \
+             ramp?: meadow|ember|depth|balance (balance for the six-class maps), fill?, outline?, width?, size?, \
+             marker?: circle|square|triangle|diamond} — graduated colours report the goodness of variance fit (GVF) and class counts",
     kind: Kind::Edit,
     enabled: has_layers,
     run: |s, p| {
@@ -155,6 +159,7 @@ pub const SYMBOLOGY: CommandSpec = CommandSpec {
             Renderer::GraduatedColors { .. } => "graduatedColors",
         });
         let field = opt_str(p, "field").map(str::to_string).or_else(|| layer.renderer.field().map(str::to_string));
+        let mut fit = None;
         layer.renderer = match kind.to_ascii_lowercase().as_str() {
             "single" | "singlesymbol" => Renderer::Single(base),
             "uniquevalues" => Renderer::unique_values(&layer.data, field.as_deref().ok_or_else(|| Error::param("field", "required"))?, base)?,
@@ -163,22 +168,47 @@ pub const SYMBOLOGY: CommandSpec = CommandSpec {
                 if !(1.0..=32.0).contains(&classes) {
                     return Err(Error::param("classes", "1 to 32"));
                 }
-                let method =
-                    Classification::parse(opt_str(p, "method").unwrap_or("")).ok_or_else(|| Error::param("method", "equalInterval or quantile"))?;
+                let method = Classification::parse(opt_str(p, "method").unwrap_or("")).ok_or_else(|| {
+                    Error::param(
+                        "method",
+                        "equalInterval, quantile, naturalBreaks, geometricInterval, manual, standardDeviation, boxMap or percentile",
+                    )
+                })?;
+                // The six-class maps are centred (on the mean or the median): a diverging ramp.
+                let default_ramp = if method.fixed_classes() { "balance" } else { "meadow" };
                 let ramp =
-                    Ramp::parse(opt_str(p, "ramp").unwrap_or("meadow")).ok_or_else(|| Error::param("ramp", "meadow, ember, depth or balance"))?;
-                Renderer::graduated(
-                    &layer.data,
-                    field.as_deref().ok_or_else(|| Error::param("field", "required"))?,
-                    classes as usize,
-                    method,
-                    ramp,
-                    base,
-                )?
+                    Ramp::parse(opt_str(p, "ramp").unwrap_or(default_ramp)).ok_or_else(|| Error::param("ramp", "meadow, ember, depth or balance"))?;
+                let breaks = match p.get("breaks") {
+                    None | Some(Json::Null) => Vec::new(),
+                    Some(Json::Array(a)) if a.len() <= 32 => {
+                        a.iter().map(|b| b.as_f64().ok_or_else(|| Error::param("breaks", "numbers"))).collect::<mkaegis_core::Result<Vec<f64>>>()?
+                    }
+                    Some(_) => return Err(Error::param("breaks", "a list of up to 32 upper bounds")),
+                };
+                if method == Classification::Manual && breaks.is_empty() {
+                    return Err(Error::param("breaks", "manual classes need their upper bounds"));
+                }
+                let options = Options { classes: classes as usize, hinge: opt_f64(p, "hinge")?, breaks };
+                let field = field.as_deref().ok_or_else(|| Error::param("field", "required"))?;
+                let (renderer, classes) = Renderer::graduated(&layer.data, field, method, &options, ramp, base)?;
+                fit = Some(classes);
+                renderer
             }
             other => return Err(Error::param("renderer", format!("unknown renderer `{other}`"))),
         };
-        Ok(json!({ "message": "symbology changed", "classes": layer.renderer.legend().len() }))
+        let counts = layer.renderer.class_counts(&layer.data);
+        let Some(fit) = fit else {
+            return Ok(json!({ "message": "symbology changed", "classes": layer.renderer.legend().len(), "counts": counts }));
+        };
+        let approximate = if fit.approximate { " (approximate: natural breaks of a quantile sample)" } else { "" };
+        Ok(json!({
+            "message": format!("symbology changed: {} classes, goodness of variance fit {:.3}{approximate}", fit.breaks.len(), fit.gvf),
+            "classes": fit.breaks.len(),
+            "breaks": fit.breaks,
+            "counts": counts,
+            "gvf": fit.gvf,
+            "approximate": fit.approximate,
+        }))
     },
 };
 

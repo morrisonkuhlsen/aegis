@@ -582,9 +582,23 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
     }
     if renderer == "graduatedColors" {
         ui.horizontal(|ui| {
-            for (label, method) in [("Equal Interval", "equalInterval"), ("Quantile", "quantile")] {
+            for (label, method) in [("Equal Interval", "equalInterval"), ("Quantile", "quantile"), ("Natural Breaks", "naturalBreaks")] {
                 if ui.button(label).clicked() {
                     next = Some(json!({ "method": method }));
+                }
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            // Six named classes each, on a diverging ramp centred on the mean or the median.
+            for (label, method, tip) in [
+                ("Std. Deviation", "standardDeviation", "Six classes at the mean ± 1 and 2 standard deviations"),
+                ("Box Map", "boxMap", "Quartiles, with outliers beyond 1.5 × the interquartile range"),
+                ("Percentile", "percentile", "< 1 %, 1–10 %, 10–50 %, 50–90 %, 90–99 %, > 99 %"),
+                ("Geometric", "geometricInterval", "Bounds in geometric progression, for positive skewed values"),
+            ] {
+                if ui.button(label).on_hover_text(tip).clicked() {
+                    let ramp = if matches!(method, "geometricInterval") { "meadow" } else { "balance" };
+                    next = Some(json!({ "method": method, "ramp": ramp }));
                 }
             }
         });

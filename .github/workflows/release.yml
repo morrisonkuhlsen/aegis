@@ -1,6 +1,7 @@
 # Release builds. A pushed tag vX.Y.Z (the [workspace.package] version in Cargo.toml) builds the
-# desktop app and the CLI for Linux, Windows and macOS and publishes them as a GitHub release with
-# SHA256SUMS.txt. Run by hand, it builds the same archives as workflow artifacts and publishes
+# desktop app and the CLI for Linux, Windows and macOS, and the web app, and publishes them as a
+# GitHub release with SHA256SUMS.txt; the web app also goes to GitHub Pages (not for a
+# pre-release). Run by hand, it builds the same archives as workflow artifacts and publishes
 # nothing: a dry run, as is a pull request that changes this file.
 #
 # How to release, and what to do when a run fails: docs/releasing.md.
@@ -140,9 +141,74 @@ jobs:
             ${{ env.NAME }}.zip
           if-no-files-found: error
 
+  web:
+    name: build (web)
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      NAME: mkaegis-web-${{ needs.version.outputs.version }}
+      # Pinned trunk release, checked against its published SHA-256.
+      TRUNK_VERSION: v0.21.14
+      TRUNK_SHA256: f2b4680cd239693a646a2795e4633c625328d7b2a044fbe749fa3a2fe9e7036b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust (stable + wasm32)
+        run: |
+          rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
+          rustup default stable
+
+      - name: Install trunk
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/trunk.tar.gz"             "https://github.com/trunk-rs/trunk/releases/download/$TRUNK_VERSION/trunk-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$TRUNK_SHA256  $RUNNER_TEMP/trunk.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/trunk.tar.gz" -C "$RUNNER_TEMP/bin" trunk
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        working-directory: apps/mkaegis-web
+        run: trunk build --release
+
+      - name: Check the site
+        working-directory: dist/web
+        # Relative URLs only: the site is served under /mkaegis/ on Pages, and anywhere else people
+        # host the zip. GitHub Pages refuses files over 100 MB.
+        run: |
+          test -f index.html
+          ls ./*_bg.wasm > /dev/null
+          if grep -nE '(src|href)="/' index.html; then
+            echo "::error::index.html has a root-absolute URL"
+            exit 1
+          fi
+          big=$(find . -type f -size +100M)
+          if [ -n "$big" ]; then
+            echo "::error::over GitHub Pages' 100 MB per file: $big"
+            exit 1
+          fi
+          touch .nojekyll
+          du -sh .
+
+      - name: Package
+        run: |
+          cp -r dist/web "$NAME"
+          cp README.md LICENSE-MIT LICENSE-APACHE NOTICE ATTRIBUTION.md "$NAME/"
+          zip -qr "$NAME.zip" "$NAME"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.NAME }}
+          path: ${{ env.NAME }}.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: dist/web
+
   publish:
     name: publish
-    needs: [version, build]
+    needs: [version, build, web]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     permissions:
@@ -156,6 +222,8 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist
+          # The archives, not the Pages site (`github-pages`).
+          pattern: mkaegis-*
           merge-multiple: true
 
       - name: Checksums
@@ -174,3 +242,19 @@ jobs:
           notes=$(awk -v head="## [$version]" 'index($0, head) == 1 { on = 1; next } on && /^## \[/ { exit } on' CHANGELOG.md)
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag \
             "${prerelease[@]}" --title "MK aeGIS $GITHUB_REF_NAME" --notes "$notes" --generate-notes
+
+  pages:
+    name: deploy (GitHub Pages)
+    needs: [web, publish]
+    # The released version only: a pre-release (v0.2.0-rc.1) leaves the site as it was.
+    if: github.ref_type == 'tag' && !contains(github.ref_name, '-')
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

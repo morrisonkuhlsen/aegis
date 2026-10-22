@@ -1,6 +1,6 @@
 # MK aeGIS roadmap
 
-*Updated 2026-10-21, at version 0.1.2.*
+*Updated 2026-10-22, at version 0.1.2.*
 
 MK aeGIS is a statistical GIS: a geographic information system built for statisticians. This page
 is the one-page summary; the detail is in [`docs/`](docs/).
@@ -41,7 +41,7 @@ From `cargo xtask stats` and `cargo xtask parity`:
 | File formats       | Shapefile and GeoJSON in and out; `.aegis` projects; PNG export                                                                                | issue #14                                              |
 | User interface     | Ribbon, Contents, map, Geoprocessing/Symbology/History panes, table, light/dark                                                                | [`docs/architecture.md`](docs/architecture.md)         |
 | Automation         | Every action is a command: CLI, MCP server, control channel                                                                                    | [`docs/control-protocol.md`](docs/control-protocol.md) |
-| Platforms          | Linux x86_64, Windows x64, macOS universal; engine and UI build for wasm                                                                       | [`docs/releasing.md`](docs/releasing.md)               |
+| Platforms          | Linux x86_64, Windows x64, macOS universal; the web app (browser, WebGPU or WebGL2) on GitHub Pages                                            | [`docs/releasing.md`](docs/releasing.md)               |
 
 ## Progress log
 

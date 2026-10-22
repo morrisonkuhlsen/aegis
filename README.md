@@ -108,6 +108,12 @@ the version, and `SHA256SUMS.txt` has a checksum for every file. Each archive ho
 | Windows 10 or 11, x64                  | `mkaegis-<ver>-windows-x64.zip`        | nothing else        |
 | macOS 11 or later, Apple silicon/Intel | `mkaegis-<ver>-macos-universal.tar.gz` | nothing else        |
 | Linux x86_64                           | `mkaegis-<ver>-linux-x86_64.tar.gz`    | glibc 2.39 or later |
+| Any, in a browser                      | `mkaegis-web-<ver>.zip`                | WebGPU or WebGL2    |
+
+**Nothing to install:** from the next release on, the web app runs at
+<https://morrisonkuhlsen.github.io/mkaegis/> (add `?sample` for the sample map). Your files stay
+on your computer: they are read in the page, and what you save downloads. The zip is the same site,
+for your own web server.
 
 The builds aren't code-signed yet, so the first launch asks for confirmation:
 

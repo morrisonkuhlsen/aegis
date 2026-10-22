@@ -32,12 +32,13 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Added
 
-- **The web app** (`apps/mkaegis-web`, #38, in part): MK aeGIS in the browser, built with
+- **The web app** (`apps/mkaegis-web`, #38): MK aeGIS in the browser, built with
   `trunk build --release`. Nothing is uploaded: the session keeps its files in memory. Add Data
   and Open use the browser's file picker (a shapefile is picked with its `.dbf` and `.shx`),
   files dropped on the page open by extension, and Save, Export Map, Export Features and Export
   Weights download what they write. `?sample` opens the sample map; `?webgl` skips WebGPU.
-  Leaving the page with unsaved changes asks first.
+  Leaving the page with unsaved changes asks first. Each release attaches it as
+  `mkaegis-web-<ver>.zip` and deploys it to <https://morrisonkuhlsen.github.io/mkaegis/>.
 - **Tables** (#27, in part):
   - **Join Field** (`management.joinField`): copies a CSV table's columns, or another layer's,
     onto a layer by a common key. It reports the features matched and unmatched, the table rows

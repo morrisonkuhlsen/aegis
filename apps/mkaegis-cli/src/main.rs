@@ -1,9 +1,10 @@
 //! MK aeGIS's headless command line.
 //!
 //! - `mkaegis-cli info FILE` — a data file's geometry type, CRS, fields and extent.
-//! - `mkaegis-cli run [--sample] [--in FILE]… [--cmd 'id={json}']… [--out FILE] [--png FILE]`
-//!   — runs commands in order; `--out` saves a project (`.aegis`) or the top layer
-//!   (`.geojson`, `.shp`); `--png` exports the map.
+//! - `mkaegis-cli run [--sample] [--in FILE]… [--cmd 'id={json}']… [--out FILE [--out-layer NAME]]
+//!   [--png FILE]` — runs commands in order; `--out` saves a project (`.aegis`) or a layer
+//!   (`.geojson`, `.shp`): `--out-layer`'s, else the last one a command made or added, else the
+//!   top one; `--png` exports the map.
 //! - `mkaegis-cli commands` — every command with its parameters.
 //! - `mkaegis-cli mcp [--sample]` — a Model Context Protocol server on stdio.
 //! - `mkaegis-cli --version` — the version, `mkaegis-cli X.Y.Z`.
@@ -14,7 +15,7 @@ use std::process::ExitCode;
 use mkaegis_engine::Session;
 use serde_json::{Value as Json, json};
 
-const USAGE: &str = "usage: mkaegis-cli info FILE | run [--sample] [--in FILE]… [--cmd 'id={json}']… [--out FILE] [--png FILE] | commands | mcp [--sample] | --version";
+const USAGE: &str = "usage: mkaegis-cli info FILE | run [--sample] [--in FILE]… [--cmd 'id={json}']… [--out FILE [--out-layer NAME]] [--png FILE] | commands | mcp [--sample] | --version";
 
 fn info(path: &str) -> Result<(), String> {
     let mut s = Session::default();
@@ -27,7 +28,10 @@ fn info(path: &str) -> Result<(), String> {
 
 fn run(args: &[String]) -> Result<(), String> {
     let mut s = Session::default();
-    let (mut out, mut png) = (None, None);
+    let (mut out, mut out_layer, mut png) = (None, None, None);
+    // The layer the last command made or added (its result's numeric `layer` id): what `--out`
+    // writes (#3). New layers are inserted by geometry type, so the top one is often not it.
+    let mut last_layer: Option<u64> = None;
     let mut i = 0;
     while let Some(arg) = args.get(i) {
         let mut value = || {
@@ -42,6 +46,7 @@ fn run(args: &[String]) -> Result<(), String> {
                 let path = value()?;
                 let cmd = if path.ends_with(".aegis") { "project.open" } else { "map.addData" };
                 let r = s.execute(cmd, &json!({ "path": path })).map_err(|e| format!("{path}: {e}"))?;
+                last_layer = r.get("layer").and_then(Json::as_u64).or(last_layer);
                 for w in r.get("warnings").and_then(Json::as_array).into_iter().flatten() {
                     eprintln!("warning: {path}: {}", w.as_str().unwrap_or_default());
                 }
@@ -51,9 +56,11 @@ fn run(args: &[String]) -> Result<(), String> {
                 let (id, params) = c.split_once('=').unwrap_or((c.as_str(), "{}"));
                 let params: Json = serde_json::from_str(params).map_err(|e| format!("{id}: bad JSON: {e}"))?;
                 let r = s.execute(id, &params).map_err(|e| format!("{id}: {e}"))?;
+                last_layer = r.get("layer").and_then(Json::as_u64).or(last_layer);
                 println!("{r}");
             }
             "--out" => out = Some(value()?),
+            "--out-layer" => out_layer = Some(value()?),
             "--png" => png = Some(value()?),
             other => return Err(format!("unknown argument `{other}`\n{USAGE}")),
         }
@@ -62,11 +69,23 @@ fn run(args: &[String]) -> Result<(), String> {
     if let Some(path) = out {
         if path.ends_with(".aegis") {
             s.execute("project.saveAs", &json!({ "path": path })).map_err(|e| e.to_string())?;
+            eprintln!("wrote {path}");
         } else {
-            let layer = s.map.layers.first().map(|l| l.id).ok_or("no layer to write")?;
-            s.execute("layer.export", &json!({ "layer": layer, "path": path })).map_err(|e| e.to_string())?;
+            let layer = match &out_layer {
+                Some(name) => s.map.layer(name).map_err(|e| format!("--out-layer: {e}"))?,
+                None => {
+                    // A later command may have removed the layer the last one made.
+                    let made = last_layer.and_then(|id| s.map.layer(&id.to_string()).ok());
+                    made.or_else(|| s.map.layers.first()).ok_or("no layer to write")?
+                }
+            };
+            let (id, name) = (layer.id, layer.name.clone());
+            let r = s.execute("layer.export", &json!({ "layer": id, "path": path })).map_err(|e| e.to_string())?;
+            for w in r.get("warnings").and_then(Json::as_array).into_iter().flatten() {
+                eprintln!("warning: {path}: {}", w.as_str().unwrap_or_default());
+            }
+            eprintln!("wrote {path} (layer {name})");
         }
-        eprintln!("wrote {path}");
     }
     if let Some(path) = png {
         if s.map.extent.is_none() {

@@ -337,39 +337,46 @@ impl Crs {
         })
     }
 
-    /// Recognises a CRS in WKT (a `.prj`, Esri or OGC flavour): by its EPSG authority, else by name.
+    /// Recognises a CRS in WKT (a `.prj`, Esri or OGC flavour): by its outermost EPSG authority,
+    /// else by its datum and projection names. A name is only trusted with a datum MK aeGIS knows
+    /// (WGS 84, SIRGAS 2000): SAD69, ED50 or Córrego Alegre UTM used to be read as WGS 84 UTM,
+    /// tens of metres off without a word (#53). `None` makes the layer's coordinate system unknown.
     pub fn from_wkt(text: &str) -> Option<Crs> {
-        // The outermost AUTHORITY comes last.
-        if let Some(code) = text.rsplit("AUTHORITY[").next().filter(|_| text.contains("AUTHORITY[")).and_then(|tail| {
-            let digits: String = tail.split(',').nth(1)?.chars().filter(char::is_ascii_digit).collect();
-            digits.parse::<u32>().ok()
-        }) && let Ok(crs) = Crs::from_epsg(code)
-        {
-            return Some(crs);
+        // The outermost AUTHORITY comes last. A code MK aeGIS doesn't know is final: its names
+        // could only mislead.
+        if text.contains("AUTHORITY[") {
+            let code = text.rsplit("AUTHORITY[").next().and_then(|tail| {
+                let digits: String = tail.split(',').nth(1)?.chars().filter(char::is_ascii_digit).collect();
+                digits.parse::<u32>().ok()
+            });
+            return code.and_then(|c| Crs::from_epsg(c).ok());
         }
-        let name: String = text.split('"').nth(1)?.to_ascii_uppercase().replace([' ', '/'], "_").replace("__", "_").replace("__", "_");
-        if name.contains("WEB_MERCATOR") || name.contains("PSEUDO_MERCATOR") {
+        let norm = |s: &str| s.to_ascii_uppercase().replace([' ', '/', '-'], "_").replace("__", "_").replace("__", "_");
+        let name = norm(text.split('"').nth(1)?);
+        // The datum's name, else the geographic CRS's, else the CRS's own.
+        let named = |key: &str| text.split(key).nth(1).and_then(|t| t.split('"').nth(1)).map(norm);
+        let datum = match named("DATUM[").or_else(|| named("GEOGCS[")).unwrap_or_else(|| name.clone()) {
+            d if d.contains("SIRGAS") && d.contains("2000") => Datum::Sirgas2000,
+            d if d.contains("WGS_1984") || d.contains("WGS_84") || d.contains("WGS84") || d.contains("WORLD_GEODETIC_SYSTEM_1984") => Datum::Wgs84,
+            _ => return None,
+        };
+        let projected = text.trim_start().to_ascii_uppercase().starts_with("PROJCS");
+        if !projected {
+            return Some(if datum == Datum::Sirgas2000 { Crs::SIRGAS2000 } else { Crs::WGS84 });
+        }
+        if datum == Datum::Wgs84 && (name.contains("WEB_MERCATOR") || name.contains("PSEUDO_MERCATOR")) {
             return Some(Crs::WEB_MERCATOR);
         }
-        let sirgas = name.contains("SIRGAS");
-        if let Some(rest) = name.split("UTM_ZONE_").nth(1) {
-            let zone: u32 = rest.chars().take_while(char::is_ascii_digit).collect::<String>().parse().ok()?;
-            let south = rest.trim_start_matches(|c: char| c.is_ascii_digit()).starts_with('S');
-            return Crs::from_epsg(match (sirgas, south) {
-                (true, true) => 31960 + zone,
-                (true, false) => return None,
-                (false, true) => 32700 + zone,
-                (false, false) => 32600 + zone,
-            })
-            .ok();
-        }
-        if name.starts_with("PROJCS") || text.trim_start().starts_with("PROJCS") {
-            return None;
-        }
-        if sirgas {
-            return Some(Crs::SIRGAS2000);
-        }
-        (name.contains("WGS_1984") || name.contains("WGS_84") || name.contains("WGS84")).then_some(Crs::WGS84)
+        let rest = name.split("UTM_ZONE_").nth(1)?;
+        let zone: u32 = rest.chars().take_while(char::is_ascii_digit).collect::<String>().parse().ok().filter(|z| (1..=60).contains(z))?;
+        let south = rest.trim_start_matches(|c: char| c.is_ascii_digit()).starts_with('S');
+        Crs::from_epsg(match (datum, south) {
+            (Datum::Sirgas2000, true) => 31960 + zone,
+            (Datum::Sirgas2000, false) => return None,
+            (Datum::Wgs84, true) => 32700 + zone,
+            (Datum::Wgs84, false) => 32600 + zone,
+        })
+        .ok()
     }
 
     /// The codes MK aeGIS knows, for pickers.
@@ -557,6 +564,33 @@ mod tests {
         assert_eq!(Crs::from_wkt(ogc).map(Crs::epsg), Some(32723));
         assert_eq!(Crs::from_wkt(r#"PROJCS["Lambert_Conformal_Conic",GEOGCS["GCS_WGS_1984"]]"#), None);
         assert_eq!(Crs::from_wkt(""), None);
+    }
+
+    /// #53: UTM on another datum was read as WGS 84 UTM, and a huge zone overflowed.
+    #[test]
+    fn names_on_other_datums_are_not_wgs84() {
+        let esri = |name: &str, gcs: &str, datum: &str| {
+            format!(
+                r#"PROJCS["{name}",GEOGCS["{gcs}",DATUM["{datum}",SPHEROID["x",6378160.0,298.25]]],PROJECTION["Transverse_Mercator"],UNIT["Meter",1.0]]"#
+            )
+        };
+        for (name, gcs, datum) in [
+            ("SAD_1969_UTM_Zone_23S", "GCS_South_American_1969", "D_South_American_1969"),
+            ("ED_1950_UTM_Zone_31N", "GCS_European_1950", "D_European_1950"),
+            ("Corrego_Alegre_UTM_Zone_23S", "GCS_Corrego_Alegre", "D_Corrego_Alegre"),
+        ] {
+            assert_eq!(Crs::from_wkt(&esri(name, gcs, datum)), None, "{name}");
+        }
+        assert_eq!(Crs::from_wkt(&esri("WGS_1984_UTM_Zone_23S", "GCS_WGS_1984", "D_WGS_1984")), Some(Crs::from_epsg(32723).unwrap()));
+        assert_eq!(Crs::from_wkt(&esri("SIRGAS_2000_UTM_Zone_23S", "GCS_SIRGAS_2000", "D_SIRGAS_2000")), Some(Crs::from_epsg(31983).unwrap()));
+        assert_eq!(Crs::from_wkt(r#"GEOGCS["GCS_SAD_1969",DATUM["D_South_American_1969"]]"#), None);
+        // An unknown outer authority is final, whatever the names say.
+        let ogc = r#"PROJCS["SAD69 / UTM zone 23S",GEOGCS["SAD69",AUTHORITY["EPSG","4618"]],AUTHORITY["EPSG","29193"]]"#;
+        assert_eq!(Crs::from_wkt(ogc), None);
+        // Zones past 60 (or past u32) are refused, never wrapped onto another code.
+        for zone in ["0", "61", "4294967295", "99999999999999999999"] {
+            assert_eq!(Crs::from_wkt(&esri(&format!("WGS_1984_UTM_Zone_{zone}S"), "GCS_WGS_1984", "D_WGS_1984")), None, "{zone}");
+        }
     }
 
     /// #6: an unknown coordinate system keeps its coordinates and refuses to project or measure.

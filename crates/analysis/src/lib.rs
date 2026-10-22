@@ -15,8 +15,12 @@ use mkaegis_geom::{Coord, Envelope, Geometry, GeometryType, algo};
 use mkaegis_model::{FeatureClass, Field, FieldType};
 use serde::{Deserialize, Serialize};
 
-/// The largest buffer distance (metres): a hemisphere.
+/// The largest Select By Location distance (metres): a hemisphere.
 const MAX_DISTANCE: f64 = 2.0e7;
+/// The widest buffer, in metres. A buffer is a circle drawn in a UTM zone, whose scale grows away
+/// from the point: 1.2 % off at 1 000 km, 11 % at 3 000 km, so a wider one would be wrong (#54).
+/// Geodesic buffers come with #8.
+const MAX_BUFFER: f64 = 1.0e6;
 
 /// The geometry in a CRS whose units are ground metres, for measuring: itself in a UTM zone, else
 /// in the UTM zone of its centroid. Geographic coordinates are degrees, and Web Mercator's metres
@@ -34,8 +38,11 @@ fn metric(g: &Geometry, crs: Crs) -> Result<(Geometry, Crs)> {
 
 /// Buffer: a polygon around each point at `distance` metres (Null shapes stay Null).
 pub fn buffer(fc: &FeatureClass, distance: f64, name: &str) -> Result<FeatureClass> {
-    if !distance.is_finite() || distance <= 0.0 || distance > MAX_DISTANCE {
-        return Err(Error::param("distance", format!("must be a positive number of metres up to {MAX_DISTANCE}")));
+    if !distance.is_finite() || distance <= 0.0 || distance > MAX_BUFFER {
+        return Err(Error::param(
+            "distance",
+            format!("must be a positive number of metres up to {MAX_BUFFER} (1 000 km: farther, a planar circle is more than 1 % off)"),
+        ));
     }
     if !matches!(fc.geometry_type, GeometryType::Point | GeometryType::Multipoint) {
         return Err(Error::NotAvailable(format!("Buffer of {} features (points only so far)", fc.geometry_type.name().to_lowercase())));
@@ -375,6 +382,9 @@ mod tests {
         assert!((area - expected).abs() / expected < 1e-3, "{area} vs {expected}");
         assert!(buffer(&cities(), -1.0, "b").is_err());
         assert!(buffer(&cities(), f64::NAN, "b").is_err());
+        // #54: past 1 000 km a planar circle is more than 1 % off, so it is refused.
+        assert!(buffer(&cities(), MAX_BUFFER, "b").is_ok());
+        assert!(buffer(&cities(), MAX_BUFFER + 1.0, "b").is_err());
     }
 
     /// #52: two points 500 m apart buffered by 1 km gave an area of about 0: each circle was a

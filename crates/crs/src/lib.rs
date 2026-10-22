@@ -20,6 +20,12 @@ pub const WEB_MERCATOR_MAX_LAT: f64 = 85.051_128_779_806_59;
 const UTM_K0: f64 = 0.9996;
 const UTM_FALSE_EASTING: f64 = 500_000.0;
 const UTM_FALSE_NORTHING_SOUTH: f64 = 10_000_000.0;
+/// The farthest from its central meridian a UTM coordinate may be, in degrees of longitude:
+/// Krüger's series diverges beyond, both ways.
+const UTM_MAX_DLON: f64 = 45.0;
+/// The largest UTM northing from the equator, in metres: the pole is at 0.9996 × the meridian
+/// quadrant, 9 997 964.9 m, so anything farther is past it.
+const UTM_MAX_NORTHING: f64 = 10_000_000.0;
 /// Vincenty's inverse iterates to this change in λ (radians, about 0.006 mm).
 const VINCENTY_TOLERANCE: f64 = 1e-12;
 const VINCENTY_MAX_ITERATIONS: usize = 200;
@@ -254,8 +260,38 @@ impl Crs {
         }
     }
 
-    /// Longitude/latitude (degrees) of a point in this CRS.
+    /// Longitude/latitude (degrees) of a point in this CRS, the longitude in (−180°, 180°]. A
+    /// UTM coordinate past the pole or too far from its zone is an error, never a NaN (#54).
     pub fn to_geographic(self, c: Coord) -> Result<Coord> {
+        self.geographic(c).map(|g| Coord::new(wrap_longitude(g.x), g.y))
+    }
+
+    /// A longitude/latitude point (degrees) in this CRS. Web Mercator can't hold the poles: past
+    /// ±85.05° it is an error, not a point moved to the edge (#54).
+    pub fn from_geographic(self, g: Coord) -> Result<Coord> {
+        self.projected(g, false)
+    }
+
+    /// A point from this CRS into `to`.
+    pub fn transform(self, to: Crs, c: Coord) -> Result<Coord> {
+        if self == to {
+            return Ok(c);
+        }
+        to.from_geographic(self.to_geographic(c)?)
+    }
+
+    /// A point from this CRS into `to`, for drawing: Web Mercator takes latitudes past ±85.05° at
+    /// its edge, and longitudes are not wrapped, so a shape that crosses the antimeridian stays in
+    /// one piece. Never for geoprocessing, whose results must be where the data is.
+    pub fn transform_for_display(self, to: Crs, c: Coord) -> Result<Coord> {
+        if self == to {
+            return Ok(c);
+        }
+        to.projected(self.geographic(c)?, true)
+    }
+
+    /// Longitude/latitude of a point, the longitude as the projection gives it.
+    fn geographic(self, c: Coord) -> Result<Coord> {
         if !c.is_finite() {
             return Err(Error::Projection("non-finite coordinate".into()));
         }
@@ -268,16 +304,23 @@ impl Crs {
                 Ok(Coord::new(lon, lat))
             }
             Kind::Utm { datum, zone, south } => {
-                let tm = TransverseMercator::new(datum.ellipsoid());
                 let y = c.y - if south { UTM_FALSE_NORTHING_SOUTH } else { 0.0 };
-                let (lon, lat) = tm.inverse(c.x - UTM_FALSE_EASTING, y, central_meridian(zone));
-                Ok(Coord::new(lon, lat))
+                if y.abs() > UTM_MAX_NORTHING {
+                    return Err(Error::Projection(format!("{}, {} is past the pole in UTM zone {zone}", c.x, c.y)));
+                }
+                let (dlon, lat) = TransverseMercator::new(datum.ellipsoid()).inverse(c.x - UTM_FALSE_EASTING, y);
+                // A wild easting (a corrupt coordinate) drives the series to infinity, or past
+                // where it holds.
+                if !(dlon.is_finite() && lat.is_finite()) || dlon.abs() > UTM_MAX_DLON + 1e-9 {
+                    return Err(Error::Projection(format!("{}, {} is too far from UTM zone {zone}", c.x, c.y)));
+                }
+                Ok(Coord::new(central_meridian(zone) + dlon, lat))
             }
         }
     }
 
-    /// A longitude/latitude point (degrees) in this CRS.
-    pub fn from_geographic(self, g: Coord) -> Result<Coord> {
+    /// A longitude/latitude point in this CRS; `display` takes Web Mercator's poles at its edge.
+    fn projected(self, g: Coord, display: bool) -> Result<Coord> {
         if !g.is_finite() || g.y.abs() > 90.0 {
             return Err(Error::Projection(format!("not a longitude/latitude: {}, {}", g.x, g.y)));
         }
@@ -285,6 +328,9 @@ impl Crs {
             Kind::Unknown => Err(unknown()),
             Kind::Geographic { .. } => Ok(g),
             Kind::WebMercator => {
+                if !display && g.y.abs() > WEB_MERCATOR_MAX_LAT {
+                    return Err(Error::Projection(format!("{}° is past Web Mercator's limit of ±{WEB_MERCATOR_MAX_LAT:.2}° latitude", g.y)));
+                }
                 let lat = g.y.clamp(-WEB_MERCATOR_MAX_LAT, WEB_MERCATOR_MAX_LAT).to_radians();
                 Ok(Coord::new(WEB_MERCATOR_R * g.x.to_radians(), WEB_MERCATOR_R * (FRAC_PI_4 + lat / 2.0).tan().ln()))
             }
@@ -292,21 +338,13 @@ impl Crs {
                 let cm = central_meridian(zone);
                 let dlon = (g.x - cm + 540.0).rem_euclid(360.0) - 180.0;
                 // Krüger's series diverges far from the central meridian.
-                if dlon.abs() > 45.0 {
+                if dlon.abs() > UTM_MAX_DLON {
                     return Err(Error::Projection(format!("{}°, {}° is too far from UTM zone {zone}", g.x, g.y)));
                 }
                 let (e, n) = TransverseMercator::new(datum.ellipsoid()).forward(dlon, g.y);
                 Ok(Coord::new(e + UTM_FALSE_EASTING, n + if south { UTM_FALSE_NORTHING_SOUTH } else { 0.0 }))
             }
         }
-    }
-
-    /// A point from this CRS into `to`.
-    pub fn transform(self, to: Crs, c: Coord) -> Result<Coord> {
-        if self == to {
-            return Ok(c);
-        }
-        to.from_geographic(self.to_geographic(c)?)
     }
 
     /// The CRS as Esri-flavoured WKT, for a shapefile's `.prj`; none for an unknown one.
@@ -398,6 +436,12 @@ fn central_meridian(zone: u8) -> f64 {
     f64::from(zone) * 6.0 - 183.0
 }
 
+/// A longitude in (−180°, 180°].
+fn wrap_longitude(lon: f64) -> f64 {
+    let w = (lon + 180.0).rem_euclid(360.0) - 180.0;
+    if w == -180.0 { 180.0 } else { w }
+}
+
 /// The transverse Mercator on an ellipsoid, by Krüger's n-series to fourth order.
 struct TransverseMercator {
     n: f64,
@@ -453,8 +497,9 @@ impl TransverseMercator {
         (UTM_K0 * self.big_a * e, UTM_K0 * self.big_a * n)
     }
 
-    /// Longitude and latitude (degrees) of an easting and northing (no false origin).
-    fn inverse(&self, x: f64, y: f64, lon0: f64) -> (f64, f64) {
+    /// Longitude from the central meridian and latitude (degrees) of an easting and northing (no
+    /// false origin).
+    fn inverse(&self, x: f64, y: f64) -> (f64, f64) {
         let (xi, eta) = (y / (UTM_K0 * self.big_a), x / (UTM_K0 * self.big_a));
         let (mut xi1, mut eta1) = (xi, eta);
         for (j, b) in self.beta.iter().enumerate() {
@@ -468,7 +513,7 @@ impl TransverseMercator {
             phi += d * (2.0 * (j as f64 + 1.0) * chi).sin();
         }
         let lam = eta1.sinh().atan2(xi1.cos());
-        (lon0 + lam.to_degrees(), phi.to_degrees())
+        (lam.to_degrees(), phi.to_degrees())
     }
 }
 
@@ -519,6 +564,33 @@ mod tests {
         assert!(close(c.x, 20_037_508.342_789_244, 1e-6) && close(c.y, 5_621_521.486_192_066, 1e-6));
         let back = Crs::WEB_MERCATOR.to_geographic(c).unwrap();
         assert!(close(back.x, 180.0, 1e-9) && close(back.y, 45.0, 1e-9));
+    }
+
+    /// #54: the poles, wild eastings and the antimeridian.
+    #[test]
+    fn edge_cases_are_errors_not_clamps_or_nans() {
+        // Web Mercator refuses the poles for geoprocessing; drawing takes them at its edge.
+        assert!(Crs::WEB_MERCATOR.from_geographic(Coord::new(-45.0, -89.99)).is_err());
+        assert!(Crs::WGS84.transform(Crs::WEB_MERCATOR, Coord::new(-45.0, -89.99)).is_err());
+        let edge = Crs::WGS84.transform_for_display(Crs::WEB_MERCATOR, Coord::new(-45.0, -89.99)).unwrap();
+        let at_limit = Crs::WEB_MERCATOR.from_geographic(Coord::new(-45.0, -WEB_MERCATOR_MAX_LAT)).unwrap();
+        assert_eq!(edge, at_limit);
+        // A corrupt UTM easting or a northing past the pole is an error, not a NaN.
+        let utm = Crs::from_epsg(32723).unwrap();
+        for c in [Coord::new(2.4e9, 7_400_000.0), Coord::new(-3.0e7, 7_400_000.0), Coord::new(500_000.0, 2.5e7), Coord::new(500_000.0, -1.0e6)] {
+            assert!(utm.to_geographic(c).is_err(), "{c:?}");
+        }
+        // The pole itself is still a point.
+        let pole = utm.to_geographic(Coord::new(500_000.0, 10_000_000.0 - 9_997_964.9)).unwrap();
+        assert!(close(pole.y, -90.0, 1e-4), "{pole:?}");
+        // Longitudes come back in (−180°, 180°]; drawing keeps them as the zone gives them.
+        let zone1 = Crs::from_epsg(32601).unwrap();
+        let p = zone1.from_geographic(Coord::new(179.0, 10.0)).unwrap();
+        let back = zone1.to_geographic(p).unwrap();
+        assert!(close(back.x, 179.0, 1e-9) && close(back.y, 10.0, 1e-9), "{back:?}");
+        let shown = zone1.transform_for_display(Crs::WGS84, p).unwrap();
+        assert!(close(shown.x, -181.0, 1e-9), "{shown:?}");
+        assert_eq!([wrap_longitude(180.0), wrap_longitude(-180.0), wrap_longitude(181.0), wrap_longitude(-540.0)], [180.0, 180.0, -179.0, 180.0]);
     }
 
     #[test]

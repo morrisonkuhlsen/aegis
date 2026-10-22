@@ -409,8 +409,9 @@ impl Map {
     }
 }
 
-/// An envelope from one CRS into another, by projecting points along its edges. Data in an
-/// unknown coordinate system, or a map in one, is placed as it is.
+/// An envelope from one CRS into another, by projecting points along its edges, for views and
+/// selection rectangles: Web Mercator takes the poles at its edge (`Crs::transform_for_display`).
+/// Data in an unknown coordinate system, or a map in one, is placed as it is.
 pub fn project_envelope(e: Envelope, from: Crs, to: Crs) -> Option<Envelope> {
     if from == to || !from.is_known() || !to.is_known() {
         return Some(e);
@@ -428,7 +429,7 @@ pub fn project_envelope(e: Envelope, from: Crs, to: Crs) -> Option<Envelope> {
             mkaegis_geom::Coord::new(e.max_x, y),
         ]);
     }
-    Envelope::of(pts.into_iter().filter_map(|p| from.transform(to, p).ok()))
+    Envelope::of(pts.into_iter().filter_map(|p| from.transform_for_display(to, p).ok()))
 }
 
 #[cfg(test)]

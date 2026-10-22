@@ -127,7 +127,11 @@ pub const SELECT_BY_RECTANGLE: CommandSpec = CommandSpec {
             }
             // The rectangle in the layer's CRS (densified edges keep it honest across projections).
             let Some(le) = mkaegis_model::project_envelope(e, crs, layer.data.crs) else { continue };
-            let local = if crs == layer.data.crs { rect.clone() } else { rect.try_map(|c| crs.transform(layer.data.crs, c)).unwrap_or(rect.clone()) };
+            let local = if crs == layer.data.crs {
+                rect.clone()
+            } else {
+                rect.try_map(|c| crs.transform_for_display(layer.data.crs, c)).unwrap_or(rect.clone())
+            };
             let rows: Vec<usize> = layer
                 .data
                 .features

@@ -12,6 +12,11 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Changed results
 
+- **A shapefile record whose shape can't be read keeps its row** (#57). It used to be skipped,
+  attributes and all, so counts, sums and every statistic on the layer's attributes left it
+  out. It now reads with a null shape and its attributes, and the warning counts such records.
+  A GeoJSON feature with an unreadable geometry, which used to fail the whole file, reads the
+  same way.
 - **Shapefile integer columns 19 or 20 characters wide read as Integer** (#55). They used to
   read as Double, so values past 2^53 (9,007,199,254,740,992) were rounded. Integer columns six
   characters wide or narrower read as Short when every value fits 16 bits.
@@ -110,6 +115,14 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Fixed
 
+- **One bad feature no longer costs the whole file** (#57). In GeoJSON, a geometry that can't
+  be read (a polygon whose exterior has fewer than 3 vertices, a position that isn't two numbers)
+  failed the whole FeatureCollection; empty `coordinates`, which RFC 7946 allows, did too. In a
+  shapefile, a record of another shape type than the file's aborted the read. Each now reads with
+  a null geometry and its attributes, empty geometries read as null, a polygon hole or a
+  shapefile ring with fewer than 3 vertices is left out on its own, and the warnings count all
+  of it. A `.dbf` with fewer rows than the `.shp` has shapes now says so. A GeoJSON file over
+  1 GB is refused by its size before it is read, not after it has been held in memory.
 - `mkaegis-cli run --out` wrote the top layer, not the one the commands made: `analysis.buffer`
   on points with `--out buffers.geojson` wrote the points (#3). It now writes the layer the last
   command made or added, and says which.

@@ -20,6 +20,8 @@ use mkaegis_model::FeatureClass;
 const FILE_CODE: i32 = 9994;
 const VERSION: i32 = 1000;
 const HEADER: usize = 100;
+/// How many unreadable records a read names one by one; the rest are only counted.
+const NAMED_PROBLEMS: usize = 5;
 
 /// A shapefile's files in memory.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -96,15 +98,23 @@ fn shape_family(code: i32) -> Option<GeometryType> {
     }
 }
 
-/// One record's shape (`None` for a null shape).
-fn read_shape(content: &[u8]) -> Result<Option<Geometry>> {
+/// A record of shape type `record` belongs in a shapefile of type `file` (a point among multipoints
+/// does: it is one).
+fn fits(record: GeometryType, file: GeometryType) -> bool {
+    record == file || (file == GeometryType::Multipoint && record == GeometryType::Point)
+}
+
+/// One record's shape (`None` for a null shape), and how many polygon rings too short to be one
+/// were left out.
+fn read_shape(content: &[u8]) -> Result<(Option<Geometry>, usize)> {
     let mut r = Bytes { b: content, at: 0 };
     let code = r.le_i32()?;
     if code == 0 {
-        return Ok(None);
+        return Ok((None, 0));
     }
+    let mut left_out = 0;
     let family = shape_family(code).ok_or_else(|| Error::NotAvailable(format!("shape type {code}")))?;
-    Ok(Some(match family {
+    let shape = match family {
         GeometryType::Point => Geometry::Point(r.point()?),
         GeometryType::Multipoint => {
             r.at += 32;
@@ -123,9 +133,16 @@ fn read_shape(content: &[u8]) -> Result<Option<Geometry>> {
                 let path = pts.get(s..e).ok_or_else(|| Error::format("shapefile", "part index out of range"))?;
                 paths.push(path.to_vec());
             }
-            if family == GeometryType::Polyline { Geometry::Polyline(paths) } else { Geometry::polygon(paths)? }
+            if family == GeometryType::Polyline {
+                Geometry::Polyline(paths)
+            } else {
+                let (polygon, n) = Geometry::polygon_lenient(paths);
+                left_out = n;
+                polygon.ok_or_else(|| Error::Geometry(mkaegis_geom::SHORT_RING.into()))?
+            }
         }
-    }))
+    };
+    Ok((Some(shape), left_out))
 }
 
 /// Reads a shapefile from its files in memory.
@@ -164,8 +181,10 @@ pub fn read(files: &Files, name: &str) -> Result<Read> {
     data.prj = prj;
 
     let mut r = Bytes { b: &files.shp, at: HEADER };
+    let rows_read = table.rows.len();
     let mut rows = table.rows.into_iter();
-    let mut skipped = 0usize;
+    // A record that can't be read keeps its attributes with a null shape (#57).
+    let (mut shapes, mut unreadable, mut rings_left_out) = (0usize, 0usize, 0usize);
     while r.at + 8 <= files.shp.len() {
         let _number = r.be_i32()?;
         let words = usize::try_from(r.be_i32()?).map_err(|_| Error::format("shapefile", "negative record length"))?;
@@ -173,22 +192,43 @@ pub fn read(files: &Files, name: &str) -> Result<Read> {
         let end = r.at.checked_add(len).filter(|e| *e <= files.shp.len()).ok_or_else(|| Error::format("shapefile", "record runs past the end"))?;
         let content = files.shp.get(r.at..end).unwrap_or_default();
         r.at = end;
+        shapes += 1;
         let values = rows.next().unwrap_or_default();
-        match read_shape(content) {
-            Ok(g) => data.push(g, values)?,
-            Err(e) => {
-                skipped += 1;
-                if skipped <= 5 {
-                    warnings.push(format!("record {} skipped: {e}", data.features.len() + skipped));
-                }
+        let shape = read_shape(content).and_then(|(g, n)| match &g {
+            Some(s) if !fits(s.geometry_type(), geometry_type) => {
+                Err(Error::format("shapefile", format!("a {} in a {} shapefile", s.geometry_type().name(), geometry_type.name())))
             }
-        }
+            _ => Ok((g, n)),
+        });
+        let g = match shape {
+            Ok((g, n)) => {
+                rings_left_out += n;
+                g
+            }
+            Err(e) => {
+                unreadable += 1;
+                if unreadable <= NAMED_PROBLEMS {
+                    warnings.push(format!("record {shapes}: {e}"));
+                }
+                None
+            }
+        };
+        data.push(g, values)?;
     }
-    if skipped > 5 {
-        warnings.push(format!("{skipped} records skipped in all"));
+    if unreadable > NAMED_PROBLEMS {
+        warnings.push(format!("{unreadable} records in all have a shape that can't be read"));
+    }
+    if unreadable > 0 {
+        warnings.push(format!("{unreadable} {} with a null shape, their attributes kept", if unreadable == 1 { "record" } else { "records" }));
+    }
+    if rings_left_out > 0 {
+        warnings.push(format!("{rings_left_out} polygon {} with fewer than 3 vertices left out", if rings_left_out == 1 { "ring" } else { "rings" }));
     }
     if rows.next().is_some() {
         warnings.push("the .dbf has more rows than the .shp has shapes".into());
+    }
+    if rows_read < shapes {
+        warnings.push(format!("the .dbf has {rows_read} rows for {shapes} shapes: the last {} have no attributes", shapes - rows_read));
     }
     if files.prj.is_none() {
         // Without a `.prj`, longitude/latitude is the usual guess, but only where it can be.
@@ -426,6 +466,43 @@ mod tests {
             let _ = read(&files, "x");
         }
         assert!(read(&Files::default(), "x").is_err());
+    }
+
+    /// #57: a record of another shape type used to abort the read; an unreadable one lost its row.
+    #[test]
+    fn a_bad_record_keeps_its_attributes_with_a_null_shape() {
+        let mut files = write(&polygons()).unwrap();
+        // The first record says it is a polyline, in a polygon shapefile.
+        files.shp[HEADER + 8..HEADER + 12].copy_from_slice(&3i32.to_le_bytes());
+        let back = read(&files, "lots").unwrap();
+        assert_eq!(back.data.features.len(), 3);
+        assert_eq!(back.data.features[0].geometry, None);
+        assert_eq!(back.data.features[0].values, polygons().features[0].values, "attributes kept");
+        assert!(back.data.features[2].geometry.is_some(), "the records after it still read");
+        assert_eq!(
+            back.warnings,
+            ["record 1: cannot read shapefile: a Polyline in a Polygon shapefile", "1 record with a null shape, their attributes kept"]
+        );
+    }
+
+    #[test]
+    fn a_ring_too_short_is_left_out_and_short_dbf_rows_are_reported() {
+        let mut fc = polygons();
+        let sliver = vec![Coord::new(5.0, 5.0), Coord::new(6.0, 5.0)];
+        fc.features[2].geometry = Some(Geometry::Polygon(vec![square(0.0, 0.0, 1.0), sliver]));
+        let mut files = write(&fc).unwrap();
+        let back = read(&files, "lots").unwrap();
+        // The same polygon as without the sliver (written clockwise, as every shell is).
+        let whole = read(&write(&polygons()).unwrap(), "lots").unwrap();
+        assert_eq!(back.data.features[2].geometry, whole.data.features[2].geometry);
+        assert_eq!(back.warnings, ["1 polygon ring with fewer than 3 vertices left out"]);
+        // A .dbf cut short in transfer: the shapes past its end have no attributes, and it says so.
+        let mut one = polygons();
+        one.features.truncate(1);
+        files.dbf = write(&one).unwrap().dbf;
+        let back = read(&files, "lots").unwrap();
+        assert_eq!(back.data.features.len(), 3);
+        assert!(back.warnings.iter().any(|w| w == "the .dbf has 1 rows for 3 shapes: the last 2 have no attributes"), "{:?}", back.warnings);
     }
 
     /// #6: projected data without a `.prj` used to be refused, and with a `.prj` MK aeGIS

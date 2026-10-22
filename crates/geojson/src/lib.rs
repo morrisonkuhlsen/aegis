@@ -1,6 +1,8 @@
 //! GeoJSON (RFC 7946) in and out (L2). A feature class holds one geometry type, so a file mixing
 //! points, lines and polygons is read as its most common family; the rest are counted as skipped.
-//! Field types are inferred from the properties. Output is always WGS 84, as the RFC requires.
+//! A feature whose geometry can't be read keeps its properties with a null geometry, and a warning
+//! counts them: one bad feature never costs the rest of the file (#57). Field types are inferred
+//! from the properties. Output is always WGS 84, as the RFC requires.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 use mkaegis_core::{Error, Result, Value};
@@ -11,12 +13,21 @@ use serde_json::{Map as JsonMap, Value as Json, json};
 
 /// The largest GeoJSON text we read.
 pub const MAX_BYTES: usize = 1 << 30;
+/// How many unreadable geometries a read names one by one; the rest are only counted.
+const NAMED_PROBLEMS: usize = 5;
 
-/// A feature class read from GeoJSON, with how many features did not fit its geometry type.
+/// A feature class read from GeoJSON, with what the reader had to work around.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Read {
     pub data: FeatureClass,
-    pub skipped: usize,
+    pub warnings: Vec<String>,
+}
+
+/// One geometry as read: `None` for an empty one (RFC 7946 §3.1 allows empty `coordinates`), and
+/// how many polygon rings were left out.
+struct Parsed {
+    geometry: Option<Geometry>,
+    rings_left_out: usize,
 }
 
 /// Reads GeoJSON text: a FeatureCollection, a Feature, or a bare geometry.
@@ -26,15 +37,60 @@ pub fn read(text: &str, name: &str) -> Result<Read> {
     }
     let root: Json = serde_json::from_str(text).map_err(|e| Error::format("GeoJSON", e.to_string()))?;
     let crs = legacy_crs(&root)?;
+    let mut warnings = Vec::new();
+    let (mut unreadable, mut empty, mut rings_left_out) = (0usize, 0usize, 0usize);
+    // A feature's geometry, or null when it can't be read: the feature keeps its properties.
+    let mut lenient = |number: usize, g: Option<&Json>| -> Option<Geometry> {
+        match g.filter(|g| !g.is_null()).map(geometry) {
+            None => None,
+            Some(Ok(p)) => {
+                rings_left_out += p.rings_left_out;
+                empty += usize::from(p.geometry.is_none());
+                p.geometry
+            }
+            Some(Err(e)) => {
+                unreadable += 1;
+                if unreadable <= NAMED_PROBLEMS {
+                    warnings.push(format!("feature {number}: {e}"));
+                }
+                None
+            }
+        }
+    };
     let features: Vec<(Option<Geometry>, JsonMap<String, Json>)> = match root.get("type").and_then(Json::as_str) {
         Some("FeatureCollection") => {
             let list = root.get("features").and_then(Json::as_array).ok_or_else(|| Error::format("GeoJSON", "FeatureCollection without features"))?;
-            list.iter().map(feature).collect::<Result<_>>()?
+            let mut out = Vec::with_capacity(list.len());
+            for (i, f) in list.iter().enumerate() {
+                let props = properties(f)?;
+                out.push((lenient(i + 1, f.get("geometry")), props));
+            }
+            out
         }
-        Some("Feature") => vec![feature(&root)?],
-        Some(_) => vec![(Some(geometry(&root)?), JsonMap::new())],
+        Some("Feature") => {
+            let props = properties(&root)?;
+            vec![(lenient(1, root.get("geometry")), props)]
+        }
+        // A bare geometry has nothing else to keep: it reads or it doesn't.
+        Some(_) => {
+            let p = geometry(&root)?;
+            rings_left_out += p.rings_left_out;
+            vec![(p.geometry, JsonMap::new())]
+        }
         None => return Err(Error::format("GeoJSON", "no `type` member")),
     };
+    if unreadable > NAMED_PROBLEMS {
+        warnings.push(format!("{unreadable} features in all have a geometry that can't be read"));
+    }
+    if unreadable > 0 {
+        warnings.push(format!("{unreadable} {} with a null geometry, their attributes kept", plural(unreadable, "feature", "features")));
+    }
+    if empty > 0 {
+        warnings.push(format!("{empty} empty {} read as null", plural(empty, "geometry", "geometries")));
+    }
+    if rings_left_out > 0 {
+        warnings.push(format!("{rings_left_out} polygon {} with fewer than 3 vertices left out", plural(rings_left_out, "ring", "rings")));
+    }
 
     // The geometry family most features have.
     let mut counts = [0usize; 3];
@@ -67,7 +123,14 @@ pub fn read(text: &str, name: &str) -> Result<Read> {
         let values = data.fields.iter().map(|f| value(props.get(&f.name), f.kind)).collect();
         data.push(g, values)?;
     }
-    Ok(Read { data, skipped })
+    if skipped > 0 {
+        warnings.insert(0, format!("{skipped} {} of another geometry type skipped", plural(skipped, "feature", "features")));
+    }
+    Ok(Read { data, warnings })
+}
+
+fn plural<'a>(n: usize, one: &'a str, many: &'a str) -> &'a str {
+    if n == 1 { one } else { many }
 }
 
 fn family(t: GeometryType) -> usize {
@@ -89,16 +152,12 @@ fn legacy_crs(root: &Json) -> Result<Crs> {
     Crs::from_epsg(code)
 }
 
-fn feature(f: &Json) -> Result<(Option<Geometry>, JsonMap<String, Json>)> {
+/// A Feature's properties; anything else in `features` makes the file unreadable.
+fn properties(f: &Json) -> Result<JsonMap<String, Json>> {
     if f.get("type").and_then(Json::as_str) != Some("Feature") {
         return Err(Error::format("GeoJSON", "a member of `features` is not a Feature"));
     }
-    let g = match f.get("geometry") {
-        None | Some(Json::Null) => None,
-        Some(g) => Some(geometry(g)?),
-    };
-    let props = f.get("properties").and_then(Json::as_object).cloned().unwrap_or_default();
-    Ok((g, props))
+    Ok(f.get("properties").and_then(Json::as_object).cloned().unwrap_or_default())
 }
 
 fn coord(v: &Json) -> Result<Coord> {
@@ -117,27 +176,59 @@ fn coords2(v: &Json) -> Result<Vec<Vec<Coord>>> {
     v.as_array().ok_or_else(|| Error::format("GeoJSON", "expected an array of arrays"))?.iter().map(coords).collect()
 }
 
-fn geometry(g: &Json) -> Result<Geometry> {
+/// A geometry. Empty `coordinates` read as an empty geometry; a polygon's hole with fewer than 3
+/// vertices is left out, but a polygon whose exterior ring is too short can't be read.
+fn geometry(g: &Json) -> Result<Parsed> {
     let c = g.get("coordinates");
     let need = || c.ok_or_else(|| Error::format("GeoJSON", "geometry without coordinates"));
-    match g.get("type").and_then(Json::as_str) {
-        Some("Point") => Ok(Geometry::Point(coord(need()?)?)),
-        Some("MultiPoint") => Ok(Geometry::Multipoint(coords(need()?)?)),
-        Some("LineString") => Ok(Geometry::Polyline(vec![coords(need()?)?])),
-        Some("MultiLineString") => Ok(Geometry::Polyline(coords2(need()?)?)),
-        Some("Polygon") => Geometry::polygon(coords2(need()?)?),
+    let kind = g.get("type").and_then(Json::as_str);
+    if matches!(kind, Some("Point" | "MultiPoint" | "LineString" | "MultiLineString" | "Polygon" | "MultiPolygon"))
+        && need()?.as_array().is_some_and(Vec::is_empty)
+    {
+        return Ok(Parsed { geometry: None, rings_left_out: 0 });
+    }
+    let whole = |g: Geometry| Parsed { geometry: Some(g), rings_left_out: 0 };
+    match kind {
+        Some("Point") => Ok(whole(Geometry::Point(coord(need()?)?))),
+        Some("MultiPoint") => Ok(whole(Geometry::Multipoint(coords(need()?)?))),
+        Some("LineString") => Ok(whole(Geometry::Polyline(vec![coords(need()?)?]))),
+        Some("MultiLineString") => Ok(whole(Geometry::Polyline(coords2(need()?)?))),
+        Some("Polygon") => {
+            let (rings, left_out) = polygon_rings(coords2(need()?)?)?;
+            Ok(Parsed { geometry: Some(Geometry::Polygon(rings)), rings_left_out: left_out })
+        }
         Some("MultiPolygon") => {
             let polys = need()?.as_array().ok_or_else(|| Error::format("GeoJSON", "MultiPolygon coordinates"))?;
-            let mut rings = Vec::new();
+            let (mut rings, mut left_out) = (Vec::new(), 0);
             for p in polys {
-                rings.extend(coords2(p)?);
+                let (r, n) = polygon_rings(coords2(p)?)?;
+                rings.extend(r);
+                left_out += n;
             }
-            Geometry::polygon(rings)
+            Ok(Parsed { geometry: Some(Geometry::Polygon(rings)), rings_left_out: left_out })
         }
         Some("GeometryCollection") => Err(Error::NotAvailable("GeoJSON GeometryCollection".into())),
         Some(other) => Err(Error::format("GeoJSON", format!("unknown geometry type `{other}`"))),
         None => Err(Error::format("GeoJSON", "geometry without `type`")),
     }
+}
+
+/// One polygon's rings, closed: the exterior must be a ring, holes too short to be one are left
+/// out (and counted). Holes are found by containment, so a hole kept without its exterior would
+/// turn into land: a short exterior fails the polygon instead.
+fn polygon_rings(rings: Vec<Vec<Coord>>) -> Result<(Vec<Vec<Coord>>, usize)> {
+    let mut rings = rings.into_iter();
+    let exterior = rings.next().ok_or_else(|| Error::Geometry("a polygon needs at least one ring".into()))?;
+    let Ok(Geometry::Polygon(mut kept)) = Geometry::polygon(vec![exterior]) else {
+        return Err(Error::Geometry(format!("the exterior ring: {}", mkaegis_geom::SHORT_RING)));
+    };
+    let holes: Vec<Vec<Coord>> = rings.collect();
+    let total = holes.len();
+    if let (Some(Geometry::Polygon(h)), _) = Geometry::polygon_lenient(holes) {
+        kept.extend(h);
+    }
+    let left_out = total - (kept.len() - 1);
+    Ok((kept, left_out))
 }
 
 fn infer_fields<'a>(props: impl Iterator<Item = &'a JsonMap<String, Json>>) -> Vec<Field> {
@@ -257,7 +348,7 @@ mod tests {
     fn reads_the_dominant_family_and_infers_fields() {
         let r = read(SAMPLE, "areas").unwrap();
         assert_eq!(r.data.geometry_type, GeometryType::Polygon);
-        assert_eq!(r.skipped, 1);
+        assert_eq!(r.warnings, ["1 feature of another geometry type skipped"]);
         assert_eq!(r.data.features.len(), 3);
         let kinds: Vec<_> = r.data.fields.iter().map(|f| (f.name.as_str(), f.kind)).collect();
         assert_eq!(
@@ -291,6 +382,39 @@ mod tests {
         let out: Json = serde_json::from_str(&write(&r.data).unwrap()).unwrap();
         let x = out.pointer("/features/0/geometry/coordinates/0").and_then(Json::as_f64).unwrap();
         assert!((x - 180.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_bad_geometry_costs_only_its_own_shape() {
+        let text = r#"{"type":"FeatureCollection","features":[
+            {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[0,0],[4,0],[4,4],[0,0]]]},"properties":{"id":1}},
+            {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[0,0],[1,1]]]},"properties":{"id":2}},
+            {"type":"Feature","geometry":{"type":"Polygon","coordinates":[]},"properties":{"id":3}},
+            {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[0,0],[4,0],[4,4],[0,0]],[[1,1],[2,1]]]},"properties":{"id":4}},
+            {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[0,0],["x",0],[4,4],[0,0]]]},"properties":{"id":5}}
+        ]}"#;
+        let r = read(text, "lots").unwrap();
+        let ids: Vec<&Value> = r.data.features.iter().map(|f| &f.values[0]).collect();
+        assert_eq!(ids, [&Value::Int(1), &Value::Int(2), &Value::Int(3), &Value::Int(4), &Value::Int(5)], "every feature kept");
+        let has_shape: Vec<bool> = r.data.features.iter().map(|f| f.geometry.is_some()).collect();
+        assert_eq!(has_shape, [true, false, false, true, false]);
+        assert_eq!(
+            r.warnings,
+            [
+                "feature 2: geometry: the exterior ring: a polygon ring needs at least 3 vertices",
+                "feature 5: cannot read GeoJSON: a position needs two numbers",
+                "2 features with a null geometry, their attributes kept",
+                "1 empty geometry read as null",
+                "1 polygon ring with fewer than 3 vertices left out",
+            ]
+        );
+        // The hole that was too short is gone; the polygon is whole.
+        assert_eq!(r.data.features[3].geometry, r.data.features[0].geometry);
+        // A Feature on its own is just as lenient; a bare geometry has nothing else to keep.
+        let one = read(r#"{"type":"Feature","geometry":{"type":"Point","coordinates":[1]},"properties":{"a":1}}"#, "p").unwrap();
+        assert_eq!((one.data.features.len(), one.data.features[0].geometry.is_none()), (1, true));
+        let empty = read(r#"{"type":"Point","coordinates":[]}"#, "p").unwrap();
+        assert!(empty.data.features[0].geometry.is_none());
     }
 
     #[test]

@@ -34,10 +34,12 @@ fn stem(path: &Path) -> String {
 pub fn read_data(disk: &Disk, path: &Path) -> Result<(FeatureClass, Vec<String>)> {
     match extension(path).as_str() {
         "geojson" | "json" => {
-            let text = disk.read_text(path)?;
-            let r = mkaegis_geojson::read(&text, &stem(path))?;
-            let warnings = if r.skipped > 0 { vec![format!("{} features of another geometry type skipped", r.skipped)] } else { Vec::new() };
-            Ok((r.data, warnings))
+            // Refused by its size before it is read: the text is held in memory whole (#57).
+            if disk.len(path)? > mkaegis_geojson::MAX_BYTES as u64 {
+                return Err(Error::format("GeoJSON", format!("larger than {} MB", mkaegis_geojson::MAX_BYTES >> 20)));
+            }
+            let r = mkaegis_geojson::read(&disk.read_text(path)?, &stem(path))?;
+            Ok((r.data, r.warnings))
         }
         "shp" => {
             let r = mkaegis_shp::read_with(path, |p| disk.read(p))?;

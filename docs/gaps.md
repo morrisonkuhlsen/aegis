@@ -1,6 +1,6 @@
 # Gaps: the ranked work list
 
-*Updated 2026-10-21, after 0.1.2.*
+*Updated 2026-10-22, after 0.1.2.*
 
 Pick work from the top. The order follows the project's rules: a crash or lost work outranks
 everything ("Never crash" in [`AGENTS.md`](../AGENTS.md)); then wrong statistical results, since
@@ -20,7 +20,6 @@ None open: the six known ones were fixed in 0.1.2 (see [`CHANGELOG.md`](../CHANG
 | Issue | Gap                                                        | Priority |
 |-------|------------------------------------------------------------|----------|
 | #54   | Projection edge cases return clamped values or NaN         | medium   |
-| #57   | One bad feature aborts the whole GeoJSON or Shapefile read | medium   |
 
 ## 4. Statistics: the road to beta
 
@@ -57,3 +56,4 @@ interop, the web app, project hygiene) are ranked by their `priority:` label on
 | 2026-10-21 | #26 narrowed to what remains              |
 | 2026-10-21 | #25 narrowed to what remains              |
 | 2026-10-21 | #27 narrowed to what remains              |
+| 2026-10-22 | #57 removed                               |

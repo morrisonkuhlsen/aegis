@@ -70,7 +70,9 @@ impl Tool {
             Tool::CalculateGeometry => tr("Writes area, length or centroid coordinates into a field."),
             Tool::SelectByAttributes => tr("Selects features with a SQL clause."),
             Tool::SelectByLocation => tr("Selects features by their spatial relation to another layer's."),
-            Tool::SummaryStatistics => tr("Count, sum, mean, minimum, maximum and standard deviation of a field."),
+            Tool::SummaryStatistics => {
+                tr("N, mean, standard deviation, quartiles, skewness, kurtosis and percentiles of one or more fields, by group and weighted.")
+            }
             Tool::SpatialWeights => tr("Who neighbours whom: contiguity, nearest neighbours, distance bands or kernels, for the spatial statistics."),
             Tool::JoinField => tr("Copies a CSV table's columns onto a layer by a common key, with a report of what matched."),
             Tool::XyTableToPoint => tr("Makes a point layer from a CSV table's X and Y columns (or a WKT column)."),
@@ -119,6 +121,13 @@ pub struct GpState {
     x: String,
     y: String,
     selected_only: bool,
+    /// Summary Statistics: the fields described, the case and weight fields ("" for none), the
+    /// percentiles asked for as typed, and the quantile definition (Hyndman–Fan 1–9).
+    stat_fields: Vec<String>,
+    case_field: String,
+    weight_field: String,
+    percentiles: String,
+    quantile_type: u8,
     result: Option<Json>,
 }
 
@@ -143,6 +152,7 @@ impl GpState {
             seed: "12345".into(),
             alpha: "0.05".into(),
             correction: "none",
+            quantile_type: mkaegis_engine::DEFAULT_QUANTILE_TYPE,
             ..GpState::default()
         };
     }
@@ -288,9 +298,57 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
         }
         Tool::SummaryStatistics => {
             layer_combo(ui, app, tr("Input Table"), "gp-in", &mut g.layer, |_| true);
-            field_combo(ui, app, g.layer, tr("Field (numeric)"), "gp-field", &mut g.field, true);
+            let fields: Vec<(String, bool)> = g
+                .layer
+                .and_then(|l| app.session.map.layers.iter().find(|x| x.id == l))
+                .map(|l| l.data.fields.iter().map(|f| (f.name.clone(), f.kind.is_numeric())).collect())
+                .unwrap_or_default();
+            let numeric: Vec<&String> = fields.iter().filter(|(_, n)| *n).map(|(f, _)| f).collect();
+            g.stat_fields.retain(|f| numeric.contains(&f));
+            if g.stat_fields.is_empty()
+                && let Some(first) = numeric.first()
+            {
+                g.stat_fields.push((*first).clone());
+            }
+            ui.label(tr("Fields (numeric)"));
+            egui::ScrollArea::vertical().id_salt("gp-stat-fields").max_height(120.0).show(ui, |ui| {
+                for f in &numeric {
+                    let mut on = g.stat_fields.contains(f);
+                    if ui.checkbox(&mut on, f.as_str()).changed() {
+                        if on {
+                            g.stat_fields.push((*f).clone());
+                        } else {
+                            g.stat_fields.retain(|x| x != *f);
+                        }
+                    }
+                }
+            });
+            let none = tr("(none)");
+            let optional = |ui: &mut Ui, label: &str, id: &str, value: &mut String, choices: Vec<&String>| {
+                if !value.is_empty() && !choices.contains(&&*value) {
+                    value.clear();
+                }
+                ui.label(label);
+                let shown = if value.is_empty() { none.to_string() } else { value.clone() };
+                egui::ComboBox::from_id_salt(id).width(ui.available_width()).selected_text(shown).show_ui(ui, |ui| {
+                    ui.selectable_value(value, String::new(), none);
+                    for c in choices {
+                        ui.selectable_value(value, c.clone(), c.as_str());
+                    }
+                });
+            };
+            optional(ui, tr("Case Field (groups)"), "gp-case", &mut g.case_field, fields.iter().map(|(f, _)| f).collect());
+            optional(ui, tr("Weight Field (frequency weights)"), "gp-weight", &mut g.weight_field, numeric.clone());
+            ui.label(tr("Percentiles"));
+            ui.add(egui::TextEdit::singleline(&mut g.percentiles).hint_text("5; 95").desired_width(f32::INFINITY));
+            ui.label(tr("Quantile definition"));
+            egui::ComboBox::from_id_salt("gp-qtype").width(ui.available_width()).selected_text(quantile_label(g.quantile_type)).show_ui(ui, |ui| {
+                for t in 1..=9 {
+                    ui.selectable_value(&mut g.quantile_type, t, quantile_label(t));
+                }
+            });
             ui.checkbox(&mut g.selected_only, tr("Selected records only"));
-            ("analysis.summaryStatistics", json!({ "layer": g.layer, "field": g.field, "selectedOnly": g.selected_only }))
+            ("analysis.summaryStatistics", summary_params(&g))
         }
         Tool::SpatialWeights => {
             layer_combo(ui, app, tr("Input Features"), "gp-in", &mut g.layer, |_| true);
@@ -498,13 +556,11 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
         && tool == Tool::SummaryStatistics
     {
         ui.separator();
-        egui::Grid::new("stats").striped(true).num_columns(2).show(ui, |ui| {
-            for k in ["count", "nulls", "sum", "mean", "min", "max", "std"] {
-                ui.label(egui::RichText::new(k).strong());
-                ui.label(r.get(k).map(|v| v.as_f64().map_or(v.to_string(), |x| mkaegis_core::Value::Float(x).to_string())).unwrap_or_default());
-                ui.end_row();
-            }
-        });
+        statistics_table(ui, r);
+        if ui.button(tr("Export Table (CSV)…")).clicked() {
+            let params = summary_params(&g);
+            app.save_to(tr("Export Statistics"), "analysis.summaryStatistics", &["csv"], "statistics.csv", params);
+        }
     }
     if let Some(r) = &g.result
         && tool == Tool::JoinField
@@ -913,4 +969,106 @@ fn option_label(value: &str) -> &str {
         "none" => tr("None"),
         other => other,
     }
+}
+
+/// Summary Statistics' parameters from its form.
+fn summary_params(g: &GpState) -> Json {
+    // `5; 95`, `5 95` or `5, 95`; a decimal comma (`2,5`) reads as a point.
+    let percentiles: Vec<f64> = g
+        .percentiles
+        .replace(", ", ";")
+        .split([';', ' '])
+        .filter(|t| !t.trim().is_empty())
+        .filter_map(|t| t.trim().replace(',', ".").parse().ok())
+        .collect();
+    json!({
+        "layer": g.layer,
+        "fields": g.stat_fields,
+        "caseField": (!g.case_field.is_empty()).then_some(&g.case_field),
+        "weightField": (!g.weight_field.is_empty()).then_some(&g.weight_field),
+        "percentiles": percentiles,
+        "quantileType": g.quantile_type,
+        "selectedOnly": g.selected_only,
+    })
+}
+
+/// A Hyndman–Fan quantile definition, named by who uses it.
+fn quantile_label(t: u8) -> String {
+    match t {
+        6 => crate::trf("Type {n} (default; SPSS, MK Sigma)", &[("n", &t)]),
+        7 => crate::trf("Type {n} (R, NumPy, Excel)", &[("n", &t)]),
+        _ => crate::trf("Type {n}", &[("n", &t)]),
+    }
+}
+
+/// The statistics Summary Statistics reports, by result key, labelled in the interface's language.
+fn statistic_rows() -> [(&'static str, &'static str); 19] {
+    [
+        ("n", tr("N")),
+        ("missing", tr("Missing")),
+        ("sum", tr("Sum")),
+        ("mean", tr("Mean")),
+        ("sd", tr("Std. deviation")),
+        ("variance", tr("Variance")),
+        ("se_mean", tr("SE of the mean")),
+        ("min", tr("Minimum")),
+        ("q1", tr("Q1")),
+        ("median", tr("Median")),
+        ("q3", tr("Q3")),
+        ("max", tr("Maximum")),
+        ("range", tr("Range")),
+        ("iqr", tr("IQR")),
+        ("skewness", tr("Skewness")),
+        ("se_skewness", tr("SE of skewness")),
+        ("kurtosis", tr("Kurtosis")),
+        ("se_kurtosis", tr("SE of kurtosis")),
+        ("cv", tr("CV")),
+    ]
+}
+
+/// Summary Statistics' result: for each group, the statistics (rows) of each field (columns).
+fn statistics_table(ui: &mut Ui, r: &Json) {
+    let show =
+        |v: Option<&Json>| v.and_then(Json::as_f64).map_or_else(|| "—".to_string(), |x| crate::i18n::value_text(&mkaegis_core::Value::Float(x)));
+    let case = r.get("caseField").and_then(Json::as_str);
+    for (gi, group) in r.get("groups").and_then(Json::as_array).into_iter().flatten().enumerate() {
+        let stats: Vec<&Json> = group.get("statistics").and_then(Json::as_array).into_iter().flatten().collect();
+        if let Some(case) = case {
+            let value = group.get("case").map_or_else(String::new, |v| v.as_str().map_or_else(|| v.to_string(), str::to_string));
+            ui.label(egui::RichText::new(format!("{case} = {value}")).strong());
+        }
+        egui::ScrollArea::horizontal().id_salt(("stats-scroll", gi)).show(ui, |ui| {
+            egui::Grid::new(("stats", gi)).striped(true).num_columns(stats.len() + 1).show(ui, |ui| {
+                ui.label("");
+                for s in &stats {
+                    ui.label(egui::RichText::new(s.get("field").and_then(Json::as_str).unwrap_or_default()).strong());
+                }
+                ui.end_row();
+                for (key, label) in statistic_rows() {
+                    ui.label(label);
+                    for s in &stats {
+                        ui.label(show(s.get(key)));
+                    }
+                    ui.end_row();
+                }
+                let percentiles = stats.first().and_then(|s| s.get("percentiles")).and_then(Json::as_array).map_or(0, Vec::len);
+                for i in 0..percentiles {
+                    let p = stats.first().and_then(|s| s.pointer(&format!("/percentiles/{i}/p"))).and_then(Json::as_f64).unwrap_or_default();
+                    ui.label(format!("P{}", crate::i18n::value_text(&mkaegis_core::Value::Float(p))));
+                    for s in &stats {
+                        ui.label(show(s.pointer(&format!("/percentiles/{i}/value"))));
+                    }
+                    ui.end_row();
+                }
+            });
+        });
+        ui.add_space(4.0);
+    }
+    let qtype = r.get("quantileType").and_then(Json::as_u64).unwrap_or(7);
+    let mut note = crate::trf("SD over N − 1; quantiles by Hyndman–Fan type {n}; skewness G1 and excess kurtosis G2.", &[("n", &qtype)]);
+    if r.get("weightField").is_some_and(|w| !w.is_null()) {
+        note.push(' ');
+        note.push_str(tr("Frequency weights: a case of weight w counts as w cases."));
+    }
+    ui.label(egui::RichText::new(note).size(11.0).color(Tokens::get(ui.ctx()).muted));
 }

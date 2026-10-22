@@ -26,7 +26,7 @@ work goes first.
 
 | Issue | Feature                                                                                             | Priority |
 |-------|-----------------------------------------------------------------------------------------------------|----------|
-| #28   | Full descriptive statistics                                                                         | high     |
+| #28   | Descriptive statistics, the rest: frequency tables, crosstabs with χ², correlation matrix           | high     |
 | #29   | Rates: excess risk, Empirical Bayes and spatial EB smoothing                                        | medium   |
 | #30   | Spatial regression: OLS diagnostics, lag and error models                                           | medium   |
 | #32   | Reproducible analyses: history as a script, seeds, report                                           | medium   |

@@ -219,7 +219,7 @@ fn select_buffer_and_select_by_location() {
     let r = s.execute("map.selectByLocation", &json!({ "layer": "Cidades", "selecting": id, "relation": "intersect" })).unwrap();
     assert!(r["selected"].as_u64().unwrap() >= 1);
     let stats = s.execute("analysis.summaryStatistics", &json!({ "layer": "Cidades", "field": "POP", "selectedOnly": true })).unwrap();
-    assert!(stats["sum"].as_f64().unwrap() >= 412_000.0);
+    assert!(stats["groups"][0]["statistics"][0]["sum"].as_f64().unwrap() >= 412_000.0);
 }
 
 #[test]
@@ -627,6 +627,89 @@ fn data_and_projects_round_trip_through_files() {
     s.execute("share.exportMap", &json!({ "path": png.display().to_string(), "width": 320, "height": 200 })).unwrap();
     assert!(std::fs::metadata(&png).unwrap().len() > 1000);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// #28: Summary Statistics of several fields, by a case field, weighted, with percentiles, and
+/// as a CSV table.
+#[test]
+fn summary_statistics_describe_several_fields_by_case_and_weight() {
+    let mut s = Session { disk: Disk::Memory(Default::default()), ..Session::default() };
+    let mut fc = mkaegis_model::FeatureClass::new(
+        "t",
+        mkaegis_geom::GeometryType::Point,
+        Crs::WGS84,
+        vec![
+            mkaegis_model::Field::new("X", mkaegis_model::FieldType::Double),
+            mkaegis_model::Field::new("Y", mkaegis_model::FieldType::Integer),
+            mkaegis_model::Field::new("W", mkaegis_model::FieldType::Integer),
+            mkaegis_model::Field::new("REGIAO", mkaegis_model::FieldType::Text),
+        ],
+    );
+    let rows: [(f64, i32, i64, &str); 5] = [(2.0, 1, 3, "Sul"), (5.0, 2, 1, "Sul"), (9.0, 3, 2, "Sul"), (1.0, 10, 1, "Norte"), (3.0, 20, 1, "Norte")];
+    for (x, y, w, r) in rows {
+        let g = mkaegis_geom::Geometry::Point(mkaegis_geom::Coord::new(x, f64::from(y)));
+        fc.push(
+            Some(g),
+            vec![
+                mkaegis_core::Value::Float(x),
+                mkaegis_core::Value::Int(i64::from(y)),
+                mkaegis_core::Value::Int(w),
+                mkaegis_core::Value::Text(r.into()),
+            ],
+        )
+        .unwrap();
+    }
+    s.map.add_layer(fc);
+
+    let r = s.execute("analysis.summaryStatistics", &json!({ "layer": "t", "fields": ["X", "Y"], "percentiles": [50] })).unwrap();
+    assert_eq!(r["groups"].as_array().unwrap().len(), 1);
+    let x = &r["groups"][0]["statistics"][0];
+    assert_eq!((x["field"].as_str(), x["n"].as_f64(), x["mean"].as_f64()), (Some("X"), Some(5.0), Some(4.0)));
+    assert_eq!(x["percentiles"][0]["value"].as_f64(), Some(3.0), "the median of 1, 2, 3, 5, 9");
+    assert_eq!(r["definitions"]["quantiles"], "Hyndman–Fan type 6", "MK Sigma's and SPSS's, by default");
+
+    // By region, weighted: the south is 2, 2, 2, 5, 9, 9 (mean 29/6), the north 1, 3.
+    let r = s.execute("analysis.summaryStatistics", &json!({ "layer": "t", "fields": ["X"], "caseField": "REGIAO", "weightField": "W" })).unwrap();
+    let groups = r["groups"].as_array().unwrap();
+    assert_eq!(groups.iter().map(|g| g["case"].as_str().unwrap()).collect::<Vec<_>>(), ["Norte", "Sul"]);
+    let south = &groups[1]["statistics"][0];
+    assert_eq!((south["n"].as_f64(), south["cases"].as_u64()), (Some(6.0), Some(3)));
+    assert!((south["mean"].as_f64().unwrap() - 29.0 / 6.0).abs() < 1e-12);
+    assert!((south["variance"].as_f64().unwrap() - 11.766_666_666_666_667).abs() < 1e-12);
+    assert!(r["definitions"]["weights"].as_str().unwrap().starts_with("frequency"));
+
+    // Type 6 is SPSS's: the quartiles of 1, 2, 3, 5, 9.
+    let r = s.execute("analysis.summaryStatistics", &json!({ "layer": "t", "field": "X", "quantileType": 6 })).unwrap();
+    assert_eq!((r["groups"][0]["statistics"][0]["q1"].as_f64(), r["groups"][0]["statistics"][0]["q3"].as_f64()), (Some(1.5), Some(7.0)));
+
+    // A CSV table: a row per group and field.
+    s.execute(
+        "analysis.summaryStatistics",
+        &json!({ "layer": "t", "fields": ["X", "Y"], "caseField": "REGIAO", "percentiles": [5, 95], "path": "stats.csv" }),
+    )
+    .unwrap();
+    let csv = s.disk.read_text(std::path::Path::new("stats.csv")).unwrap();
+    let mut lines = csv.lines();
+    let head = lines.next().unwrap();
+    assert!(head.starts_with("REGIAO,FIELD,N,CASES,MISSING,SUM,MEAN,SD") && head.ends_with("P5,P95"), "{head}");
+    assert_eq!(lines.count(), 4, "2 regions × 2 fields");
+
+    // Refused: a Text field (#4), an unknown one, a bad quantile type or percentile.
+    let err = s.execute("analysis.summaryStatistics", &json!({ "layer": "t", "fields": ["REGIAO"] })).unwrap_err().to_string();
+    assert!(err.contains("Text") && err.contains("numeric"), "{err}");
+    for bad in [
+        json!({ "layer": "t", "fields": ["NOPE"] }),
+        json!({ "layer": "t", "field": "X", "quantileType": 10 }),
+        json!({ "layer": "t", "field": "X", "percentiles": [120] }),
+        json!({ "layer": "t", "fields": [] }),
+    ] {
+        assert!(s.execute("analysis.summaryStatistics", &bad).is_err(), "{bad}");
+    }
+    // Nothing selected: nothing counted, and a sum of +0, never -0.
+    let r = s.execute("analysis.summaryStatistics", &json!({ "layer": "t", "field": "X", "selectedOnly": true })).unwrap();
+    let x = &r["groups"][0]["statistics"][0];
+    assert_eq!((x["n"].as_f64(), x["mean"].is_null()), (Some(0.0), true));
+    assert!(x["sum"].as_f64().unwrap().is_sign_positive());
 }
 
 /// #15: the basemap is a map property, saved with the project, and Export Map draws it from the

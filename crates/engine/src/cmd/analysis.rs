@@ -252,16 +252,197 @@ pub const SUMMARY_STATISTICS: CommandSpec = CommandSpec {
     label: "Summary Statistics",
     ribbon: "Analysis ▸ Tools",
     shortcut: None,
-    params: "{layer, field, selectedOnly?}",
+    params: "{layer, fields: [numeric fields] (or field), caseField?, weightField? (frequency weights), percentiles? [0–100], quantileType? (Hyndman–Fan 1–9, default 6 as MK Sigma and SPSS), selectedOnly?, path? (.csv)} — N, missing, sum, mean, SD, variance, SE of the mean, min, quartiles, max, range, IQR, skewness and kurtosis with their SEs, CV and percentiles of each field, for each value of the case field",
     kind: Kind::Query,
     enabled: has_layers,
     run: |s, p| {
         let layer = s.map.layer(&layer_key(p, "layer")?)?;
-        let rows: Option<Vec<usize>> = opt_bool(p, "selectedOnly")?.unwrap_or(false).then(|| layer.selection.iter().copied().collect());
-        let stats = mkaegis_analysis::summary_statistics(&layer.data, req_str(p, "field")?, rows.as_deref())?;
-        serde_json::to_value(stats).map_err(|e| Error::Internal(e.to_string()))
+        let fc = &layer.data;
+        let numeric = |name: &str, param: &str| -> Result<usize> {
+            let i = fc.field_index(name).ok_or_else(|| Error::NotFound(format!("field `{name}`")))?;
+            match fc.fields.get(i) {
+                Some(f) if f.kind.is_numeric() => Ok(i),
+                Some(f) => Err(Error::param(
+                    param,
+                    format!("`{}` is a {} field; Summary Statistics needs a numeric one (Short, Long or Double)", f.name, f.kind.name()),
+                )),
+                None => Err(Error::NotFound(format!("field `{name}`"))),
+            }
+        };
+        let names: Vec<String> = match (p.get("fields"), opt_str(p, "field")) {
+            (Some(Json::Array(a)), _) => {
+                a.iter().map(|v| v.as_str().map(str::to_string).ok_or_else(|| Error::param("fields", "field names"))).collect::<Result<_>>()?
+            }
+            (_, Some(f)) => vec![f.to_string()],
+            _ => return Err(Error::param("fields", "one or more numeric fields")),
+        };
+        if names.is_empty() || names.len() > MAX_STATISTICS_FIELDS {
+            return Err(Error::param("fields", format!("1 to {MAX_STATISTICS_FIELDS} numeric fields")));
+        }
+        let columns: Vec<(String, usize)> = names.iter().map(|n| numeric(n, "fields").map(|i| (n.clone(), i))).collect::<Result<_>>()?;
+        let case = opt_str(p, "caseField").map(|n| fc.field_index(n).ok_or_else(|| Error::NotFound(format!("field `{n}`")))).transpose()?;
+        let weight = opt_str(p, "weightField").map(|n| numeric(n, "weightField")).transpose()?;
+        let percentiles: Vec<f64> = match p.get("percentiles") {
+            None | Some(Json::Null) => Vec::new(),
+            Some(Json::Array(a)) if a.len() <= 99 => {
+                a.iter().map(|v| v.as_f64().ok_or_else(|| Error::param("percentiles", "numbers from 0 to 100"))).collect::<Result<_>>()?
+            }
+            Some(_) => return Err(Error::param("percentiles", "a list of at most 99 numbers from 0 to 100")),
+        };
+        let kind = match opt_f64(p, "quantileType")? {
+            None => mkaegis_stats::descriptive::DEFAULT_QUANTILE_TYPE,
+            Some(t) if t.fract() == 0.0 && (1.0..=9.0).contains(&t) => t as u8,
+            Some(_) => return Err(Error::param("quantileType", "Hyndman–Fan type 1 to 9")),
+        };
+        let rows: Vec<usize> =
+            if opt_bool(p, "selectedOnly")?.unwrap_or(false) { layer.selection.iter().copied().collect() } else { (0..fc.features.len()).collect() };
+        let groups = group_rows(fc, &rows, case)?;
+        let weight_of = |r: usize| weight.map_or(1.0, |w| fc.value(r, w).and_then(Value::as_f64).unwrap_or(f64::NAN));
+        let mut table = Vec::with_capacity(groups.len());
+        for (key, members) in &groups {
+            let mut stats = Vec::with_capacity(columns.len());
+            for (name, i) in &columns {
+                let d = mkaegis_stats::descriptive::describe(
+                    members.iter().map(|r| (fc.value(*r, *i).and_then(Value::as_f64), weight_of(*r))),
+                    &percentiles,
+                    kind,
+                )?;
+                stats.push((name.clone(), d));
+            }
+            table.push((key.clone(), stats));
+        }
+        let case_name = case.and_then(|i| fc.fields.get(i)).map(|f| f.name.clone());
+        let weight_name = weight.and_then(|i| fc.fields.get(i)).map(|f| f.name.clone());
+        let csv = opt_str(p, "path").map(|_| statistics_csv(case_name.as_deref(), &table, &percentiles));
+        let out = json!({
+            "message": format!("{} {} in {} {}", columns.len(), if columns.len() == 1 { "field" } else { "fields" }, table.len(), if table.len() == 1 { "group" } else { "groups" }),
+            "fields": names,
+            "caseField": case_name,
+            "weightField": weight_name,
+            "quantileType": kind,
+            "percentiles": percentiles,
+            "groups": table.iter().map(|(key, stats)| json!({
+                "case": key,
+                "statistics": stats.iter().map(|(name, d)| {
+                    let mut v = serde_json::to_value(d).unwrap_or(Json::Null);
+                    if let Some(o) = v.as_object_mut() {
+                        o.insert("field".into(), json!(name));
+                    }
+                    v
+                }).collect::<Vec<_>>(),
+            })).collect::<Vec<_>>(),
+            "definitions": {
+                "sd": "sample: divided by N − 1",
+                "weights": if weight_name.is_some() { "frequency: a case of weight w counts as w cases; a missing, zero or negative weight leaves it out" } else { "none" },
+                "quantiles": format!("Hyndman–Fan type {kind}"),
+                "skewness": "adjusted Fisher–Pearson G1",
+                "kurtosis": "excess, G2",
+                "cv": "SD / |mean|",
+            },
+        });
+        if let (Some(csv), Some(file)) = (csv, opt_str(p, "path")) {
+            s.disk.write(std::path::Path::new(file), csv.as_bytes())?;
+        }
+        Ok(out)
     },
 };
+
+/// The most fields one Summary Statistics run describes.
+const MAX_STATISTICS_FIELDS: usize = 200;
+/// The most groups a case field may make.
+const MAX_GROUPS: usize = 10_000;
+
+/// `rows` by the value of the `case` field (one group of all of them without one), the groups
+/// in the value's order with Null first.
+fn group_rows(fc: &FeatureClass, rows: &[usize], case: Option<usize>) -> Result<Vec<(Value, Vec<usize>)>> {
+    let Some(c) = case else { return Ok(vec![(Value::Null, rows.to_vec())]) };
+    let mut index: HashMap<String, usize> = HashMap::new();
+    let mut groups: Vec<(Value, Vec<usize>)> = Vec::new();
+    for &r in rows {
+        let v = fc.value(r, c).cloned().unwrap_or(Value::Null);
+        let key = format!("{v:?}");
+        let at = match index.get(&key) {
+            Some(at) => *at,
+            None => {
+                if groups.len() >= MAX_GROUPS {
+                    return Err(Error::param("caseField", format!("more than {MAX_GROUPS} distinct values")));
+                }
+                index.insert(key, groups.len());
+                groups.push((v, Vec::new()));
+                groups.len() - 1
+            }
+        };
+        if let Some(g) = groups.get_mut(at) {
+            g.1.push(r);
+        }
+    }
+    let rank = |v: &Value| match v {
+        Value::Null => 0,
+        Value::Bool(_) => 1,
+        Value::Int(_) | Value::Float(_) => 2,
+        Value::Text(_) => 3,
+    };
+    groups.sort_by(|(a, _), (b, _)| {
+        rank(a).cmp(&rank(b)).then_with(|| match (a.as_f64(), b.as_f64()) {
+            (Some(x), Some(y)) => x.total_cmp(&y),
+            _ => a.to_string().cmp(&b.to_string()),
+        })
+    });
+    Ok(groups)
+}
+
+/// The statistics as a CSV table: a row per group and field.
+fn statistics_csv(case: Option<&str>, table: &[(Value, Vec<(String, mkaegis_stats::descriptive::Descriptives)>)], percentiles: &[f64]) -> String {
+    use mkaegis_model::Field;
+    let mut fields: Vec<Field> = Vec::new();
+    if let Some(c) = case {
+        fields.push(Field::new(c, FieldType::Text));
+    }
+    fields.push(Field::new("FIELD", FieldType::Text));
+    let names = [
+        "N", "CASES", "MISSING", "SUM", "MEAN", "SD", "VARIANCE", "SE_MEAN", "MIN", "Q1", "MEDIAN", "Q3", "MAX", "RANGE", "IQR", "SKEWNESS",
+        "SE_SKEW", "KURTOSIS", "SE_KURT", "CV",
+    ];
+    fields.extend(names.iter().map(|n| Field::new(n, FieldType::Double)));
+    fields.extend(percentiles.iter().map(|p| Field::new(&format!("P{}", p.to_string().replace('.', "_")), FieldType::Double)));
+    let num = |x: Option<f64>| x.map_or(Value::Null, Value::Float);
+    let mut rows: Vec<Vec<Value>> = Vec::new();
+    for (key, stats) in table {
+        for (name, d) in stats {
+            let mut row = Vec::with_capacity(fields.len());
+            if case.is_some() {
+                row.push(if key.is_null() { Value::Null } else { Value::Text(key.to_string()) });
+            }
+            row.push(Value::Text(name.clone()));
+            row.extend([
+                Value::Float(d.n),
+                Value::Float(d.cases as f64),
+                Value::Float(d.missing as f64),
+                Value::Float(d.sum),
+                num(d.mean),
+                num(d.sd),
+                num(d.variance),
+                num(d.se_mean),
+                num(d.min),
+                num(d.q1),
+                num(d.median),
+                num(d.q3),
+                num(d.max),
+                num(d.range),
+                num(d.iqr),
+                num(d.skewness),
+                num(d.se_skewness),
+                num(d.kurtosis),
+                num(d.se_kurtosis),
+                num(d.cv),
+            ]);
+            row.extend(d.percentiles.iter().map(|q| num(q.value)));
+            rows.push(row);
+        }
+    }
+    let refs: Vec<&[Value]> = rows.iter().map(Vec::as_slice).collect();
+    mkaegis_csv::write(&fields, &refs)
+}
 
 pub const EXPORT_MAP: CommandSpec = CommandSpec {
     id: "share.exportMap",

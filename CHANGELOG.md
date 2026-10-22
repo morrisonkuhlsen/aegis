@@ -10,6 +10,25 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ## [Unreleased]
 
+### Added
+
+- **Summary Statistics, a real statistical summary** (#28, in part): several fields at once; N
+  (weighted), missing, sum, mean, standard deviation, variance, SE of the mean, minimum,
+  quartiles, median, maximum, range, IQR, skewness and kurtosis with their standard errors, CV,
+  and any percentiles; by a **case field** (a group per value), with **frequency weights**, and
+  quantiles by any of Hyndman & Fan's nine definitions (type 6 by default, as MK Sigma and SPSS,
+  so the sibling apps agree; type 7 is R's and NumPy's). The result says which definitions it used, and the form exports it
+  as a CSV table. Skewness G1 and excess kurtosis G2 and their SEs follow SPSS; the values are
+  tested against NumPy and SciPy.
+
+### Changed
+
+- **`analysis.summaryStatistics` returns a table** (#28): `{fields, caseField, weightField,
+  quantileType, percentiles, groups: [{case, statistics: [{field, n, missing, sum, mean, sd,
+  …}]}], definitions}`, where it returned one field's `count`, `nulls`, `sum`, `mean`, `min`,
+  `max` and `std`. `field` still works for one field; `std` is now `sd` and `count` is `n`. The
+  numbers are the same.
+
 ## [0.4.0] - 2026-10-22
 
 ### Added

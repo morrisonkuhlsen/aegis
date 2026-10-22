@@ -166,7 +166,7 @@ fn title_bar(app: &mut MapApp, ui: &mut Ui) {
                 && let Some(l) = app.active_layer()
             {
                 let (id, name) = (l.id, format!("{}.geojson", l.name));
-                app.save_to("Export Features", "layer.export", &["geojson", "shp"], &name, json!({ "layer": id }));
+                app.save_to("Export Features", "layer.export", &["geojson", "shp", "csv"], &name, json!({ "layer": id }));
             }
         });
         let dark = ui.ctx().global_style().visuals.dark_mode;
@@ -353,6 +353,17 @@ fn analysis_tab(app: &mut MapApp, ui: &mut Ui) {
             }
         }
     });
+    // Tables from statistics packages and spreadsheets: joined to a layer, or placed as points.
+    group(ui, "Tables", |ui| {
+        for (icon, label, tool, enabled) in
+            [(Icon::Table, "Join Field", GpTool::JoinField, layers), (Icon::AddData, "XY Table To Point", GpTool::XyTableToPoint, true)]
+        {
+            if button(ui, icon, label, enabled, app.gp.tool == Some(tool) && app.pane == Some(Pane::Geoprocessing), tool.description()) {
+                app.gp.open(tool, active_id(app));
+                app.pane = Some(Pane::Geoprocessing);
+            }
+        }
+    });
 }
 
 /// The Statistics tab: spatial weights, then the statistics that use them.
@@ -494,7 +505,7 @@ fn share_tab(app: &mut MapApp, ui: &mut Ui) {
             && let Some(l) = app.active_layer()
         {
             let (id, name) = (l.id, format!("{}.geojson", l.name));
-            app.save_to("Export Features", "layer.export", &["geojson", "shp"], &name, json!({ "layer": id }));
+            app.save_to("Export Features", "layer.export", &["geojson", "shp", "csv"], &name, json!({ "layer": id }));
         }
         if button(ui, Icon::Save, "Save Project", true, false, "Save the project (Ctrl+S)") {
             app.save_project(false);

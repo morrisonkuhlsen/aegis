@@ -1,0 +1,13 @@
+[package]
+name = "mkaegis-csv"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "MK aeGIS L2: delimited text tables (CSV, TSV) in and out, with type inference"
+
+[lints]
+workspace = true
+
+[dependencies]
+mkaegis-core = { workspace = true }
+mkaegis-model = { workspace = true }

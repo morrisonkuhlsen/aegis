@@ -22,14 +22,15 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
-/// Each internal crate's layer: L0 `core`/`geom`/`crs` → L1 `model` → L2 `geojson`/`shp`/`render`
+/// Each internal crate's layer: L0 `core`/`geom`/`crs` → L1 `model` → L2 `geojson`/`csv`/`shp`/`render`
 /// → L3 `analysis` → L4 `engine` → L5 `ui-egui`/`mcp` → L6 `apps/*`.
-const LAYERS: [(&str, u8); 14] = [
+const LAYERS: [(&str, u8); 15] = [
     ("mkaegis-core", 0),
     ("mkaegis-geom", 0),
     ("mkaegis-crs", 0),
     ("mkaegis-model", 1),
     ("mkaegis-geojson", 2),
+    ("mkaegis-csv", 2),
     ("mkaegis-shp", 2),
     ("mkaegis-render", 2),
     ("mkaegis-analysis", 3),

@@ -16,6 +16,7 @@ mkaegis-geom = { path = "crates/geom" }
 mkaegis-crs = { path = "crates/crs" }
 mkaegis-model = { path = "crates/model" }
 mkaegis-geojson = { path = "crates/geojson" }
+mkaegis-csv = { path = "crates/csv" }
 mkaegis-shp = { path = "crates/shp" }
 mkaegis-render = { path = "crates/render" }
 mkaegis-analysis = { path = "crates/analysis" }

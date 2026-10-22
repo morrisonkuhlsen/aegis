@@ -28,7 +28,7 @@ None open: the six known ones were fixed in 0.1.2 (see [`CHANGELOG.md`](../CHANG
 |-------|-----------------------------------------------------------------------------------------------------|----------|
 | #26   | Classification, the rest: diverging ramps on a chosen centre, rate legends                          | medium   |
 | #25   | Linked views, the rest: LOWESS, scatter matrix, parallel coordinates, small multiples, chart export | medium   |
-| #27   | CSV import with types; join by key with a join report                                               | high     |
+| #27   | Tables, the rest: standalone tables in the map, Add Join (temporary), GeoParquet                    | medium   |
 | #28   | Full descriptive statistics                                                                         | high     |
 | #29   | Rates: excess risk, Empirical Bayes and spatial EB smoothing                                        | medium   |
 | #30   | Spatial regression: OLS diagnostics, lag and error models                                           | medium   |
@@ -56,3 +56,4 @@ interop, the web app, project hygiene) are ranked by their `priority:` label on
 | 2026-10-21 | #24 removed                               |
 | 2026-10-21 | #26 narrowed to what remains              |
 | 2026-10-21 | #25 narrowed to what remains              |
+| 2026-10-21 | #27 narrowed to what remains              |

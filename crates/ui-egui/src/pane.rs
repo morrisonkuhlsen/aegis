@@ -28,10 +28,12 @@ pub enum Tool {
     SummaryStatistics,
     SpatialWeights,
     SpatialAutocorrelation,
+    JoinField,
+    XyTableToPoint,
 }
 
 impl Tool {
-    const ALL: [Tool; 8] = [
+    const ALL: [Tool; 10] = [
         Tool::Buffer,
         Tool::Project,
         Tool::CalculateGeometry,
@@ -40,6 +42,8 @@ impl Tool {
         Tool::SummaryStatistics,
         Tool::SpatialWeights,
         Tool::SpatialAutocorrelation,
+        Tool::JoinField,
+        Tool::XyTableToPoint,
     ];
 
     pub fn name(self) -> &'static str {
@@ -52,6 +56,8 @@ impl Tool {
             Tool::SummaryStatistics => "Summary Statistics (Analysis Tools)",
             Tool::SpatialWeights => "Spatial Weights (Spatial Statistics Tools)",
             Tool::SpatialAutocorrelation => "Spatial Autocorrelation (Spatial Statistics Tools)",
+            Tool::JoinField => "Join Field (Data Management Tools)",
+            Tool::XyTableToPoint => "XY Table To Point (Data Management Tools)",
         }
     }
 
@@ -64,6 +70,8 @@ impl Tool {
             Tool::SelectByLocation => "Selects features by their spatial relation to another layer's.",
             Tool::SummaryStatistics => "Count, sum, mean, minimum, maximum and standard deviation of a field.",
             Tool::SpatialWeights => "Who neighbours whom: contiguity, nearest neighbours, distance bands or kernels, for the spatial statistics.",
+            Tool::JoinField => "Copies a CSV table's columns onto a layer by a common key, with a report of what matched.",
+            Tool::XyTableToPoint => "Makes a point layer from a CSV table's X and Y columns (or a WKT column).",
             Tool::SpatialAutocorrelation => {
                 "Is a field clustered, dispersed or random in space, and where? Global Moran's I, Geary's C, General G; local Moran's I (LISA) and Gi* hot spots, mapped."
             }
@@ -100,6 +108,14 @@ pub struct GpState {
     seed: String,
     alpha: String,
     correction: &'static str,
+    /// Join Field and XY Table To Point: the table's path, its columns (read when the path
+    /// changes), and the key, X and Y columns chosen.
+    path: String,
+    columns: Vec<String>,
+    columns_of: String,
+    join_key: String,
+    x: String,
+    y: String,
     selected_only: bool,
     result: Option<Json>,
 }
@@ -313,6 +329,57 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
                 }),
             )
         }
+        Tool::JoinField | Tool::XyTableToPoint => {
+            if tool == Tool::JoinField {
+                layer_combo(ui, app, "Input Table (layer)", "gp-in", &mut g.layer, |_| true);
+                field_combo(ui, app, g.layer, "Input Join Field", "gp-key", &mut g.field, false);
+            }
+            ui.label(if tool == Tool::JoinField { "Join Table (CSV)" } else { "XY Table (CSV)" });
+            // Right to left: the button first, then the path takes exactly what is left. Sizing
+            // the path by a guess at the button's width overflowed the row, and the pane, which
+            // fits its content, widened a little on every frame.
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Browse…").clicked()
+                    && let Some(pick) = &app.services.open_file
+                    && let Some(p) = pick("Table", &["csv", "tsv", "txt"])
+                {
+                    g.path = p.display().to_string();
+                }
+                ui.add(egui::TextEdit::singleline(&mut g.path).hint_text("path to a .csv file").desired_width(ui.available_width()));
+            });
+            if g.columns_of != g.path {
+                g.columns_of = g.path.clone();
+                g.columns = mkaegis_engine::io::read_table(std::path::Path::new(g.path.trim()), &Default::default())
+                    .map(|t| t.fields.into_iter().map(|f| f.name).collect())
+                    .unwrap_or_default();
+            }
+            let pick = |ui: &mut Ui, label: &str, id: &str, value: &mut String, columns: &[String], guess: &[&str]| {
+                if !columns.contains(value) {
+                    *value =
+                        columns.iter().find(|c| guess.iter().any(|g| c.eq_ignore_ascii_case(g))).or(columns.first()).cloned().unwrap_or_default();
+                }
+                ui.label(label);
+                egui::ComboBox::from_id_salt(id).width(ui.available_width()).selected_text(value.as_str()).show_ui(ui, |ui| {
+                    for c in columns {
+                        ui.selectable_value(value, c.clone(), c);
+                    }
+                });
+            };
+            if !g.path.trim().is_empty() && g.columns.is_empty() {
+                ui.label(egui::RichText::new("The table couldn't be read.").size(11.0).color(t.muted));
+            }
+            if tool == Tool::JoinField {
+                let field = g.field.clone();
+                pick(ui, "Join Table Field", "gp-jkey", &mut g.join_key, &g.columns, &[field.as_str()]);
+                ("management.joinField", json!({ "layer": g.layer, "field": g.field, "path": g.path.trim(), "joinField": g.join_key }))
+            } else {
+                pick(ui, "X Field (longitude or easting)", "gp-x", &mut g.x, &g.columns, &["x", "lon", "long", "longitude", "lng"]);
+                pick(ui, "Y Field (latitude or northing)", "gp-y", &mut g.y, &g.columns, &["y", "lat", "latitude"]);
+                ui.label("Coordinate System (EPSG)");
+                ui.add(egui::TextEdit::singleline(&mut g.epsg).desired_width(f32::INFINITY));
+                ("management.xyTableToPoint", json!({ "path": g.path.trim(), "x": g.x, "y": g.y, "epsg": g.epsg.trim() }))
+            }
+        }
         Tool::SpatialAutocorrelation => {
             let names: Vec<(String, u32)> = app.session.map.weights.iter().map(|w| (w.name.clone(), w.layer)).collect();
             if !names.iter().any(|(n, _)| *n == g.weights) {
@@ -414,6 +481,33 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
                 ui.end_row();
             }
         });
+    }
+    if let Some(r) = &g.result
+        && tool == Tool::JoinField
+        && r.get("matched").is_some()
+    {
+        ui.separator();
+        egui::Grid::new("join").striped(true).num_columns(2).show(ui, |ui| {
+            for (label, key) in [
+                ("Features matched", "matched"),
+                ("Features unmatched", "unmatched"),
+                ("Table rows unused", "unused"),
+                ("Duplicate keys in the table", "duplicate_keys"),
+            ] {
+                ui.label(egui::RichText::new(label).strong());
+                ui.label(r.get(key).map(Json::to_string).unwrap_or_default());
+                ui.end_row();
+            }
+        });
+        let list = |key: &str| {
+            r.get(key).and_then(Json::as_array).map(|a| a.iter().filter_map(Json::as_str).collect::<Vec<_>>().join(", ")).unwrap_or_default()
+        };
+        for (label, key) in [("Unmatched keys, e.g.", "unmatched_examples"), ("Unused keys, e.g.", "unused_examples")] {
+            let text = list(key);
+            if !text.is_empty() {
+                ui.label(egui::RichText::new(format!("{label} {text}")).size(11.0).color(t.muted));
+            }
+        }
     }
     if let Some(r) = &g.result
         && tool == Tool::SpatialAutocorrelation

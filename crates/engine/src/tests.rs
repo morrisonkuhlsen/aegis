@@ -547,6 +547,60 @@ fn chart_statistics_are_queries() {
     assert!(s.execute("stats.histogram", &json!({ "layer": "Cidades", "field": "POP", "bins": "0" })).is_err());
 }
 
+/// #27: a CSV table joins by key with an exact report; codes keep their zeros; a table of
+/// coordinates becomes points.
+#[test]
+fn csv_tables_join_and_become_points() {
+    let dir = scratch("csv");
+    let mut s = Session::sample();
+    let table = dir.join("indicadores.csv");
+    // Rochedo twice (a duplicate key), Nowhere (unused), every other city missing.
+    std::fs::write(&table, "CIDADE;COD;TAXA\nRochedo;0012;1,5\nRochedo;0013;9,9\nMirante;0021;2,25\nNowhere;0099;3\n").unwrap();
+    let r = s
+        .execute("management.joinField", &json!({ "layer": "Cidades", "field": "NOME", "path": table.display().to_string(), "joinField": "CIDADE" }))
+        .unwrap();
+    assert_eq!(
+        (r["matched"].clone(), r["unmatched"].clone(), r["unused"].clone(), r["duplicate_keys"].clone()),
+        (json!(2), json!(21), json!(1), json!(1))
+    );
+    assert_eq!(r["fields"], json!(["COD", "TAXA"]));
+    assert!(r["warnings"][0].as_str().unwrap().contains("first row was used"));
+    let layer = s.map.layer("Cidades").unwrap();
+    let (nome, cod, taxa) =
+        (layer.data.field_index("NOME").unwrap(), layer.data.field_index("COD").unwrap(), layer.data.field_index("TAXA").unwrap());
+    let rochedo = layer.data.features.iter().find(|f| f.values[nome] == mkaegis_core::Value::Text("Rochedo".into())).unwrap();
+    assert_eq!(
+        (rochedo.values[cod].clone(), rochedo.values[taxa].clone()),
+        (mkaegis_core::Value::Text("0012".into()), mkaegis_core::Value::Float(1.5))
+    );
+    // The code survives an export to CSV and back.
+    let out = dir.join("cidades.csv");
+    s.execute("layer.export", &json!({ "layer": "Cidades", "path": out.display().to_string() })).unwrap();
+    let back = crate::io::read_table(&out, &Default::default()).unwrap();
+    let c = back.fields.iter().position(|f| f.name == "COD").unwrap();
+    assert!(back.rows.iter().any(|r| r[c] == mkaegis_core::Value::Text("0012".into())));
+    // Join from another layer, then refusals.
+    assert!(s.execute("management.joinField", &json!({ "layer": "Cidades", "field": "NOME", "joinField": "CIDADE" })).is_err());
+    assert!(
+        s.execute("management.joinField", &json!({ "layer": "Cidades", "field": "NOME", "path": table.display().to_string(), "joinField": "NOPE" }))
+            .is_err()
+    );
+
+    let xy = dir.join("pontos.csv");
+    std::fs::write(&xy, "ID,LON,LAT\n001,-46.6,-23.5\n002,-43.2,-22.9\n003,,\n004,200,95\n").unwrap();
+    let r = s.execute("management.xyTableToPoint", &json!({ "path": xy.display().to_string(), "x": "LON", "y": "LAT" })).unwrap();
+    let layer = s.map.layer(&r["layer"].to_string()).unwrap();
+    assert_eq!(layer.data.features.len(), 2);
+    assert_eq!(layer.data.features[0].values[0], mkaegis_core::Value::Text("001".into()));
+    assert!(r["warnings"].to_string().contains("2 rows"), "{}", r["warnings"]);
+    let wkt = dir.join("wkt.csv");
+    std::fs::write(&wkt, "NAME,SHAPE\na,\"POLYGON ((0 0, 1 0, 1 1, 0 0))\"\nb,nonsense\n").unwrap();
+    let r = s.execute("management.xyTableToPoint", &json!({ "path": wkt.display().to_string(), "wkt": "SHAPE" })).unwrap();
+    assert_eq!(s.map.layer(&r["layer"].to_string()).unwrap().data.geometry_type, mkaegis_geom::GeometryType::Polygon);
+    assert!(s.execute("management.xyTableToPoint", &json!({ "path": xy.display().to_string(), "x": "LON" })).is_err());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn data_and_projects_round_trip_through_files() {
     let dir = scratch("files");

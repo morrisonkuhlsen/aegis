@@ -89,6 +89,8 @@ pub static COMMANDS: &[CommandSpec] = &[
     analysis::PROJECT,
     analysis::DEFINE_PROJECTION,
     analysis::CALCULATE_GEOMETRY,
+    analysis::JOIN_FIELD,
+    analysis::XY_TABLE_TO_POINT,
     analysis::SUMMARY_STATISTICS,
     analysis::EXPORT_MAP,
     stats::WEIGHTS,

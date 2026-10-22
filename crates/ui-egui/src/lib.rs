@@ -216,6 +216,8 @@ impl MapApp {
             "management.project" => gp(self, T::Project),
             "management.calculateGeometry" => gp(self, T::CalculateGeometry),
             "analysis.summaryStatistics" => gp(self, T::SummaryStatistics),
+            "management.joinField" => gp(self, T::JoinField),
+            "management.xyTableToPoint" => gp(self, T::XyTableToPoint),
             "stats.globalMoran" | "stats.gearyC" | "stats.generalG" | "stats.localMoran" | "stats.hotSpots" => {
                 gp(self, T::SpatialAutocorrelation);
                 self.gp.statistic = match id {
@@ -255,7 +257,7 @@ impl MapApp {
             "layer.export" => {
                 if let Some(l) = self.active_layer() {
                     let (layer, name) = (l.id, format!("{}.geojson", l.name));
-                    self.save_to("Export Features", "layer.export", &["geojson", "shp"], &name, json!({ "layer": layer }));
+                    self.save_to("Export Features", "layer.export", &["geojson", "shp", "csv"], &name, json!({ "layer": layer }));
                 }
             }
             "map.describe" | "feature.setValue" | "map.setExtent" => self.show_table = true,
@@ -1008,6 +1010,22 @@ mod tests {
         assert!(!expected.is_empty());
         assert_eq!(layer.selection.iter().copied().collect::<Vec<_>>(), expected);
         assert_eq!(harness.state().session.history().last().map(|h| h.command.as_str()), Some("feature.select"));
+    }
+
+    /// The Join Field form kept widening the pane, frame after frame: its path row overflowed.
+    /// Every tool's form must leave the pane as wide as it was.
+    #[test]
+    fn tool_forms_keep_the_pane_width() {
+        let mut harness = harness(MapApp::new(Session::sample()));
+        for tool in [GpTool::JoinField, GpTool::XyTableToPoint, GpTool::SpatialAutocorrelation, GpTool::SpatialWeights, GpTool::Buffer] {
+            harness.state_mut().gp.open(tool, None);
+            harness.state_mut().pane = Some(Pane::Geoprocessing);
+            harness.run_steps(3);
+            let before = harness.get_by_label("Run").rect();
+            harness.run_steps(40);
+            let after = harness.get_by_label("Run").rect();
+            assert_eq!(before, after, "{tool:?}: the pane moved");
+        }
     }
 
     #[test]

@@ -187,6 +187,64 @@ impl Canvas {
         }
     }
 
+    /// Draws the `src` part ([x, y, w, h], image pixels) of an RGBA image `width` pixels wide over
+    /// `dest` ([x0, y0, x1, y1], canvas pixels), sampled bilinearly and blended over: a pixel is
+    /// drawn when its centre is inside `dest`, so tiles side by side neither gap nor overlap.
+    pub fn image(&mut self, rgba: &[u8], width: usize, src: [f32; 4], dest: [f32; 4]) {
+        let height = rgba.len() / 4 / width.max(1);
+        let [x0, y0, x1, y1] = dest;
+        if width == 0 || height == 0 || !dest.iter().chain(src.iter()).all(|v| v.is_finite()) || x1 - x0 < 1e-3 || y1 - y0 < 1e-3 {
+            return;
+        }
+        let span = |lo: f32, hi: f32, n: usize| ((lo - 0.5).ceil().max(0.0) as usize, ((hi - 0.5).floor() + 1.0).clamp(0.0, n as f32) as usize);
+        let ((xa, xb), (ya, yb)) = (span(x0, x1, self.width), span(y0, y1, self.height));
+        let texel = |x: usize, y: usize| -> [f32; 4] {
+            let i = (y.min(height - 1) * width + x.min(width - 1)) * 4;
+            rgba.get(i..i + 4).map_or([0.0; 4], |p| [f32::from(p[0]), f32::from(p[1]), f32::from(p[2]), f32::from(p[3])])
+        };
+        // Samples stay inside `src`, so a stretched part never bleeds its neighbour's pixels in.
+        let (u_lo, u_hi) = (src[0], (src[0] + src[2] - 1.0).max(src[0]));
+        let (v_lo, v_hi) = (src[1], (src[1] + src[3] - 1.0).max(src[1]));
+        for y in ya..yb {
+            let v = (src[1] + (y as f32 + 0.5 - y0) / (y1 - y0) * src[3] - 0.5).clamp(v_lo, v_hi);
+            for x in xa..xb {
+                let u = (src[0] + (x as f32 + 0.5 - x0) / (x1 - x0) * src[2] - 0.5).clamp(u_lo, u_hi);
+                let (ui, vi) = (u.floor() as usize, v.floor() as usize);
+                let (fu, fv) = (u - u.floor(), v - v.floor());
+                let (a, b, c, d) = (texel(ui, vi), texel(ui + 1, vi), texel(ui, vi + 1), texel(ui + 1, vi + 1));
+                let mix = |k: usize| (a[k] * (1.0 - fu) + b[k] * fu) * (1.0 - fv) + (c[k] * (1.0 - fu) + d[k] * fu) * fv;
+                let px = Color { r: mix(0).round() as u8, g: mix(1).round() as u8, b: mix(2).round() as u8, a: mix(3).round() as u8 };
+                self.blend(x, y, px, 1.0);
+            }
+        }
+    }
+
+    /// Fills the pixels from (x0, y0) up to, not including, (x1, y1) with `c`, blended over.
+    pub fn fill_rect(&mut self, x0: usize, y0: usize, x1: usize, y1: usize, c: Color) {
+        for y in y0..y1.min(self.height) {
+            for x in x0..x1.min(self.width) {
+                self.blend(x, y, c, 1.0);
+            }
+        }
+    }
+
+    /// Writes `text` in the built-in 5×7 font (`crate::font`), each font pixel `scale` pixels,
+    /// its top left at (x, y).
+    pub fn text(&mut self, text: &str, x: usize, y: usize, scale: usize, c: Color) {
+        let scale = scale.max(1);
+        for (i, ch) in text.chars().enumerate() {
+            let left = x.saturating_add(i.saturating_mul(crate::font::ADVANCE * scale));
+            for (row, bits) in crate::font::glyph(ch).iter().enumerate() {
+                for col in 0..5 {
+                    if bits & (0b10000 >> col) != 0 {
+                        let (px, py) = (left + col * scale, y.saturating_add(row * scale));
+                        self.fill_rect(px, py, px + scale, py + scale, c);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn png(&self) -> Result<Vec<u8>> {
         let mut out = Vec::new();
         {

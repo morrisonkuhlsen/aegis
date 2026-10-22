@@ -37,6 +37,8 @@ log = "0.4"
 png = "0.18"
 # XML for KML (OGC 07-147r2), no default features: UTF-8 only, no serde. MIT.
 quick-xml = { version = "0.41", default-features = false }
+# HTTP for basemap tiles on the desktop (rustls TLS with ring, gzip). MIT OR Apache-2.0.
+ureq = "3"
 # JPEG decoding for the splash artwork. MIT/Apache/Zlib, pure Rust, builds for wasm.
 zune-jpeg = "0.5"
 zune-core = "0.5"

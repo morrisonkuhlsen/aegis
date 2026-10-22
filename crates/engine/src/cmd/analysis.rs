@@ -277,8 +277,13 @@ pub const EXPORT_MAP: CommandSpec = CommandSpec {
             let v = super::opt_f64(p, k)?.unwrap_or(d);
             if (1.0..=16_384.0).contains(&v) { Ok(v as u32) } else { Err(Error::param(k, "1 to 16384 pixels")) }
         };
-        let png = mkaegis_render::export_png(&s.map, dim("width", 1600.0)?, dim("height", 1000.0)?, s.map.extent)?;
+        let png = mkaegis_render::export_png(&s.map, dim("width", 1600.0)?, dim("height", 1000.0)?, s.map.extent, Some(&s.tiles))?;
+        // Commands never fetch: the basemap is what the map's views have fetched.
+        let mut warnings = Vec::new();
+        if s.map.basemap.is_some() && s.map.crs != mkaegis_crs::Crs::WEB_MERCATOR {
+            warnings.push("the basemap is drawn in Web Mercator maps only".to_string());
+        }
         s.disk.write(&file, &png)?;
-        Ok(json!({ "message": format!("map exported to {}", file.display()) }))
+        Ok(json!({ "message": format!("map exported to {}", file.display()), "warnings": warnings }))
     },
 };

@@ -629,6 +629,40 @@ fn data_and_projects_round_trip_through_files() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// #15: the basemap is a map property, saved with the project, and Export Map draws it from the
+/// tiles fetched so far, with its attribution; commands never fetch.
+#[test]
+fn the_basemap_is_saved_and_exported_from_fetched_tiles() {
+    use mkaegis_render::basemap::{self, TileKey};
+    let mut s = Session::sample();
+    s.disk = Disk::Memory(Default::default());
+    assert!(s.execute("map.setBasemap", &json!({ "basemap": "google" })).is_err());
+    s.execute("map.setBasemap", &json!({ "basemap": "openStreetMap" })).unwrap();
+    assert_eq!(s.map.basemap, Some(mkaegis_model::Basemap::OpenStreetMap));
+    assert_eq!(s.execute("map.describe", &json!({})).unwrap()["basemap"], "openStreetMap");
+    s.execute("project.saveAs", &json!({ "path": "map.aegis" })).unwrap();
+    let mut t = Session { disk: s.disk.clone(), ..Session::default() };
+    t.execute("project.open", &json!({ "path": "map.aegis" })).unwrap();
+    assert_eq!(t.map.basemap, Some(mkaegis_model::Basemap::OpenStreetMap));
+
+    // A grey world tile at zoom 0 stands in for every tile the export needs.
+    let grey: Vec<u8> = (0..256 * 256).flat_map(|_| [120, 120, 120, 255]).collect();
+    s.tiles.insert(TileKey { basemap: mkaegis_model::Basemap::OpenStreetMap, z: 0, x: 0, y: 0 }, grey);
+    s.execute("share.exportMap", &json!({ "path": "map.png", "width": 400, "height": 300 })).unwrap();
+    let png = s.disk.read(std::path::Path::new("map.png")).unwrap();
+    let mut reader = png::Decoder::new(std::io::Cursor::new(png)).read_info().unwrap();
+    let mut px = vec![0; reader.output_buffer_size().unwrap()];
+    reader.next_frame(&mut px).unwrap();
+    let at = |x: usize, y: usize| px[(y * 400 + x) * 4..(y * 400 + x) * 4 + 3].to_vec();
+    assert_eq!(at(5, 5), [120, 120, 120], "the basemap, not the white background");
+    // The attribution band: light, with dark text, in the bottom-right corner.
+    let band: Vec<Vec<u8>> = (380..400).flat_map(|x| (290..300).map(move |y| (x, y))).map(|(x, y)| at(x, y)).collect();
+    assert!(band.iter().any(|p| p[0] < 100) && band.iter().any(|p| p[0] > 200), "text on a light band");
+    assert!(basemap::source(mkaegis_model::Basemap::OpenStreetMap).export_attribution.contains("OpenStreetMap"));
+    s.execute("map.setBasemap", &json!({ "basemap": "none" })).unwrap();
+    assert_eq!(s.map.basemap, None);
+}
+
 #[test]
 fn kml_mixing_points_and_polygons_adds_a_layer_for_each() {
     let mut s = Session::sample();

@@ -6,6 +6,8 @@
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+mod tiles;
+
 use std::io::Write as _;
 use std::path::Path;
 
@@ -79,6 +81,7 @@ fn services() -> Services {
                 let _ = std::fs::write(file, text.join("\n"));
             }
         })),
+        fetch: Some(Box::new(tiles::fetcher(tiles::cache_dir()))),
         save_language: Some(Box::new(|language: Language| {
             if let Some(file) = settings_file("language.txt") {
                 let _ = file.parent().map(std::fs::create_dir_all);

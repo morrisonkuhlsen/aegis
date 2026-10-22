@@ -3,6 +3,7 @@
 use mkaegis_core::{Error, Result};
 use mkaegis_crs::Crs;
 use mkaegis_geom::{Coord, Envelope};
+use mkaegis_model::Basemap;
 use mkaegis_model::query::Query;
 use serde_json::{Value as Json, json};
 
@@ -268,6 +269,30 @@ pub const SET_CRS: CommandSpec = CommandSpec {
     },
 };
 
+pub const SET_BASEMAP: CommandSpec = CommandSpec {
+    id: "map.setBasemap",
+    label: "Basemap",
+    ribbon: "Map ▸ Layer",
+    shortcut: None,
+    params: "{basemap: openStreetMap|satellite|none} — a web basemap under the layers, its tiles fetched as the map is viewed; drawn in Web Mercator maps",
+    kind: Kind::Edit,
+    enabled: always,
+    run: |s, p| {
+        let id = req_str(p, "basemap")?;
+        let basemap = match id {
+            "none" => None,
+            other => Some(Basemap::from_id(other).ok_or_else(|| Error::param("basemap", "openStreetMap, satellite or none"))?),
+        };
+        s.map.basemap = basemap;
+        let mut warnings = Vec::new();
+        if basemap.is_some() && s.map.crs != Crs::WEB_MERCATOR {
+            warnings.push(format!("basemaps are drawn in Web Mercator maps; this map is in {}", s.map.crs.name()));
+        }
+        let message = basemap.map_or_else(|| "no basemap".to_string(), |b| format!("basemap {}", b.id()));
+        Ok(json!({ "message": message, "warnings": warnings }))
+    },
+};
+
 pub const DESCRIBE: CommandSpec = CommandSpec {
     id: "map.describe",
     label: "Describe Map",
@@ -293,6 +318,7 @@ pub const DESCRIBE: CommandSpec = CommandSpec {
         Ok(json!({
             "name": s.map.name, "crs": { "epsg": s.map.crs.epsg(), "name": s.map.crs.name() },
             "extent": s.map.extent.map(|e| vec![e.min_x, e.min_y, e.max_x, e.max_y]),
+            "basemap": s.map.basemap.map(Basemap::id),
             "layers": layers, "modified": s.modified,
         }))
     },

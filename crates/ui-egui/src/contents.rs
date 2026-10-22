@@ -3,7 +3,7 @@
 
 use egui::{Sense, Ui, vec2};
 use mkaegis_geom::GeometryType;
-use mkaegis_model::{Layer, Symbol};
+use mkaegis_model::{Basemap, Layer, Symbol};
 use serde_json::json;
 
 use crate::i18n::tr;
@@ -12,6 +12,30 @@ use crate::{Dialog, MapApp, Pane};
 
 /// The most features a layer may have for Contents to count its classes every frame.
 const MAX_COUNTED: usize = 200_000;
+
+/// The basemap under the layers, at the bottom of the drawing order (#15).
+fn basemap_row(app: &mut MapApp, ui: &mut Ui) {
+    let current = app.session.map.basemap;
+    let name = |b: Option<Basemap>| match b {
+        None => tr("None"),
+        Some(Basemap::OpenStreetMap) => tr("OpenStreetMap"),
+        Some(Basemap::Satellite) => tr("Satellite (NASA, c. 2000)"),
+    };
+    ui.indent("basemap", |ui| {
+        ui.horizontal(|ui| {
+            ui.label(tr("Basemap"));
+            let mut chosen = current;
+            egui::ComboBox::from_id_salt("basemap").selected_text(name(current)).show_ui(ui, |ui| {
+                for b in [None, Some(Basemap::OpenStreetMap), Some(Basemap::Satellite)] {
+                    ui.selectable_value(&mut chosen, b, name(b));
+                }
+            });
+            if chosen != current {
+                app.run("map.setBasemap", json!({ "basemap": chosen.map_or("none", Basemap::id) }));
+            }
+        });
+    });
+}
 
 /// A symbol swatch: a square patch, a line or a marker, by geometry type.
 fn swatch(ui: &mut Ui, kind: GeometryType, s: &Symbol) {
@@ -168,6 +192,7 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
                 row(app, ui, i, n.saturating_sub(1));
             }
         });
+        basemap_row(app, ui);
         if n == 0 {
             ui.add_space(12.0);
             ui.label(egui::RichText::new(tr("No layers yet.")).color(t.muted));

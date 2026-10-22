@@ -117,6 +117,9 @@ what you save downloads. The zip is the same site, for your own web server.
 **Em português:** View ▸ Language switches the interface to Português (Brasil), numbers
 included; the web app starts in your browser's language.
 
+**Basemaps:** Contents › Basemap puts OpenStreetMap or open satellite imagery (NASA GIBS) under
+your layers; tiles are fetched only while it is on.
+
 The builds aren't code-signed yet, so the first launch asks for confirmation:
 
 - **Windows:** unzip and run `mkaegis.exe`. If SmartScreen says *Windows protected your PC*, choose

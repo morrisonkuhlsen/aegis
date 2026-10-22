@@ -215,7 +215,8 @@ fn render(app: &MapApp, p: &Json) -> Result<Json, String> {
     let path = p.get("path").and_then(Json::as_str).ok_or("path required")?;
     let dim = |k: &str, d: u64| p.get(k).and_then(Json::as_u64).unwrap_or(d).clamp(1, 8192) as u32;
     let extent = app.view.viewport().map(|v| v.extent());
-    let png = mkaegis_render::export_png(&app.session.map, dim("width", 1280), dim("height", 800), extent).map_err(|e| e.to_string())?;
+    let png = mkaegis_render::export_png(&app.session.map, dim("width", 1280), dim("height", 800), extent, Some(&app.session.tiles))
+        .map_err(|e| e.to_string())?;
     std::fs::write(path, png).map_err(|e| e.to_string())?;
     Ok(json!({ "path": path }))
 }

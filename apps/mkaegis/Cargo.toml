@@ -15,5 +15,11 @@ mkaegis-ui-egui = { workspace = true }
 egui = { workspace = true }
 eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11"] }
 rfd = { workspace = true }
+ureq = { workspace = true }
 log = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+mkaegis-core = { workspace = true }
+mkaegis-model = { workspace = true }
+mkaegis-render = { workspace = true }

@@ -76,7 +76,13 @@ pub struct Services {
     pub download: Option<Box<dyn Fn(&str, &[u8])>>,
     /// Where picked and dropped files arrive.
     pub inbox: Option<Inbox>,
+    /// Fetch a web address (a basemap tile) without waiting, then call back with its bytes or why
+    /// not, from any thread. Without it the basemap isn't drawn.
+    pub fetch: Option<Box<dyn Fn(String, FetchDone)>>,
 }
+
+/// What a fetch calls when it is done: the body, or why there is none.
+pub type FetchDone = Box<dyn FnOnce(std::result::Result<Vec<u8>, String>) + Send>;
 
 /// Files that arrived together: one pick, or one drop on the window.
 #[derive(Debug, Clone, Default)]

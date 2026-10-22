@@ -7,7 +7,7 @@ use std::sync::PoisonError;
 
 use eframe::egui_wgpu::{WgpuSetup, wgpu};
 use mkaegis_engine::Session;
-use mkaegis_ui_egui::{Arrival, Inbox, Language, MapApp, Services};
+use mkaegis_ui_egui::{Arrival, FetchDone, Inbox, Language, MapApp, Services};
 use wasm_bindgen::JsCast as _;
 use wasm_bindgen::closure::Closure;
 
@@ -73,7 +73,12 @@ pub fn start() {
                 options,
                 Box::new(move |cc| {
                     // `Session::default()` keeps its files in memory here: there is no file system.
-                    let session = if has_flag("sample") { Session::sample() } else { Session::default() };
+                    let mut session = if has_flag("sample") { Session::sample() } else { Session::default() };
+                    // `?basemap=openStreetMap` (or `satellite`): a link that opens with one.
+                    if let Some(basemap) = query_value("basemap") {
+                        let _ = session.execute("map.setBasemap", &serde_json::json!({ "basemap": basemap }));
+                        session.modified = false;
+                    }
                     let inbox = Inbox::default();
                     let mut app = MapApp::new(session);
                     app.services = services(Inbox::clone(&inbox), cc.egui_ctx.clone());
@@ -116,6 +121,11 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
                 log::error!("couldn't download {name}: {e}");
             }
         })),
+        // The browser's own fetch: it keeps tiles in its HTTP cache as their servers ask, and
+        // sends the page as Referer, as OpenStreetMap's tile policy expects of web apps.
+        fetch: Some(Box::new(|url: String, done: FetchDone| {
+            wasm_bindgen_futures::spawn_local(async move { done(fetch(&url).await) });
+        })),
         save_language: Some(Box::new(|language: Language| {
             if let Some(store) = local_storage()
                 && let Err(e) = store.set_item(LANGUAGE_KEY, language.code())
@@ -126,6 +136,19 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
         inbox: Some(inbox),
         ..Default::default()
     }
+}
+
+/// A web address's body.
+async fn fetch(url: &str) -> Result<Vec<u8>, String> {
+    let js = |e: wasm_bindgen::JsValue| format!("{e:?}");
+    let window = web_sys::window().ok_or("no window")?;
+    let response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url)).await.map_err(js)?;
+    let response: web_sys::Response = response.dyn_into().map_err(|_| "not a response")?;
+    if !response.ok() {
+        return Err(format!("HTTP {}", response.status()));
+    }
+    let body = wasm_bindgen_futures::JsFuture::from(response.array_buffer().map_err(js)?).await.map_err(js)?;
+    Ok(js_sys::Uint8Array::new(&body).to_vec())
 }
 
 /// Hands files to the app and wakes it to take them.
@@ -193,6 +216,12 @@ fn language() -> Language {
 /// The browser's storage for this site, when it allows it (a private window may not).
 fn local_storage() -> Option<web_sys::Storage> {
     web_sys::window()?.local_storage().ok()?
+}
+
+/// The value of `?key=value` in the page's address.
+fn query_value(key: &str) -> Option<String> {
+    let search = web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default();
+    web_sys::UrlSearchParams::new_with_str(&search).ok()?.get(key)
 }
 
 /// The page's address has `?flag` (or `&flag`, `flag=…`).

@@ -14,3 +14,6 @@ mkaegis-geom = { workspace = true }
 mkaegis-crs = { workspace = true }
 mkaegis-model = { workspace = true }
 png = { workspace = true }
+# Basemap tiles that come as JPEG (NASA GIBS imagery).
+zune-jpeg = { workspace = true }
+zune-core = { workspace = true }

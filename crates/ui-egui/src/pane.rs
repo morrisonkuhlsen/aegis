@@ -64,7 +64,7 @@ impl Tool {
             Tool::SummaryStatistics => "Count, sum, mean, minimum, maximum and standard deviation of a field.",
             Tool::SpatialWeights => "Who neighbours whom: contiguity, nearest neighbours, distance bands or kernels, for the spatial statistics.",
             Tool::SpatialAutocorrelation => {
-                "Is a field clustered, dispersed or random in space? Global Moran's I, Geary's C or General G, with z-scores, p-values and a permutation test."
+                "Is a field clustered, dispersed or random in space, and where? Global Moran's I, Geary's C, General G; local Moran's I (LISA) and Gi* hot spots, mapped."
             }
         }
     }
@@ -91,11 +91,14 @@ pub struct GpState {
     order: String,
     threshold: String,
     standardize: &'static str,
-    /// Spatial Autocorrelation: the weights, the statistic's command, permutations and seed.
+    /// Spatial Autocorrelation: the weights, the statistic's command, permutations, seed, and
+    /// for the local statistics the significance level and the multiple-testing correction.
     weights: String,
     pub statistic: &'static str,
     permutations: String,
     seed: String,
+    alpha: String,
+    correction: &'static str,
     selected_only: bool,
     result: Option<Json>,
 }
@@ -119,6 +122,8 @@ impl GpState {
             statistic: "stats.globalMoran",
             permutations: "999".into(),
             seed: "12345".into(),
+            alpha: "0.05".into(),
+            correction: "none",
             ..GpState::default()
         };
     }
@@ -325,16 +330,43 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             field_combo(ui, app, layer, "Input Field (numeric)", "gp-field", &mut g.field, true);
             ui.label("Statistic");
             egui::ComboBox::from_id_salt("gp-stat").width(ui.available_width()).selected_text(statistic_label(g.statistic)).show_ui(ui, |ui| {
-                for c in ["stats.globalMoran", "stats.gearyC", "stats.generalG"] {
+                for c in ["stats.globalMoran", "stats.gearyC", "stats.generalG", "stats.localMoran", "stats.hotSpots"] {
                     ui.selectable_value(&mut g.statistic, c, statistic_label(c));
                 }
             });
-            ui.label("Permutations (0 for none)");
-            ui.add(egui::TextEdit::singleline(&mut g.permutations).desired_width(f32::INFINITY));
-            ui.label("Seed");
-            ui.add(egui::TextEdit::singleline(&mut g.seed).desired_width(f32::INFINITY));
+            let local = matches!(g.statistic, "stats.localMoran" | "stats.hotSpots");
+            if g.statistic != "stats.hotSpots" {
+                ui.label("Permutations (0 for none)");
+                ui.add(egui::TextEdit::singleline(&mut g.permutations).desired_width(f32::INFINITY));
+                ui.label("Seed");
+                ui.add(egui::TextEdit::singleline(&mut g.seed).desired_width(f32::INFINITY));
+            }
+            if g.statistic == "stats.localMoran" {
+                ui.label("Significance level (α)");
+                ui.add(egui::TextEdit::singleline(&mut g.alpha).desired_width(f32::INFINITY));
+            }
+            if local {
+                ui.label("Multiple-testing correction");
+                egui::ComboBox::from_id_salt("gp-correction").width(ui.available_width()).selected_text(correction_label(g.correction)).show_ui(
+                    ui,
+                    |ui| {
+                        for c in ["none", "fdr", "bonferroni"] {
+                            ui.selectable_value(&mut g.correction, c, correction_label(c));
+                        }
+                    },
+                );
+                ui.label(egui::RichText::new("The results are written as fields on the layer and mapped.").size(11.0).color(t.muted));
+            }
             let number = |t: &str| t.trim().parse::<u64>().ok();
-            (g.statistic, json!({ "weights": g.weights, "field": g.field, "permutations": number(&g.permutations), "seed": number(&g.seed) }))
+            let params = json!({
+                "weights": g.weights,
+                "field": g.field,
+                "permutations": (g.statistic != "stats.hotSpots").then(|| number(&g.permutations)).flatten(),
+                "seed": (g.statistic != "stats.hotSpots").then(|| number(&g.seed)).flatten(),
+                "alpha": (g.statistic == "stats.localMoran").then(|| g.alpha.trim().replace(',', ".").parse::<f64>().ok()).flatten(),
+                "correction": local.then_some(g.correction),
+            });
+            (g.statistic, params)
         }
     };
     ui.add_space(8.0);
@@ -384,9 +416,12 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
     }
     if let Some(r) = &g.result
         && tool == Tool::SpatialAutocorrelation
-        && r.get("statistic").is_some()
     {
-        autocorrelation_report(ui, r);
+        if r.get("statistic").is_some() {
+            autocorrelation_report(ui, r);
+        } else if r.get("summary").is_some() {
+            local_report(ui, r);
+        }
     }
     app.gp = g;
 }
@@ -395,8 +430,49 @@ fn statistic_label(command: &str) -> &'static str {
     match command {
         "stats.gearyC" => "Geary's C",
         "stats.generalG" => "Getis-Ord General G",
+        "stats.localMoran" => "Local Moran's I (clusters and outliers)",
+        "stats.hotSpots" => "Getis-Ord Gi* (hot spots)",
         _ => "Global Moran's I",
     }
+}
+
+fn correction_label(correction: &str) -> &'static str {
+    match correction {
+        "fdr" => "False discovery rate (Benjamini–Hochberg)",
+        "bonferroni" => "Bonferroni",
+        _ => "None",
+    }
+}
+
+/// A local statistic's summary: what was tested, how, and how many features came out where.
+fn local_report(ui: &mut Ui, r: &Json) {
+    let t = Tokens::get(ui.ctx());
+    ui.separator();
+    ui.label(egui::RichText::new(r.get("message").and_then(Json::as_str).unwrap_or("")).strong());
+    egui::Grid::new("local").striped(true).num_columns(2).show(ui, |ui| {
+        let mut row = |label: &str, value: String| {
+            ui.label(egui::RichText::new(label).strong());
+            ui.label(value);
+            ui.end_row();
+        };
+        let summary = |k: &str| r.pointer(&format!("/summary/{k}")).cloned().unwrap_or(Json::Null);
+        row("Features tested", summary("tested").to_string());
+        row("Correction", correction_label(summary("correction").as_str().unwrap_or("none")).to_string());
+        if let Some(t) = summary("threshold").as_f64() {
+            row("p threshold", if t != 0.0 && t < 1e-4 { format!("{t:.3e}") } else { format!("{t:.4}") });
+        }
+        if let Some(clusters) = r.get("clusters").and_then(Json::as_object) {
+            for (name, count) in clusters {
+                row(name, count.to_string());
+            }
+        }
+        if let (Some(hot), Some(cold)) = (r.get("hot"), r.get("cold")) {
+            row("Hot spots (95 %)", hot.to_string());
+            row("Cold spots (95 %)", cold.to_string());
+        }
+    });
+    let fields: Vec<&str> = r.get("fields").and_then(Json::as_array).into_iter().flatten().filter_map(Json::as_str).collect();
+    ui.label(egui::RichText::new(format!("Fields written: {}.", fields.join(", "))).size(11.0).color(t.muted));
 }
 
 /// A global statistic's report: the value against its expectation, then each inference.

@@ -23,6 +23,28 @@ const DEFAULT_FILLS: [Color; 8] = [
     Color::rgb(0xd8, 0xb0, 0x94),
 ];
 
+/// MK aeGIS's LISA cluster colours: warm for high, cool for low, strong for clusters and light
+/// for outliers, grey where nothing is significant.
+pub const LISA_COLORS: [(&str, Color); 6] = [
+    ("High-High", Color::rgb(0xc8, 0x33, 0x3a)),
+    ("Low-Low", Color::rgb(0x2f, 0x64, 0xb0)),
+    ("High-Low", Color::rgb(0xee, 0x9a, 0x9e)),
+    ("Low-High", Color::rgb(0x93, 0xb4, 0xe0)),
+    ("Not significant", Color::rgb(0xe6, 0xe6, 0xe3)),
+    ("No neighbours", Color::rgb(0xbd, 0xbd, 0xbd)),
+];
+
+/// MK aeGIS's hot and cold spot colours, from 99 % hot to 99 % cold confidence.
+pub const HOT_SPOT_COLORS: [(&str, Color); 7] = [
+    ("Hot spot, 99%", Color::rgb(0xb2, 0x23, 0x2a)),
+    ("Hot spot, 95%", Color::rgb(0xd9, 0x60, 0x3f)),
+    ("Hot spot, 90%", Color::rgb(0xee, 0xa8, 0x86)),
+    ("Not significant", Color::rgb(0xee, 0xee, 0xea)),
+    ("Cold spot, 90%", Color::rgb(0xa9, 0xc4, 0xe2)),
+    ("Cold spot, 95%", Color::rgb(0x5c, 0x8f, 0xc7)),
+    ("Cold spot, 99%", Color::rgb(0x2c, 0x5a, 0xa0)),
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Marker {
@@ -238,6 +260,16 @@ impl Renderer {
         let classes = values.into_iter().enumerate().map(|(n, value)| UniqueClass { value, symbol: base.with_fill(categorical(n)) }).collect();
         let field = fc.fields.get(i).map(|f| f.name.clone()).unwrap_or_default();
         Ok(Renderer::UniqueValues { field, classes, other: base.with_fill(Color::rgb(0xc8, 0xc8, 0xc8)) })
+    }
+
+    /// Fixed categories of a text field, each with its colour, in the order given (a legend
+    /// such as [`LISA_COLORS`]); other values are grey.
+    pub fn categories(field: &str, classes: &[(&str, Color)], base: Symbol) -> Renderer {
+        Renderer::UniqueValues {
+            field: field.to_string(),
+            classes: classes.iter().map(|(value, fill)| UniqueClass { value: (*value).to_string(), symbol: base.with_fill(*fill) }).collect(),
+            other: base.with_fill(Color::rgb(0xc8, 0xc8, 0xc8)),
+        }
     }
 
     /// Graduated colours: `k` classes of a numeric field, coloured along `ramp`.

@@ -39,7 +39,7 @@ From `cargo xtask stats` and `cargo xtask parity`:
 | Geoprocessing      | Buffer (points), Project, Calculate Geometry, Select By Location, Summary Statistics                                                           | [`docs/parity-checklist.md`](docs/parity-checklist.md) |
 | Coordinate systems | WGS 84, SIRGAS 2000, Web Mercator, UTM on both datums                                                                                          | issue #9                                               |
 | File formats       | Shapefile, GeoJSON and KML in and out; `.aegis` projects; PNG export                                                                           | issue #14                                              |
-| User interface     | Ribbon, Contents, map, Geoprocessing/Symbology/History panes, table, light/dark                                                                | [`docs/architecture.md`](docs/architecture.md)         |
+| User interface     | Ribbon, Contents, map, Geoprocessing/Symbology/History panes, table, light/dark; English and Portuguese (Brazil)                               | [`docs/architecture.md`](docs/architecture.md)         |
 | Automation         | Every action is a command: CLI, MCP server, control channel                                                                                    | [`docs/control-protocol.md`](docs/control-protocol.md) |
 | Platforms          | Linux x86_64, Windows x64, macOS universal; the web app (browser, WebGPU or WebGL2) on GitHub Pages                                            | [`docs/releasing.md`](docs/releasing.md)               |
 

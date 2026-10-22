@@ -1,5 +1,5 @@
 //! Geoprocessing tools (L3), named after the toolboxes': Buffer (Analysis), Project and Calculate
-//! Geometry Attributes (Data Management), Select Layer By Location, Summary Statistics, and
+//! Geometry Attributes (Data Management), Select Layer By Location, and
 //! Join Field (`join`).
 //!
 //! Distances and areas are in metres. Data in a UTM zone is measured as it is; data in any other
@@ -321,59 +321,6 @@ fn centre(g: &Geometry) -> Option<Coord> {
     }
 }
 
-/// Summary Statistics of a numeric field.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Statistics {
-    pub field: String,
-    pub count: usize,
-    pub nulls: usize,
-    pub sum: f64,
-    pub mean: Option<f64>,
-    pub min: Option<f64>,
-    pub max: Option<f64>,
-    /// Sample standard deviation (n − 1).
-    pub std: Option<f64>,
-}
-
-/// Summary Statistics over `rows` (all when `None`), of a numeric field: on a Text field every
-/// value would count as missing (#4), so it is refused.
-pub fn summary_statistics(fc: &FeatureClass, field: &str, rows: Option<&[usize]>) -> Result<Statistics> {
-    let i = fc.field_index(field).ok_or_else(|| Error::NotFound(format!("field `{field}`")))?;
-    if let Some(f) = fc.fields.get(i).filter(|f| !f.kind.is_numeric()) {
-        return Err(Error::param(
-            "field",
-            format!("`{}` is a {} field; Summary Statistics needs a numeric one (Short, Long or Double)", f.name, f.kind.name()),
-        ));
-    }
-    let pick: Box<dyn Iterator<Item = usize>> = match rows {
-        Some(r) => Box::new(r.iter().copied()),
-        None => Box::new(0..fc.features.len()),
-    };
-    let (mut values, mut nulls) = (Vec::new(), 0);
-    for r in pick {
-        match fc.value(r, i).and_then(Value::as_f64) {
-            Some(x) => values.push(x),
-            None => nulls += 1,
-        }
-    }
-    let n = values.len();
-    // From +0: an empty f64 sum is -0, which would print as `-0.0`.
-    let sum = values.iter().fold(0.0, |a, x| a + x);
-    let mean = (n > 0).then(|| sum / n as f64);
-    // Two-pass variance: stable for large offsets.
-    let std = mean.filter(|_| n > 1).map(|m| (values.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt());
-    Ok(Statistics {
-        field: fc.fields.get(i).map(|f| f.name.clone()).unwrap_or_default(),
-        count: n,
-        nulls,
-        sum,
-        mean,
-        min: values.iter().copied().reduce(f64::min),
-        max: values.iter().copied().reduce(f64::max),
-        std,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,22 +335,6 @@ mod tests {
     }
 
     /// #4: a Text field reported every value as null and a sum of -0.0.
-    #[test]
-    fn statistics_need_a_numeric_field_and_never_report_negative_zero() {
-        let mut fc =
-            FeatureClass::new("t", GeometryType::Point, Crs::WGS84, vec![Field::new("NAME", FieldType::Text), Field::new("X", FieldType::Double)]);
-        for name in ["a", "b"] {
-            fc.push(None, vec![Value::Text(name.into()), Value::Null]).unwrap();
-        }
-        let err = summary_statistics(&fc, "NAME", None).unwrap_err().to_string();
-        assert!(err.contains("Text") && err.contains("numeric"), "{err}");
-        // A numeric field with only nulls: nothing counted, a sum of +0.
-        let s = summary_statistics(&fc, "X", None).unwrap();
-        assert_eq!((s.count, s.nulls, s.mean, s.min, s.std), (0, 2, None, None, None));
-        assert!(s.sum == 0.0 && s.sum.is_sign_positive(), "{}", s.sum);
-        assert!(summary_statistics(&fc, "X", Some(&[])).unwrap().sum.is_sign_positive());
-    }
-
     #[test]
     fn buffer_is_a_circle_of_the_right_area() {
         let b = buffer(&cities(), 1000.0, "b").unwrap();
@@ -483,11 +414,6 @@ mod tests {
         assert_eq!(select_by_location(&c, &zone, Some(&[]), Relation::Intersect).unwrap(), Vec::<usize>::new());
         let near = select_by_location(&c, &c, Some(&[0]), Relation::WithinDistance(400_000.0)).unwrap();
         assert_eq!(near, vec![0, 1, 2]);
-        let s = summary_statistics(&c, "pop", None).unwrap();
-        assert_eq!((s.count, s.nulls, s.sum, s.min, s.max), (3, 1, 22.0, Some(4.0), Some(12.0)));
-        // Sample variance of 12, 4, 6: (14²/9 + 10²/9 + 4²/9) / 2 = 52/3.
-        assert!((s.std.unwrap() - (52.0f64 / 3.0).sqrt()).abs() < 1e-12);
-        assert!(summary_statistics(&c, "nope", None).is_err());
     }
 
     /// #51: Select By Location's distance and centre relations.

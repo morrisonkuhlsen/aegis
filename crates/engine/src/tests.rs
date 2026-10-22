@@ -630,6 +630,27 @@ fn data_and_projects_round_trip_through_files() {
 }
 
 #[test]
+fn kml_mixing_points_and_polygons_adds_a_layer_for_each() {
+    let mut s = Session::sample();
+    s.disk = Disk::Memory(Default::default());
+    s.execute("layer.export", &json!({ "layer": "Ilhas", "path": "ilhas.kml" })).unwrap();
+    let r = s.execute("map.addData", &json!({ "path": "ilhas.kml" })).unwrap();
+    assert_eq!(s.map.layer(&r["layer"].to_string()).unwrap().data.features.len(), 3);
+    // A parcel and its vertices, as SIGEF exports them: two layers, the polygons first.
+    let kml = r#"<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+        <Placemark><name>Lote</name><Polygon><outerBoundaryIs><LinearRing><coordinates>-40,-9 -39.9,-9 -39.9,-8.9 -40,-9</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>
+        <Folder><Placemark><name>V1</name><Point><coordinates>-40,-9</coordinates></Point></Placemark>
+        <Placemark><name>V2</name><Point><coordinates>-39.9,-9</coordinates></Point></Placemark></Folder>
+    </Document></kml>"#;
+    s.disk.memory_mut().unwrap().put("sitio.kml", kml.as_bytes().to_vec()).unwrap();
+    let r = s.execute("map.addData", &json!({ "path": "sitio.kml" })).unwrap();
+    assert_eq!(r["message"], "added 3 features in 2 layers");
+    let names: Vec<String> = r["layers"].as_array().unwrap().iter().map(|id| s.map.layer(&id.to_string()).unwrap().name.clone()).collect();
+    assert_eq!(names, ["sitio_Polygons", "sitio_Points"]);
+    assert_eq!(r["layer"], r["layers"][0]);
+}
+
+#[test]
 fn files_in_memory_take_the_same_commands_as_files_on_disk() {
     // The browser: what a person picks goes in, what commands write comes back out.
     let mut s = Session { disk: Disk::Memory(Default::default()), ..Session::sample() };

@@ -24,21 +24,29 @@ pub const ADD_DATA: CommandSpec = CommandSpec {
     label: "Add Data",
     ribbon: "Map ▸ Layer",
     shortcut: None,
-    params: "{path} — a .geojson, .json or .shp file; added as a layer on top",
+    params: "{path} — a .geojson, .json, .kml or .shp file; added as a layer on top (a KML mixing points, lines and polygons as a layer for each)",
     kind: Kind::Edit,
     enabled: always,
     run: |s, p| {
         let file = path(p, "path")?;
-        let (mut data, warnings) = crate::io::read_data(&s.disk, &file)?;
-        data.name = s.map.unique_name(&data.name);
-        let count = data.features.len();
+        let (layers, warnings) = crate::io::read_data(&s.disk, &file)?;
         let first = s.map.layers.is_empty();
-        let id = s.map.add_layer(data);
+        let (mut ids, mut count) = (Vec::with_capacity(layers.len()), 0);
+        for mut data in layers {
+            data.name = s.map.unique_name(&data.name);
+            count += data.features.len();
+            ids.push(s.map.add_layer(data));
+        }
         if first {
             let e = s.map.full_extent();
             let _ = set_extent(s, e);
         }
-        Ok(json!({ "message": format!("added {count} features"), "layer": id, "warnings": warnings }))
+        let message = match ids.len() {
+            1 => format!("added {count} features"),
+            n => format!("added {count} features in {n} layers"),
+        };
+        // `layer` is the first one read: a KML's polygons, when it has some.
+        Ok(json!({ "message": message, "layer": ids.first(), "layers": ids, "warnings": warnings }))
     },
 };
 

@@ -314,7 +314,7 @@ pub const EXPORT: CommandSpec = CommandSpec {
     label: "Export Features",
     ribbon: "Data ▸ Export",
     shortcut: None,
-    params: "{layer, path, selectedOnly?} — .geojson or .shp",
+    params: "{layer, path, selectedOnly?} — .geojson, .kml, .shp or .csv (attributes only)",
     kind: Kind::View,
     enabled: has_layers,
     run: |s, p| {

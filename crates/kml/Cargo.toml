@@ -1,0 +1,16 @@
+[package]
+name = "mkaegis-kml"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "MK aeGIS L2: KML 2.2 (OGC 07-147r2) reader and writer"
+
+[lints]
+workspace = true
+
+[dependencies]
+mkaegis-core = { workspace = true }
+mkaegis-geom = { workspace = true }
+mkaegis-crs = { workspace = true }
+mkaegis-model = { workspace = true }
+quick-xml = { workspace = true }

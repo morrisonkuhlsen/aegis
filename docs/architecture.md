@@ -16,6 +16,7 @@ WebAssembly (`cargo xtask wasm`).
 | L0    | `mkaegis-crs`      | Coordinate reference systems by EPSG code and the projection math (Snyder, Karney)               |
 | L1    | `mkaegis-model`    | The map document: feature classes, layers, the map, symbology, SQL `WHERE`, spatial weights      |
 | L2    | `mkaegis-geojson`  | GeoJSON (RFC 7946) in and out                                                                    |
+| L2    | `mkaegis-kml`      | KML 2.2 (OGC 07-147r2) in and out: a layer per geometry family                                   |
 | L2    | `mkaegis-csv`      | Delimited text tables (CSV, TSV) in and out, with type inference, from RFC 4180                  |
 | L2    | `mkaegis-shp`      | Shapefile (`.shp/.shx/.dbf/.prj/.cpg`) in and out, from the public technical description         |
 | L2    | `mkaegis-render`   | Viewport, display list and a software rasteriser to PNG                                          |

@@ -10,6 +10,17 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ## [Unreleased]
 
+### Added
+
+- **KML** (#14, in part): Add Data reads `.kml` (KML 2.2) and Export Features writes it, on the
+  desktop, in the CLI and in the web app. Placemarks in any Folder are read with their `name`,
+  `description` and `ExtendedData` (`Data` and `SchemaData`), typed from their values. A document
+  mixing points, lines and polygons (a SIGEF parcel with its vertices) becomes a layer for each:
+  `<name>_Polygons`, `<name>_Lines`, `<name>_Points`. A Placemark whose geometry can't be read
+  keeps its attributes with a null geometry, and the warnings count it. Export writes WGS 84,
+  with `name` and `description` from fields so named and the other fields as `ExtendedData`.
+  `.kmz` is not read yet.
+
 ## [0.2.0] - 2026-10-22
 
 ### Changed results

@@ -12,6 +12,7 @@ use mkaegis_engine::explore::{self, Bins};
 use serde_json::json;
 
 use crate::MapApp;
+use crate::i18n::tr;
 use crate::theme::Tokens;
 
 /// The most features a chart draws; beyond, it says so instead of slowing every frame.
@@ -36,10 +37,10 @@ impl Chart {
 
     pub fn name(self) -> &'static str {
         match self {
-            Chart::Histogram => "Histogram",
-            Chart::BoxPlot => "Box Plot",
-            Chart::Scatter => "Scatter Plot",
-            Chart::MoranScatter => "Moran Scatter Plot",
+            Chart::Histogram => tr("Histogram"),
+            Chart::BoxPlot => tr("Box Plot"),
+            Chart::Scatter => tr("Scatter Plot"),
+            Chart::MoranScatter => tr("Moran Scatter Plot"),
         }
     }
 }
@@ -116,7 +117,7 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
         if !names.iter().any(|(n, _)| *n == c.weights) {
             c.weights = names.last().map(|(n, _)| n.clone()).unwrap_or_default();
         }
-        ui.label("Spatial Weights");
+        ui.label(tr("Spatial Weights"));
         egui::ComboBox::from_id_salt("chart-weights").width(ui.available_width()).selected_text(c.weights.as_str()).show_ui(ui, |ui| {
             for (n, _) in &names {
                 ui.selectable_value(&mut c.weights, n.clone(), n);
@@ -124,7 +125,7 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
         });
         c.layer = names.iter().find(|(n, _)| *n == c.weights).map(|(_, l)| *l);
         if names.is_empty() {
-            ui.label(egui::RichText::new("Build spatial weights first (Statistics › Spatial Weights).").size(11.0).color(t.muted));
+            ui.label(egui::RichText::new(tr("Build spatial weights first (Statistics › Spatial Weights).")).size(11.0).color(t.muted));
         }
     } else {
         layer_combo(app, ui, &mut c.layer);
@@ -141,14 +142,14 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
     {
         c.x = f.clone();
     }
-    field_combo(ui, if c.kind == Chart::Scatter { "X" } else { "Field" }, "chart-x", &numeric, &mut c.x);
+    field_combo(ui, if c.kind == Chart::Scatter { "X" } else { tr("Field") }, "chart-x", &numeric, &mut c.x);
     if c.kind == Chart::Scatter {
         field_combo(ui, "Y", "chart-y", &numeric, &mut c.y);
     }
     match c.kind {
         Chart::Histogram => {
             ui.horizontal(|ui| {
-                ui.label("Bins");
+                ui.label(tr("Bins"));
                 for (label, rule) in [("Sturges", "sturges"), ("Freedman–Diaconis", "fd"), ("10", "10"), ("20", "20")] {
                     if ui.selectable_label(c.bins == rule, label).clicked() {
                         c.bins = rule.into();
@@ -158,7 +159,7 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
         }
         Chart::BoxPlot => {
             ui.horizontal(|ui| {
-                ui.label("Fences");
+                ui.label(tr("Fences"));
                 for h in [1.5, 3.0] {
                     if ui.selectable_label(c.hinge == h, format!("{h} × IQR")).clicked() {
                         c.hinge = h;
@@ -171,7 +172,10 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
     ui.separator();
     if let Some(layer) = c.layer.and_then(|id| app.session.map.layers.iter().find(|l| l.id == id)) {
         if layer.data.features.len() > MAX_FEATURES {
-            ui.label(egui::RichText::new(format!("Charts draw up to {MAX_FEATURES} features.")).color(t.muted));
+            ui.label(
+                egui::RichText::new(crate::trf("Charts draw up to {count} features.", &[("count", &crate::i18n::grouped(MAX_FEATURES as f64))]))
+                    .color(t.muted),
+            );
         } else {
             let selected = layer.selection.clone();
             let id = layer.id;
@@ -192,7 +196,9 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
                 app.run("feature.select", json!({ "layer": id, "rows": rows, "mode": mode }));
             }
             ui.label(
-                egui::RichText::new("Drag across the chart, or click a bar or a point, to select on the map. Shift adds.").size(11.0).color(t.muted),
+                egui::RichText::new(tr("Drag across the chart, or click a bar or a point, to select on the map. Shift adds."))
+                    .size(11.0)
+                    .color(t.muted),
             );
         }
     }
@@ -207,10 +213,10 @@ fn layer_combo(app: &MapApp, ui: &mut Ui, layer: &mut Option<u32>) {
         *layer = app.active.filter(|a| layers.iter().any(|(i, _)| i == a)).or_else(|| layers.first().map(|(i, _)| *i));
     }
     if layers.is_empty() {
-        ui.label(egui::RichText::new("No layer has a numeric field to chart.").size(11.0).color(Tokens::get(ui.ctx()).muted));
+        ui.label(egui::RichText::new(tr("No layer has a numeric field to chart.")).size(11.0).color(Tokens::get(ui.ctx()).muted));
         return;
     }
-    ui.label("Layer");
+    ui.label(tr("Layer"));
     let shown = layers.iter().find(|(i, _)| Some(*i) == *layer).map(|(_, n)| n.clone()).unwrap_or_else(|| "—".into());
     egui::ComboBox::from_id_salt("chart-layer").width(ui.available_width()).selected_text(shown).show_ui(ui, |ui| {
         for (i, n) in &layers {
@@ -274,14 +280,14 @@ fn axes(ui: &Ui, t: &Tokens, f: &Frame, x_label: &str, y_scale: bool) {
 /// An axis number in a few characters: four significant digits, or exponent notation.
 fn short(x: f64) -> String {
     if x == 0.0 || !x.is_finite() {
-        return if x == 0.0 { "0".into() } else { x.to_string() };
+        return if x == 0.0 { "0".into() } else { crate::i18n::localize(x.to_string()) };
     }
     if x.abs() >= 1e5 || x.abs() < 1e-3 {
-        return format!("{x:.2e}");
+        return crate::i18n::localize(format!("{x:.2e}"));
     }
     let decimals = (3 - x.abs().log10().floor() as i32).clamp(0, 6) as usize;
     let s = format!("{x:.decimals$}");
-    if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s }
+    crate::i18n::localize(if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s })
 }
 
 fn histogram(ui: &mut Ui, t: &Tokens, c: &mut ChartState, x: &[f64], selected: &BTreeSet<usize>) -> Option<Vec<usize>> {
@@ -316,7 +322,11 @@ fn histogram(ui: &mut Ui, t: &Tokens, c: &mut ChartState, x: &[f64], selected: &
         }
     }
     axes(ui, t, &f, &c.x, true);
-    ui.label(egui::RichText::new(format!("{} bins, {} features", h.counts.len(), h.counts.iter().sum::<usize>())).size(11.0).color(t.muted));
+    ui.label(
+        egui::RichText::new(crate::trf("{bins} bins, {count} features", &[("bins", &h.counts.len()), ("count", &h.counts.iter().sum::<usize>())]))
+            .size(11.0)
+            .color(t.muted),
+    );
     let rows_in = |a: f64, z: f64| -> Vec<usize> {
         let bins: Vec<usize> =
             (0..h.counts.len()).filter(|b| h.edges.get(b + 1).is_some_and(|e| *e >= a) && h.edges.get(*b).is_some_and(|e| *e <= z)).collect();
@@ -372,14 +382,16 @@ fn box_plot(ui: &mut Ui, t: &Tokens, c: &mut ChartState, x: &[f64], selected: &B
     p.circle_filled(f.at(b.mean, ym), 2.5, t.accent);
     axes(ui, t, &f, &c.x, false);
     ui.label(
-        egui::RichText::new(format!(
-            "Q1 {} · median {} · Q3 {} · mean (dot) {} · {} outliers beyond {} × IQR",
-            short(b.q1),
-            short(b.median),
-            short(b.q3),
-            short(b.mean),
-            b.outliers.len(),
-            b.hinge
+        egui::RichText::new(crate::trf(
+            "Q1 {q1} · median {median} · Q3 {q3} · mean (dot) {mean} · {outliers} outliers beyond {hinge} × IQR",
+            &[
+                ("q1", &short(b.q1)),
+                ("median", &short(b.median)),
+                ("q3", &short(b.q3)),
+                ("mean", &short(b.mean)),
+                ("outliers", &b.outliers.len()),
+                ("hinge", &crate::i18n::decimal(b.hinge, 1)),
+            ],
         ))
         .size(11.0)
         .color(t.muted),
@@ -410,7 +422,7 @@ fn scatter(
     let points: Vec<(usize, f64, f64)> =
         x.iter().zip(y).enumerate().filter(|(_, (a, b))| a.is_finite() && b.is_finite()).map(|(i, (a, b))| (i, *a, *b)).collect();
     if points.len() < 2 {
-        ui.label(egui::RichText::new("Needs two features with both values.").color(t.muted));
+        ui.label(egui::RichText::new(tr("Needs two features with both values.")).color(t.muted));
         return None;
     }
     let range = |v: &mut dyn Iterator<Item = f64>| v.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), x| (lo.min(x), hi.max(x)));
@@ -429,10 +441,10 @@ fn scatter(
         p.line_segment([f.at(f.x.0, 0.0), f.at(f.x.1, 0.0)], grid);
         let font = egui::FontId::proportional(10.0);
         for (label, qx, qy, align) in [
-            ("High-High", f.x.1, f.y.1, egui::Align2::RIGHT_TOP),
-            ("Low-High", f.x.0, f.y.1, egui::Align2::LEFT_TOP),
-            ("Low-Low", f.x.0, f.y.0, egui::Align2::LEFT_BOTTOM),
-            ("High-Low", f.x.1, f.y.0, egui::Align2::RIGHT_BOTTOM),
+            (tr("High-High"), f.x.1, f.y.1, egui::Align2::RIGHT_TOP),
+            (tr("Low-High"), f.x.0, f.y.1, egui::Align2::LEFT_TOP),
+            (tr("Low-Low"), f.x.0, f.y.0, egui::Align2::LEFT_BOTTOM),
+            (tr("High-Low"), f.x.1, f.y.0, egui::Align2::RIGHT_BOTTOM),
         ] {
             p.text(f.at(qx, qy), align, label, font.clone(), t.muted);
         }
@@ -448,7 +460,7 @@ fn scatter(
     let caption = match moran_slope {
         Some(slope) => {
             p.with_clip_rect(f.rect).line_segment(line(slope, 0.0), Stroke::new(1.5, Color32::from_rgb(0xc8, 0x33, 0x3a)));
-            format!("slope {} (Moran's I with row-standardised weights) · y: spatial lag Wz", short(slope))
+            crate::trf("slope {slope} (Moran's I with row-standardised weights) · y: spatial lag Wz", &[("slope", &short(slope))])
         }
         None => match explore::ols(x, y) {
             Ok(fit) => {
@@ -459,7 +471,7 @@ fn scatter(
             Err(e) => e.to_string(),
         },
     };
-    axes(ui, t, &f, if moran_slope.is_some() { "z (standardised)" } else { &c.x }, true);
+    axes(ui, t, &f, if moran_slope.is_some() { tr("z (standardised)") } else { &c.x }, true);
     ui.label(egui::RichText::new(caption).size(11.0).color(t.muted));
     if let Some(r) = brushed(c, &response, ui, t) {
         return Some(points.iter().filter(|(_, a, b)| r.contains(f.at(*a, *b))).map(|(i, _, _)| *i).collect());

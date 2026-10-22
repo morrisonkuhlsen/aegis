@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use egui::{Align2, Color32, FontId, Rect, RichText, Sense, Stroke, Ui, pos2, vec2};
 
+use crate::i18n::tr;
 use crate::icons::{self, Icon};
 use crate::splash::{self, BRAND, INK, ON_INK, ON_INK_SOFT};
 use crate::theme::Tokens;
@@ -93,7 +94,7 @@ pub(crate) fn show(ui: &mut Ui, view: &View) -> Option<Action> {
         if let Some(texture) = splash::wordmark(ui.ctx()) {
             let width = COLUMN - 70.0;
             let size = vec2(width, width * texture.size_vec2().y / texture.size_vec2().x.max(1.0));
-            ui.add(egui::Image::new((texture.id(), size)).tint(ON_INK)).on_hover_text("Morrison Kühlsen");
+            ui.add(egui::Image::new((texture.id(), size)).tint(ON_INK)).on_hover_text(tr("Morrison Kühlsen"));
         }
     });
     col.add_space(18.0);
@@ -112,24 +113,24 @@ pub(crate) fn show(ui: &mut Ui, view: &View) -> Option<Action> {
             action = Some(then);
         }
     };
-    caption(&mut col, "START");
-    go(&mut col, Icon::House, "Home", view.page == Page::Home, Action::Page(Page::Home));
-    go(&mut col, Icon::New, "New", view.page == Page::New, Action::Page(Page::New));
-    go(&mut col, Icon::Open, "Open", view.page == Page::Open, Action::Page(Page::Open));
+    caption(&mut col, tr("START"));
+    go(&mut col, Icon::House, tr("Home"), view.page == Page::Home, Action::Page(Page::Home));
+    go(&mut col, Icon::New, tr("New"), view.page == Page::New, Action::Page(Page::New));
+    go(&mut col, Icon::Open, tr("Open"), view.page == Page::Open, Action::Page(Page::Open));
     col.add_space(10.0);
-    caption(&mut col, "THIS PROJECT");
-    go(&mut col, Icon::Info, "Info", view.page == Page::Info, Action::Page(Page::Info));
-    go(&mut col, Icon::Save, "Save", false, Action::Save);
-    go(&mut col, Icon::Save, "Save As", false, Action::SaveAs);
-    go(&mut col, Icon::Export, "Export", view.page == Page::Export, Action::Page(Page::Export));
-    go(&mut col, Icon::Close, "Close", false, Action::Close);
+    caption(&mut col, tr("THIS PROJECT"));
+    go(&mut col, Icon::Info, tr("Info"), view.page == Page::Info, Action::Page(Page::Info));
+    go(&mut col, Icon::Save, tr("Save"), false, Action::Save);
+    go(&mut col, Icon::Save, tr("Save As"), false, Action::SaveAs);
+    go(&mut col, Icon::Export, tr("Export"), view.page == Page::Export, Action::Page(Page::Export));
+    go(&mut col, Icon::Close, tr("Close"), false, Action::Close);
     col.add_space(10.0);
     caption(&mut col, "MK AEGIS");
-    go(&mut col, Icon::Logo, "About", false, Action::About);
-    go(&mut col, Icon::ChevronLeft, "Exit", false, Action::Exit);
+    go(&mut col, Icon::Logo, tr("About"), false, Action::About);
+    go(&mut col, Icon::ChevronLeft, tr("Exit"), false, Action::Exit);
     // The house's line at the column's foot.
     let foot = pos2(column.left() + 30.0, column.bottom() - 22.0);
-    col.painter().text(foot, Align2::LEFT_BOTTOM, splash::HOUSE, FontId::proportional(11.5), ON_INK_SOFT);
+    col.painter().text(foot, Align2::LEFT_BOTTOM, splash::house(), FontId::proportional(11.5), ON_INK_SOFT);
     col.painter().text(foot + vec2(0.0, 15.0), Align2::LEFT_BOTTOM, "morrisonkuhlsen.com", FontId::proportional(11.5), ON_INK);
 
     // The page stops before the artwork, when there is one.
@@ -140,8 +141,8 @@ pub(crate) fn show(ui: &mut Ui, view: &View) -> Option<Action> {
     // Back to the map, in the page's corner.
     let corner = Rect::from_min_size(pos2(content.right() - 200.0, content.top() - 6.0), vec2(200.0, 32.0));
     let mut back = ui.new_child(egui::UiBuilder::new().max_rect(corner).layout(egui::Layout::right_to_left(egui::Align::Center)));
-    let button = back.add(egui::Button::new(RichText::new("Back to the map").size(13.5)).min_size(vec2(0.0, 30.0)));
-    if button.on_hover_text("Esc").clicked() {
+    let button = back.add(egui::Button::new(RichText::new(tr("Back to the map")).size(13.5)).min_size(vec2(0.0, 30.0)));
+    if button.on_hover_text(tr("Esc")).clicked() {
         action = Some(Action::Back);
     }
     let page_action = egui::ScrollArea::vertical().id_salt("backstage").auto_shrink([false, false]).show(&mut page, |ui| pages(ui, view)).inner;
@@ -155,80 +156,82 @@ fn pages(ui: &mut Ui, view: &View) -> Option<Action> {
     match view.page {
         Page::Home | Page::New => {
             if view.page == Page::Home {
-                heading(ui, "Welcome to MK aeGIS", splash::TAGLINE);
+                heading(ui, tr("Welcome to MK aeGIS"), splash::tagline());
             } else {
-                heading(ui, "New", "Start a map: empty, or with the sample data to try every tool.");
+                heading(ui, tr("New"), tr("Start a map: empty, or with the sample data to try every tool."));
             }
-            section(ui, "START");
+            section(ui, tr("START"));
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = vec2(16.0, 16.0);
-                if card(ui, Icon::New, "New map", "An empty map in Web Mercator. Add shapefiles or GeoJSON to it.") {
+                if card(ui, Icon::New, tr("New map"), tr("An empty map in Web Mercator. Add shapefiles or GeoJSON to it.")) {
                     action = Some(Action::Blank);
                 }
-                if card(ui, Icon::Layers, "Sample map", "A made-up archipelago with islands, towns, roads and rivers.") {
+                if card(ui, Icon::Layers, tr("Sample map"), tr("A made-up archipelago with islands, towns, roads and rivers.")) {
                     action = Some(Action::Sample);
                 }
                 if view.page == Page::Home {
-                    if card(ui, Icon::Open, "Open a project", "An MK aeGIS project (.aegis): the map, its layers and its spatial weights.") {
+                    if card(ui, Icon::Open, tr("Open a project"), tr("An MK aeGIS project (.aegis): the map, its layers and its spatial weights.")) {
                         action = Some(Action::Browse);
                     }
-                    if card(ui, Icon::AddData, "Add data", "A shapefile (.shp) or GeoJSON file, to this map.") {
+                    if card(ui, Icon::AddData, tr("Add data"), tr("A shapefile (.shp) or GeoJSON file, to this map.")) {
                         action = Some(Action::AddData);
                     }
                 }
             });
             if view.page == Page::Home {
                 ui.add_space(30.0);
-                section(ui, "RECENT");
+                section(ui, tr("RECENT"));
                 if let Some(a) = recent(ui, view.recent) {
                     action = Some(a);
                 }
             }
         }
         Page::Open => {
-            heading(ui, "Open", "An MK aeGIS project (.aegis). To add a shapefile or GeoJSON to this map, use Add Data.");
-            let browse = egui::Button::new(RichText::new("Browse…").size(14.0).color(ON_INK)).fill(BRAND).min_size(vec2(130.0, 34.0));
-            if ui.add(browse).on_hover_text("Ctrl+O").clicked() {
+            heading(ui, tr("Open"), tr("An MK aeGIS project (.aegis). To add a shapefile or GeoJSON to this map, use Add Data."));
+            let browse = egui::Button::new(RichText::new(tr("Browse…")).size(14.0).color(ON_INK)).fill(BRAND).min_size(vec2(130.0, 34.0));
+            if ui.add(browse).on_hover_text(tr("Ctrl+O")).clicked() {
                 action = Some(Action::Browse);
             }
             ui.add_space(28.0);
-            section(ui, "RECENT");
+            section(ui, tr("RECENT"));
             if let Some(a) = recent(ui, view.recent) {
                 action = Some(a);
             }
         }
         Page::Info => {
-            let path = view.file_path.map_or_else(|| "Not saved yet".to_string(), |p| p.display().to_string());
-            heading(ui, view.file_name.unwrap_or("Untitled"), &path);
+            let path = view.file_path.map_or_else(|| tr("Not saved yet").to_string(), |p| p.display().to_string());
+            heading(ui, view.file_name.unwrap_or(tr("Untitled")), &path);
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = vec2(14.0, 14.0);
-                fact(ui, "Layers", &view.layers.to_string());
-                fact(ui, "Features", &view.features.to_string());
-                fact(ui, "Coordinate system", &view.crs);
-                fact(ui, "Spatial weights", &view.weights.to_string());
-                fact(ui, "Saved", if view.modified { "Not yet" } else { "Yes" });
+                fact(ui, tr("Layers"), &view.layers.to_string());
+                fact(ui, tr("Features"), &view.features.to_string());
+                fact(ui, tr("Coordinate system"), &view.crs);
+                fact(ui, tr("Spatial weights"), &view.weights.to_string());
+                fact(ui, tr("Saved"), if view.modified { tr("Not yet") } else { tr("Yes") });
             });
             if view.modified {
                 ui.add_space(18.0);
-                ui.label(RichText::new("This project has changes that aren't saved.").color(t.muted));
+                ui.label(RichText::new(tr("This project has changes that aren't saved.")).color(t.muted));
             }
         }
         Page::Export => {
-            heading(ui, "Export", "Write the map or a layer to a file other programs read.");
+            heading(ui, tr("Export"), tr("Write the map or a layer to a file other programs read."));
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = vec2(16.0, 16.0);
                 let has_map = view.layers > 0;
                 if ui
-                    .add_enabled_ui(has_map, |ui| card(ui, Icon::Share, "Map image", "The current view as a PNG image, as Export Map writes it."))
+                    .add_enabled_ui(has_map, |ui| {
+                        card(ui, Icon::Share, tr("Map image"), tr("The current view as a PNG image, as Export Map writes it."))
+                    })
                     .inner
                 {
                     action = Some(Action::ExportMap);
                 }
                 let line = view.active_layer.map_or_else(
-                    || "Select a layer in Contents to export its features.".to_string(),
-                    |name| format!("The layer {name} as GeoJSON or a shapefile."),
+                    || tr("Select a layer in Contents to export its features.").to_string(),
+                    |name| crate::trf("The layer {name} as GeoJSON or a shapefile.", &[("name", &name)]),
                 );
-                if ui.add_enabled_ui(view.active_layer.is_some(), |ui| card(ui, Icon::Export, "Features", &line)).inner {
+                if ui.add_enabled_ui(view.active_layer.is_some(), |ui| card(ui, Icon::Export, tr("Features"), &line)).inner {
                     action = Some(Action::ExportFeatures);
                 }
             });
@@ -352,11 +355,11 @@ fn fact(ui: &mut Ui, name: &str, value: &str) {
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 fn ago(seconds: u64) -> String {
     match seconds {
-        0..60 => "just now".into(),
-        60..3600 => format!("{} min ago", seconds / 60),
-        3600..86_400 => format!("{} h ago", seconds / 3600),
-        86_400..172_800 => "yesterday".into(),
-        _ => format!("{} days ago", seconds / 86_400),
+        0..60 => tr("just now").into(),
+        60..3600 => crate::trf("{count} min ago", &[("count", &(seconds / 60))]),
+        3600..86_400 => crate::trf("{count} h ago", &[("count", &(seconds / 3600))]),
+        86_400..172_800 => tr("yesterday").into(),
+        _ => crate::trf("{count} days ago", &[("count", &(seconds / 86_400))]),
     }
 }
 
@@ -365,7 +368,7 @@ fn ago(seconds: u64) -> String {
 fn recent(ui: &mut Ui, files: &[PathBuf]) -> Option<Action> {
     let t = Tokens::get(ui.ctx());
     if files.is_empty() {
-        ui.label(RichText::new("Projects you open or save show here.").color(t.muted));
+        ui.label(RichText::new(tr("Projects you open or save show here.")).color(t.muted));
         return None;
     }
     let mut action = None;
@@ -387,7 +390,7 @@ fn recent(ui: &mut Ui, files: &[PathBuf]) -> Option<Action> {
         icons::paint(&p, Rect::from_center_size(pos2(rect.left() + 22.0, rect.center().y), vec2(18.0, 18.0)), Icon::Layers, t.accent, BRAND);
         p.text(pos2(rect.left() + 46.0, rect.center().y - 8.0), Align2::LEFT_CENTER, &name, FontId::proportional(14.0), t.text);
         p.text(pos2(rect.left() + 46.0, rect.center().y + 9.0), Align2::LEFT_CENTER, &folder, FontId::proportional(11.5), t.muted);
-        let when = changed.unwrap_or_else(|| "not found".into());
+        let when = changed.unwrap_or_else(|| tr("not found").into());
         p.text(pos2(rect.right() - 14.0, rect.center().y), Align2::RIGHT_CENTER, when, FontId::proportional(12.0), t.muted);
         if response.clicked() && exists {
             action = Some(Action::Open(path.clone()));

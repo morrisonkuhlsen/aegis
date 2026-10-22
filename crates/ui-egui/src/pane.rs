@@ -8,6 +8,7 @@ use mkaegis_model::Renderer;
 use serde_json::{Value as Json, json};
 
 use crate::MapApp;
+use crate::i18n::tr;
 use crate::theme::Tokens;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,33 +50,33 @@ impl Tool {
 
     pub fn name(self) -> &'static str {
         match self {
-            Tool::Buffer => "Buffer (Analysis Tools)",
-            Tool::Project => "Project (Data Management Tools)",
-            Tool::CalculateGeometry => "Calculate Geometry Attributes (Data Management Tools)",
-            Tool::SelectByAttributes => "Select Layer By Attribute (Data Management Tools)",
-            Tool::SelectByLocation => "Select Layer By Location (Data Management Tools)",
-            Tool::SummaryStatistics => "Summary Statistics (Analysis Tools)",
-            Tool::SpatialWeights => "Spatial Weights (Spatial Statistics Tools)",
-            Tool::SpatialAutocorrelation => "Spatial Autocorrelation (Spatial Statistics Tools)",
-            Tool::JoinField => "Join Field (Data Management Tools)",
-            Tool::XyTableToPoint => "XY Table To Point (Data Management Tools)",
+            Tool::Buffer => tr("Buffer (Analysis Tools)"),
+            Tool::Project => tr("Project (Data Management Tools)"),
+            Tool::CalculateGeometry => tr("Calculate Geometry Attributes (Data Management Tools)"),
+            Tool::SelectByAttributes => tr("Select Layer By Attribute (Data Management Tools)"),
+            Tool::SelectByLocation => tr("Select Layer By Location (Data Management Tools)"),
+            Tool::SummaryStatistics => tr("Summary Statistics (Analysis Tools)"),
+            Tool::SpatialWeights => tr("Spatial Weights (Spatial Statistics Tools)"),
+            Tool::SpatialAutocorrelation => tr("Spatial Autocorrelation (Spatial Statistics Tools)"),
+            Tool::JoinField => tr("Join Field (Data Management Tools)"),
+            Tool::XyTableToPoint => tr("XY Table To Point (Data Management Tools)"),
         }
     }
 
     pub fn description(self) -> &'static str {
         match self {
-            Tool::Buffer => "Creates buffer polygons around input features at a distance.",
-            Tool::Project => "Projects features into a new coordinate system.",
-            Tool::CalculateGeometry => "Writes area, length or centroid coordinates into a field.",
-            Tool::SelectByAttributes => "Selects features with a SQL clause.",
-            Tool::SelectByLocation => "Selects features by their spatial relation to another layer's.",
-            Tool::SummaryStatistics => "Count, sum, mean, minimum, maximum and standard deviation of a field.",
-            Tool::SpatialWeights => "Who neighbours whom: contiguity, nearest neighbours, distance bands or kernels, for the spatial statistics.",
-            Tool::JoinField => "Copies a CSV table's columns onto a layer by a common key, with a report of what matched.",
-            Tool::XyTableToPoint => "Makes a point layer from a CSV table's X and Y columns (or a WKT column).",
-            Tool::SpatialAutocorrelation => {
-                "Is a field clustered, dispersed or random in space, and where? Global Moran's I, Geary's C, General G; local Moran's I (LISA) and Gi* hot spots, mapped."
-            }
+            Tool::Buffer => tr("Creates buffer polygons around input features at a distance."),
+            Tool::Project => tr("Projects features into a new coordinate system."),
+            Tool::CalculateGeometry => tr("Writes area, length or centroid coordinates into a field."),
+            Tool::SelectByAttributes => tr("Selects features with a SQL clause."),
+            Tool::SelectByLocation => tr("Selects features by their spatial relation to another layer's."),
+            Tool::SummaryStatistics => tr("Count, sum, mean, minimum, maximum and standard deviation of a field."),
+            Tool::SpatialWeights => tr("Who neighbours whom: contiguity, nearest neighbours, distance bands or kernels, for the spatial statistics."),
+            Tool::JoinField => tr("Copies a CSV table's columns onto a layer by a common key, with a report of what matched."),
+            Tool::XyTableToPoint => tr("Makes a point layer from a CSV table's X and Y columns (or a WKT column)."),
+            Tool::SpatialAutocorrelation => tr(
+                "Is a field clustered, dispersed or random in space, and where? Global Moran's I, Geary's C, General G; local Moran's I (LISA) and Gi* hot spots, mapped.",
+            ),
         }
     }
 }
@@ -180,7 +181,7 @@ fn field_combo(ui: &mut Ui, app: &MapApp, layer: Option<u32>, label: &str, id: &
 fn gp(app: &mut MapApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let Some(tool) = app.gp.tool else {
-        ui.add(egui::TextEdit::singleline(&mut app.gp.search).hint_text("Find Tools").desired_width(f32::INFINITY));
+        ui.add(egui::TextEdit::singleline(&mut app.gp.search).hint_text(tr("Find Tools")).desired_width(f32::INFINITY));
         ui.add_space(6.0);
         let q = app.gp.search.to_lowercase();
         for tool in
@@ -197,7 +198,7 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
         return;
     };
     ui.horizontal(|ui| {
-        if ui.button("‹ Tools").on_hover_text("Back to the tools").clicked() {
+        if ui.button(tr("‹ Tools")).on_hover_text(tr("Back to the tools")).clicked() {
             app.gp.tool = None;
         }
         ui.label(egui::RichText::new(tool.name()).strong().color(t.text));
@@ -208,38 +209,44 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
     let points = |k: GeometryType| matches!(k, GeometryType::Point | GeometryType::Multipoint);
     let (command, params): (&str, Json) = match tool {
         Tool::Buffer => {
-            layer_combo(ui, app, "Input Features (points)", "gp-in", &mut g.layer, points);
-            ui.label("Distance");
+            layer_combo(ui, app, tr("Input Features (points)"), "gp-in", &mut g.layer, points);
+            ui.label(tr("Distance"));
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut g.distance).desired_width(90.0));
-                egui::ComboBox::from_id_salt("gp-unit").selected_text(g.unit).show_ui(ui, |ui| {
-                    ui.selectable_value(&mut g.unit, "meters", "meters");
-                    ui.selectable_value(&mut g.unit, "kilometers", "kilometers");
+                egui::ComboBox::from_id_salt("gp-unit").selected_text(option_label(g.unit)).show_ui(ui, |ui| {
+                    for u in ["meters", "kilometers"] {
+                        ui.selectable_value(&mut g.unit, u, option_label(u));
+                    }
                 });
             });
-            ui.label("Output Feature Class");
-            ui.add(egui::TextEdit::singleline(&mut g.output).hint_text("<input>_Buffer").desired_width(f32::INFINITY));
+            ui.label(tr("Output Feature Class"));
+            ui.add(egui::TextEdit::singleline(&mut g.output).hint_text(tr("<input>_Buffer")).desired_width(f32::INFINITY));
             (
                 "analysis.buffer",
                 json!({ "layer": g.layer, "distance": g.distance.replace(',', "."), "unit": g.unit, "output": (!g.output.is_empty()).then_some(&g.output) }),
             )
         }
         Tool::Project => {
-            layer_combo(ui, app, "Input Features", "gp-in", &mut g.layer, |_| true);
-            ui.label("Output Coordinate System (EPSG)");
+            layer_combo(ui, app, tr("Input Features"), "gp-in", &mut g.layer, |_| true);
+            ui.label(tr("Output Coordinate System (EPSG)"));
             ui.add(egui::TextEdit::singleline(&mut g.epsg).desired_width(f32::INFINITY));
-            let name =
-                g.epsg.trim().parse::<u32>().ok().and_then(|c| mkaegis_crs::Crs::from_epsg(c).ok()).map_or("unknown code".to_string(), |c| c.name());
+            let name = g
+                .epsg
+                .trim()
+                .parse::<u32>()
+                .ok()
+                .and_then(|c| mkaegis_crs::Crs::from_epsg(c).ok())
+                .map_or(tr("unknown code").to_string(), |c| c.name());
             ui.label(egui::RichText::new(name).size(11.0).color(t.muted));
-            ui.label("Output Feature Class");
-            ui.add(egui::TextEdit::singleline(&mut g.output).hint_text("<input>_Project").desired_width(f32::INFINITY));
+            ui.label(tr("Output Feature Class"));
+            ui.add(egui::TextEdit::singleline(&mut g.output).hint_text(tr("<input>_Project")).desired_width(f32::INFINITY));
             ("management.project", json!({ "layer": g.layer, "epsg": g.epsg.trim(), "output": (!g.output.is_empty()).then_some(&g.output) }))
         }
         Tool::CalculateGeometry => {
-            layer_combo(ui, app, "Input Features", "gp-in", &mut g.layer, |_| true);
-            ui.label("Target Field (new or numeric)");
-            ui.add(egui::TextEdit::singleline(&mut g.field).hint_text("AREA_HA").desired_width(f32::INFINITY));
-            ui.label("Property");
+            layer_combo(ui, app, tr("Input Features"), "gp-in", &mut g.layer, |_| true);
+            ui.label(tr("Target Field (new or numeric)"));
+            ui.add(egui::TextEdit::singleline(&mut g.field).hint_text(tr("AREA_HA")).desired_width(f32::INFINITY));
+            ui.label(tr("Property"));
             // Only what the layer's shapes have: no area of points, no length of points (#5).
             let kind = g.layer.and_then(|id| app.session.map.layers.iter().find(|l| l.id == id)).map(|l| l.data.geometry_type);
             let offered: Vec<&'static str> = Property::ALL.iter().filter(|(_, p)| kind.is_none_or(|k| p.fits(k))).map(|(name, _)| *name).collect();
@@ -248,30 +255,30 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             {
                 g.property = first;
             }
-            egui::ComboBox::from_id_salt("gp-prop").width(ui.available_width()).selected_text(g.property).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("gp-prop").width(ui.available_width()).selected_text(option_label(g.property)).show_ui(ui, |ui| {
                 for p in offered {
-                    ui.selectable_value(&mut g.property, p, p);
+                    ui.selectable_value(&mut g.property, p, option_label(p));
                 }
             });
             ("management.calculateGeometry", json!({ "layer": g.layer, "field": g.field, "property": g.property }))
         }
         Tool::SelectByAttributes => {
-            layer_combo(ui, app, "Input Rows", "gp-in", &mut g.layer, |_| true);
-            ui.label("Where clause");
-            ui.add(egui::TextEdit::multiline(&mut g.clause).hint_text("POP > 10000").desired_rows(3).desired_width(f32::INFINITY));
+            layer_combo(ui, app, tr("Input Rows"), "gp-in", &mut g.layer, |_| true);
+            ui.label(tr("Where clause"));
+            ui.add(egui::TextEdit::multiline(&mut g.clause).hint_text(tr("POP > 10000")).desired_rows(3).desired_width(f32::INFINITY));
             ("map.selectByAttributes", json!({ "layer": g.layer, "where": g.clause }))
         }
         Tool::SelectByLocation => {
-            layer_combo(ui, app, "Input Features", "gp-in", &mut g.layer, |_| true);
-            ui.label("Relationship");
-            egui::ComboBox::from_id_salt("gp-rel").width(ui.available_width()).selected_text(g.relation).show_ui(ui, |ui| {
+            layer_combo(ui, app, tr("Input Features"), "gp-in", &mut g.layer, |_| true);
+            ui.label(tr("Relationship"));
+            egui::ComboBox::from_id_salt("gp-rel").width(ui.available_width()).selected_text(option_label(g.relation)).show_ui(ui, |ui| {
                 for r in ["intersect", "withinDistance", "within", "contains", "haveTheirCenterIn"] {
-                    ui.selectable_value(&mut g.relation, r, r);
+                    ui.selectable_value(&mut g.relation, r, option_label(r));
                 }
             });
-            layer_combo(ui, app, "Selecting Features", "gp-sel", &mut g.other, |_| true);
+            layer_combo(ui, app, tr("Selecting Features"), "gp-sel", &mut g.other, |_| true);
             if g.relation == "withinDistance" {
-                ui.label("Search Distance (meters)");
+                ui.label(tr("Search Distance (meters)"));
                 ui.add(egui::TextEdit::singleline(&mut g.distance).desired_width(f32::INFINITY));
             }
             (
@@ -280,13 +287,13 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             )
         }
         Tool::SummaryStatistics => {
-            layer_combo(ui, app, "Input Table", "gp-in", &mut g.layer, |_| true);
-            field_combo(ui, app, g.layer, "Field (numeric)", "gp-field", &mut g.field, true);
-            ui.checkbox(&mut g.selected_only, "Selected records only");
+            layer_combo(ui, app, tr("Input Table"), "gp-in", &mut g.layer, |_| true);
+            field_combo(ui, app, g.layer, tr("Field (numeric)"), "gp-field", &mut g.field, true);
+            ui.checkbox(&mut g.selected_only, tr("Selected records only"));
             ("analysis.summaryStatistics", json!({ "layer": g.layer, "field": g.field, "selectedOnly": g.selected_only }))
         }
         Tool::SpatialWeights => {
-            layer_combo(ui, app, "Input Features", "gp-in", &mut g.layer, |_| true);
+            layer_combo(ui, app, tr("Input Features"), "gp-in", &mut g.layer, |_| true);
             let polygons = g
                 .layer
                 .and_then(|id| app.session.map.layers.iter().find(|l| l.id == id))
@@ -294,7 +301,7 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             if !polygons && matches!(g.method, "queen" | "rook") {
                 g.method = "knn";
             }
-            ui.label("Conceptualization");
+            ui.label(tr("Conceptualization"));
             egui::ComboBox::from_id_salt("gp-method").width(ui.available_width()).selected_text(method_label(g.method)).show_ui(ui, |ui| {
                 for m in ["queen", "rook", "knn", "distance", "kernel"] {
                     if polygons || !matches!(m, "queen" | "rook") {
@@ -304,26 +311,28 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             });
             match g.method {
                 "queen" | "rook" => {
-                    ui.label("Order of contiguity");
+                    ui.label(tr("Order of contiguity"));
                     ui.add(egui::TextEdit::singleline(&mut g.order).desired_width(f32::INFINITY));
                 }
                 "knn" | "kernel" => {
-                    ui.label(if g.method == "knn" { "Number of neighbors (k)" } else { "Neighbors for the adaptive bandwidth (k)" });
+                    ui.label(if g.method == "knn" { tr("Number of neighbors (k)") } else { tr("Neighbors for the adaptive bandwidth (k)") });
                     ui.add(egui::TextEdit::singleline(&mut g.k).desired_width(f32::INFINITY));
                 }
                 _ => {
-                    ui.label("Distance band (meters)");
-                    ui.add(egui::TextEdit::singleline(&mut g.threshold).hint_text("the smallest with no feature alone").desired_width(f32::INFINITY));
+                    ui.label(tr("Distance band (meters)"));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut g.threshold).hint_text(tr("the smallest with no feature alone")).desired_width(f32::INFINITY),
+                    );
                 }
             }
-            ui.label("Standardization");
-            egui::ComboBox::from_id_salt("gp-std").width(ui.available_width()).selected_text(g.standardize).show_ui(ui, |ui| {
+            ui.label(tr("Standardization"));
+            egui::ComboBox::from_id_salt("gp-std").width(ui.available_width()).selected_text(option_label(g.standardize)).show_ui(ui, |ui| {
                 for s in ["row", "binary", "variance", "none"] {
-                    ui.selectable_value(&mut g.standardize, s, s);
+                    ui.selectable_value(&mut g.standardize, s, option_label(s));
                 }
             });
-            ui.label("Weights name");
-            ui.add(egui::TextEdit::singleline(&mut g.output).hint_text("<input>_<method>").desired_width(f32::INFINITY));
+            ui.label(tr("Weights name"));
+            ui.add(egui::TextEdit::singleline(&mut g.output).hint_text(tr("<input>_<method>")).desired_width(f32::INFINITY));
             let number = |t: &str| t.trim().replace(',', ".");
             (
                 "stats.weights",
@@ -340,25 +349,25 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
         }
         Tool::JoinField | Tool::XyTableToPoint => {
             if tool == Tool::JoinField {
-                layer_combo(ui, app, "Input Table (layer)", "gp-in", &mut g.layer, |_| true);
-                field_combo(ui, app, g.layer, "Input Join Field", "gp-key", &mut g.field, false);
+                layer_combo(ui, app, tr("Input Table (layer)"), "gp-in", &mut g.layer, |_| true);
+                field_combo(ui, app, g.layer, tr("Input Join Field"), "gp-key", &mut g.field, false);
             }
-            ui.label(if tool == Tool::JoinField { "Join Table (CSV)" } else { "XY Table (CSV)" });
+            ui.label(if tool == Tool::JoinField { tr("Join Table (CSV)") } else { tr("XY Table (CSV)") });
             // Right to left: the button first, then the path takes exactly what is left. Sizing
             // the path by a guess at the button's width overflowed the row, and the pane, which
             // fits its content, widened a little on every frame.
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Browse…").clicked() {
+                if ui.button(tr("Browse…")).clicked() {
                     match &app.services.open_file {
                         Some(pick) => {
-                            if let Some(p) = pick("Table", &crate::TABLE_EXTENSIONS) {
+                            if let Some(p) = pick(tr("Table"), &crate::TABLE_EXTENSIONS) {
                                 g.path = p.display().to_string();
                             }
                         }
                         None => app.pick_table(),
                     }
                 }
-                ui.add(egui::TextEdit::singleline(&mut g.path).hint_text("path to a .csv file").desired_width(ui.available_width()));
+                ui.add(egui::TextEdit::singleline(&mut g.path).hint_text(tr("path to a .csv file")).desired_width(ui.available_width()));
             });
             if g.columns_of != g.path {
                 g.columns_of = g.path.clone();
@@ -379,16 +388,16 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
                 });
             };
             if !g.path.trim().is_empty() && g.columns.is_empty() {
-                ui.label(egui::RichText::new("The table couldn't be read.").size(11.0).color(t.muted));
+                ui.label(egui::RichText::new(tr("The table couldn't be read.")).size(11.0).color(t.muted));
             }
             if tool == Tool::JoinField {
                 let field = g.field.clone();
-                pick(ui, "Join Table Field", "gp-jkey", &mut g.join_key, &g.columns, &[field.as_str()]);
+                pick(ui, tr("Join Table Field"), "gp-jkey", &mut g.join_key, &g.columns, &[field.as_str()]);
                 ("management.joinField", json!({ "layer": g.layer, "field": g.field, "path": g.path.trim(), "joinField": g.join_key }))
             } else {
-                pick(ui, "X Field (longitude or easting)", "gp-x", &mut g.x, &g.columns, &["x", "lon", "long", "longitude", "lng"]);
-                pick(ui, "Y Field (latitude or northing)", "gp-y", &mut g.y, &g.columns, &["y", "lat", "latitude"]);
-                ui.label("Coordinate System (EPSG)");
+                pick(ui, tr("X Field (longitude or easting)"), "gp-x", &mut g.x, &g.columns, &["x", "lon", "long", "longitude", "lng"]);
+                pick(ui, tr("Y Field (latitude or northing)"), "gp-y", &mut g.y, &g.columns, &["y", "lat", "latitude"]);
+                ui.label(tr("Coordinate System (EPSG)"));
                 ui.add(egui::TextEdit::singleline(&mut g.epsg).desired_width(f32::INFINITY));
                 ("management.xyTableToPoint", json!({ "path": g.path.trim(), "x": g.x, "y": g.y, "epsg": g.epsg.trim() }))
             }
@@ -398,18 +407,18 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             if !names.iter().any(|(n, _)| *n == g.weights) {
                 g.weights = names.last().map(|(n, _)| n.clone()).unwrap_or_default();
             }
-            ui.label("Spatial Weights");
+            ui.label(tr("Spatial Weights"));
             egui::ComboBox::from_id_salt("gp-weights").width(ui.available_width()).selected_text(g.weights.as_str()).show_ui(ui, |ui| {
                 for (n, _) in &names {
                     ui.selectable_value(&mut g.weights, n.clone(), n);
                 }
             });
             if names.is_empty() {
-                ui.label(egui::RichText::new("Build spatial weights first (Statistics › Spatial Weights).").size(11.0).color(t.muted));
+                ui.label(egui::RichText::new(tr("Build spatial weights first (Statistics › Spatial Weights).")).size(11.0).color(t.muted));
             }
             let layer = names.iter().find(|(n, _)| *n == g.weights).map(|(_, l)| *l);
-            field_combo(ui, app, layer, "Input Field (numeric)", "gp-field", &mut g.field, true);
-            ui.label("Statistic");
+            field_combo(ui, app, layer, tr("Input Field (numeric)"), "gp-field", &mut g.field, true);
+            ui.label(tr("Statistic"));
             egui::ComboBox::from_id_salt("gp-stat").width(ui.available_width()).selected_text(statistic_label(g.statistic)).show_ui(ui, |ui| {
                 for c in ["stats.globalMoran", "stats.gearyC", "stats.generalG", "stats.localMoran", "stats.hotSpots"] {
                     ui.selectable_value(&mut g.statistic, c, statistic_label(c));
@@ -417,17 +426,17 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             });
             let local = matches!(g.statistic, "stats.localMoran" | "stats.hotSpots");
             if g.statistic != "stats.hotSpots" {
-                ui.label("Permutations (0 for none)");
+                ui.label(tr("Permutations (0 for none)"));
                 ui.add(egui::TextEdit::singleline(&mut g.permutations).desired_width(f32::INFINITY));
-                ui.label("Seed");
+                ui.label(tr("Seed"));
                 ui.add(egui::TextEdit::singleline(&mut g.seed).desired_width(f32::INFINITY));
             }
             if g.statistic == "stats.localMoran" {
-                ui.label("Significance level (α)");
+                ui.label(tr("Significance level (α)"));
                 ui.add(egui::TextEdit::singleline(&mut g.alpha).desired_width(f32::INFINITY));
             }
             if local {
-                ui.label("Multiple-testing correction");
+                ui.label(tr("Multiple-testing correction"));
                 egui::ComboBox::from_id_salt("gp-correction").width(ui.available_width()).selected_text(correction_label(g.correction)).show_ui(
                     ui,
                     |ui| {
@@ -436,7 +445,7 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
                         }
                     },
                 );
-                ui.label(egui::RichText::new("The results are written as fields on the layer and mapped.").size(11.0).color(t.muted));
+                ui.label(egui::RichText::new(tr("The results are written as fields on the layer and mapped.")).size(11.0).color(t.muted));
             }
             let number = |t: &str| t.trim().parse::<u64>().ok();
             let params = json!({
@@ -451,7 +460,7 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
         }
     };
     ui.add_space(8.0);
-    if ui.add(egui::Button::new(egui::RichText::new("Run").strong()).min_size(egui::vec2(80.0, 26.0))).clicked() {
+    if ui.add(egui::Button::new(egui::RichText::new(tr("Run")).strong()).min_size(egui::vec2(80.0, 26.0))).clicked() {
         g.result = app.run(command, params);
     }
     if let Some(r) = &g.result
@@ -463,25 +472,27 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             let summary = |k: &str| r.pointer(&format!("/summary/{k}")).cloned().unwrap_or(Json::Null);
             let number = |v: Json| v.as_f64().map_or(v.to_string(), |x| mkaegis_core::Value::Float(x).to_string());
             for (label, key) in [
-                ("Features", "n"),
-                ("Links", "links"),
-                ("% non-zero", "percent_nonzero"),
-                ("Mean neighbors", "mean_neighbours"),
-                ("Min neighbors", "min_neighbours"),
-                ("Max neighbors", "max_neighbours"),
+                (tr("Features"), "n"),
+                (tr("Links"), "links"),
+                (tr("% non-zero"), "percent_nonzero"),
+                (tr("Mean neighbors"), "mean_neighbours"),
+                (tr("Min neighbors"), "min_neighbours"),
+                (tr("Max neighbors"), "max_neighbours"),
             ] {
                 ui.label(egui::RichText::new(label).strong());
                 ui.label(number(summary(key)));
                 ui.end_row();
             }
-            ui.label(egui::RichText::new("Without neighbors").strong());
+            ui.label(egui::RichText::new(tr("Without neighbors")).strong());
             ui.label(summary("islands").as_array().map_or(0, Vec::len).to_string());
             ui.end_row();
-            ui.label(egui::RichText::new("Symmetric").strong());
+            ui.label(egui::RichText::new(tr("Symmetric")).strong());
             ui.label(if summary("symmetric").as_bool().unwrap_or(false) { "yes" } else { "no" });
             ui.end_row();
         });
-        ui.label(egui::RichText::new("Select a feature, then Statistics › Neighbors, to see its neighbours on the map.").size(11.0).color(t.muted));
+        ui.label(
+            egui::RichText::new(tr("Select a feature, then Statistics › Neighbors, to see its neighbours on the map.")).size(11.0).color(t.muted),
+        );
     }
     if let Some(r) = &g.result
         && tool == Tool::SummaryStatistics
@@ -502,10 +513,10 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
         ui.separator();
         egui::Grid::new("join").striped(true).num_columns(2).show(ui, |ui| {
             for (label, key) in [
-                ("Features matched", "matched"),
-                ("Features unmatched", "unmatched"),
-                ("Table rows unused", "unused"),
-                ("Duplicate keys in the table", "duplicate_keys"),
+                (tr("Features matched"), "matched"),
+                (tr("Features unmatched"), "unmatched"),
+                (tr("Table rows unused"), "unused"),
+                (tr("Duplicate keys in the table"), "duplicate_keys"),
             ] {
                 ui.label(egui::RichText::new(label).strong());
                 ui.label(r.get(key).map(Json::to_string).unwrap_or_default());
@@ -515,7 +526,7 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
         let list = |key: &str| {
             r.get(key).and_then(Json::as_array).map(|a| a.iter().filter_map(Json::as_str).collect::<Vec<_>>().join(", ")).unwrap_or_default()
         };
-        for (label, key) in [("Unmatched keys, e.g.", "unmatched_examples"), ("Unused keys, e.g.", "unused_examples")] {
+        for (label, key) in [(tr("Unmatched keys, e.g."), "unmatched_examples"), (tr("Unused keys, e.g."), "unused_examples")] {
             let text = list(key);
             if !text.is_empty() {
                 ui.label(egui::RichText::new(format!("{label} {text}")).size(11.0).color(t.muted));
@@ -536,19 +547,19 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
 
 fn statistic_label(command: &str) -> &'static str {
     match command {
-        "stats.gearyC" => "Geary's C",
-        "stats.generalG" => "Getis-Ord General G",
-        "stats.localMoran" => "Local Moran's I (clusters and outliers)",
-        "stats.hotSpots" => "Getis-Ord Gi* (hot spots)",
-        _ => "Global Moran's I",
+        "stats.gearyC" => tr("Geary's C"),
+        "stats.generalG" => tr("Getis-Ord General G"),
+        "stats.localMoran" => tr("Local Moran's I (clusters and outliers)"),
+        "stats.hotSpots" => tr("Getis-Ord Gi* (hot spots)"),
+        _ => tr("Global Moran's I"),
     }
 }
 
 fn correction_label(correction: &str) -> &'static str {
     match correction {
-        "fdr" => "False discovery rate (Benjamini–Hochberg)",
-        "bonferroni" => "Bonferroni",
-        _ => "None",
+        "fdr" => tr("False discovery rate (Benjamini–Hochberg)"),
+        "bonferroni" => tr("Bonferroni"),
+        _ => tr("None"),
     }
 }
 
@@ -564,10 +575,10 @@ fn local_report(ui: &mut Ui, r: &Json) {
             ui.end_row();
         };
         let summary = |k: &str| r.pointer(&format!("/summary/{k}")).cloned().unwrap_or(Json::Null);
-        row("Features tested", summary("tested").to_string());
-        row("Correction", correction_label(summary("correction").as_str().unwrap_or("none")).to_string());
+        row(tr("Features tested"), summary("tested").to_string());
+        row(tr("Correction"), correction_label(summary("correction").as_str().unwrap_or("none")).to_string());
         if let Some(t) = summary("threshold").as_f64() {
-            row("p threshold", if t != 0.0 && t < 1e-4 { format!("{t:.3e}") } else { format!("{t:.4}") });
+            row(tr("p threshold"), crate::i18n::localize(if t != 0.0 && t < 1e-4 { format!("{t:.3e}") } else { format!("{t:.4}") }));
         }
         if let Some(clusters) = r.get("clusters").and_then(Json::as_object) {
             for (name, count) in clusters {
@@ -575,27 +586,30 @@ fn local_report(ui: &mut Ui, r: &Json) {
             }
         }
         if let (Some(hot), Some(cold)) = (r.get("hot"), r.get("cold")) {
-            row("Hot spots (95 %)", hot.to_string());
-            row("Cold spots (95 %)", cold.to_string());
+            row(tr("Hot spots (95 %)"), hot.to_string());
+            row(tr("Cold spots (95 %)"), cold.to_string());
         }
     });
     let fields: Vec<&str> = r.get("fields").and_then(Json::as_array).into_iter().flatten().filter_map(Json::as_str).collect();
-    ui.label(egui::RichText::new(format!("Fields written: {}.", fields.join(", "))).size(11.0).color(t.muted));
+    ui.label(egui::RichText::new(crate::trf("Fields written: {fields}.", &[("fields", &fields.join(", "))])).size(11.0).color(t.muted));
 }
 
 /// A global statistic's report: the value against its expectation, then each inference.
 fn autocorrelation_report(ui: &mut Ui, r: &Json) {
     let t = Tokens::get(ui.ctx());
     let num = |path: &str| r.pointer(path).and_then(Json::as_f64);
-    let show =
-        |x: Option<f64>| x.map_or_else(|| "—".to_string(), |x| if x != 0.0 && x.abs() < 1e-4 { format!("{x:.3e}") } else { format!("{x:.4}") });
+    let show = |x: Option<f64>| {
+        x.map_or_else(|| "—".to_string(), |x| crate::i18n::localize(if x != 0.0 && x.abs() < 1e-4 { format!("{x:.3e}") } else { format!("{x:.4}") }))
+    };
     ui.separator();
     ui.label(
-        egui::RichText::new(format!(
-            "{} — {} by {}",
-            r.get("statistic").and_then(Json::as_str).unwrap_or(""),
-            r.get("field").and_then(Json::as_str).unwrap_or(""),
-            r.get("weights").and_then(Json::as_str).unwrap_or("")
+        egui::RichText::new(crate::trf(
+            "{statistic} — {field} by {weights}",
+            &[
+                ("statistic", &r.get("statistic").and_then(Json::as_str).unwrap_or("")),
+                ("field", &r.get("field").and_then(Json::as_str).unwrap_or("")),
+                ("weights", &r.get("weights").and_then(Json::as_str).unwrap_or("")),
+            ],
         ))
         .strong(),
     );
@@ -605,37 +619,39 @@ fn autocorrelation_report(ui: &mut Ui, r: &Json) {
             ui.label(value);
             ui.end_row();
         };
-        row("Value", show(num("/value")));
-        row("Expected", show(num("/expected")));
-        row("Features", r.get("n").map(Json::to_string).unwrap_or_default());
-        for (label, key) in [("normality", "/normality"), ("randomization", "/randomization")] {
+        row(tr("Value"), show(num("/value")));
+        row(tr("Expected"), show(num("/expected")));
+        row(tr("Features"), r.get("n").map(Json::to_string).unwrap_or_default());
+        for (label, key) in [(tr("normality"), "/normality"), (tr("randomization"), "/randomization")] {
             if r.pointer(key).is_some_and(|v| !v.is_null()) {
-                row(&format!("z ({label})"), show(num(&format!("{key}/z"))));
-                row(&format!("p ({label}, two-sided)"), show(num(&format!("{key}/p"))));
+                row(&crate::trf("z ({assumption})", &[("assumption", &label)]), show(num(&format!("{key}/z"))));
+                row(&crate::trf("p ({assumption}, two-sided)", &[("assumption", &label)]), show(num(&format!("{key}/p"))));
             }
         }
         if r.get("permutation").is_some_and(|v| !v.is_null()) {
-            row("Pseudo p (one-sided)", show(num("/permutation/p")));
-            row("z (permutation)", show(num("/permutation/z")));
+            row(tr("Pseudo p (one-sided)"), show(num("/permutation/p")));
+            row(tr("z (permutation)"), show(num("/permutation/z")));
             row(
-                "Permutations",
-                format!(
-                    "{} (seed {})",
-                    r.pointer("/permutation/permutations").unwrap_or(&Json::Null),
-                    r.pointer("/permutation/seed").unwrap_or(&Json::Null)
+                tr("Permutations"),
+                crate::trf(
+                    "{count} (seed {seed})",
+                    &[
+                        ("count", r.pointer("/permutation/permutations").unwrap_or(&Json::Null)),
+                        ("seed", r.pointer("/permutation/seed").unwrap_or(&Json::Null)),
+                    ],
                 ),
             );
         }
     });
     if let Some(n) = r.get("islands").and_then(Json::as_u64).filter(|n| *n > 0) {
-        ui.label(egui::RichText::new(format!("{n} features have no neighbours.")).size(11.0).color(t.muted));
+        ui.label(egui::RichText::new(crate::trf("{count} features have no neighbours.", &[("count", &n)])).size(11.0).color(t.muted));
     }
 }
 
 fn symbology(app: &mut MapApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let Some(layer) = app.active_layer() else {
-        ui.label(egui::RichText::new("Select a layer in Contents.").color(t.muted));
+        ui.label(egui::RichText::new(tr("Select a layer in Contents.")).color(t.muted));
         return;
     };
     let id = layer.id;
@@ -651,22 +667,22 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
     let all: Vec<String> = layer.data.fields.iter().map(|f| f.name.clone()).collect();
     let labels = layer.labels.clone();
     let opacity = layer.opacity;
-    ui.label(egui::RichText::new(format!("Symbology — {}", layer.name)).strong().color(t.text));
+    ui.label(egui::RichText::new(crate::trf("Symbology — {layer}", &[("layer", &layer.name)])).strong().color(t.text));
     ui.separator();
     let mut next: Option<Json> = None;
-    ui.label("Primary symbology");
+    ui.label(tr("Primary symbology"));
     let mut r = renderer;
     egui::ComboBox::from_id_salt("sym-renderer")
         .width(ui.available_width())
         .selected_text(match r {
-            "uniqueValues" => "Unique Values",
-            "graduatedColors" => "Graduated Colors",
-            _ => "Single Symbol",
+            "uniqueValues" => tr("Unique Values"),
+            "graduatedColors" => tr("Graduated Colors"),
+            _ => tr("Single Symbol"),
         })
         .show_ui(ui, |ui| {
-            ui.selectable_value(&mut r, "single", "Single Symbol");
-            ui.selectable_value(&mut r, "uniqueValues", "Unique Values");
-            ui.add_enabled_ui(!numeric.is_empty(), |ui| ui.selectable_value(&mut r, "graduatedColors", "Graduated Colors"));
+            ui.selectable_value(&mut r, "single", tr("Single Symbol"));
+            ui.selectable_value(&mut r, "uniqueValues", tr("Unique Values"));
+            ui.add_enabled_ui(!numeric.is_empty(), |ui| ui.selectable_value(&mut r, "graduatedColors", tr("Graduated Colors")));
         });
     if r != renderer {
         let f = match r {
@@ -678,7 +694,7 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
     }
     if renderer != "single" {
         let mut f = field.clone().unwrap_or_default();
-        ui.label("Field");
+        ui.label(tr("Field"));
         egui::ComboBox::from_id_salt("sym-field").width(ui.available_width()).selected_text(f.as_str()).show_ui(ui, |ui| {
             for name in if renderer == "graduatedColors" { &numeric } else { &all } {
                 ui.selectable_value(&mut f, name.clone(), name);
@@ -690,7 +706,7 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
     }
     if renderer == "graduatedColors" {
         ui.horizontal(|ui| {
-            for (label, method) in [("Equal Interval", "equalInterval"), ("Quantile", "quantile"), ("Natural Breaks", "naturalBreaks")] {
+            for (label, method) in [(tr("Equal Interval"), "equalInterval"), (tr("Quantile"), "quantile"), (tr("Natural Breaks"), "naturalBreaks")] {
                 if ui.button(label).clicked() {
                     next = Some(json!({ "method": method }));
                 }
@@ -699,10 +715,10 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
         ui.horizontal_wrapped(|ui| {
             // Six named classes each, on a diverging ramp centred on the mean or the median.
             for (label, method, tip) in [
-                ("Std. Deviation", "standardDeviation", "Six classes at the mean ± 1 and 2 standard deviations"),
-                ("Box Map", "boxMap", "Quartiles, with outliers beyond 1.5 × the interquartile range"),
-                ("Percentile", "percentile", "< 1 %, 1–10 %, 10–50 %, 50–90 %, 90–99 %, > 99 %"),
-                ("Geometric", "geometricInterval", "Bounds in geometric progression, for positive skewed values"),
+                (tr("Std. Deviation"), "standardDeviation", tr("Six classes at the mean ± 1 and 2 standard deviations")),
+                (tr("Box Map"), "boxMap", tr("Quartiles, with outliers beyond 1.5 × the interquartile range")),
+                (tr("Percentile"), "percentile", "< 1 %, 1–10 %, 10–50 %, 50–90 %, 90–99 %, > 99 %"),
+                (tr("Geometric"), "geometricInterval", tr("Bounds in geometric progression, for positive skewed values")),
             ] {
                 if ui.button(label).on_hover_text(tip).clicked() {
                     let ramp = if matches!(method, "geometricInterval") { "meadow" } else { "balance" };
@@ -711,7 +727,7 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
             }
         });
         ui.horizontal(|ui| {
-            ui.label("Classes");
+            ui.label(tr("Classes"));
             for k in [3, 4, 5, 7] {
                 if ui.button(k.to_string()).clicked() {
                     next = Some(json!({ "classes": k }));
@@ -719,7 +735,7 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
             }
         });
         ui.horizontal(|ui| {
-            ui.label("Ramp");
+            ui.label(tr("Ramp"));
             for ramp in ["meadow", "ember", "depth", "balance"] {
                 if ui.button(ramp).clicked() {
                     next = Some(json!({ "ramp": ramp }));
@@ -728,7 +744,7 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
         });
     }
     ui.separator();
-    ui.label(egui::RichText::new("Symbol").strong());
+    ui.label(egui::RichText::new(tr("Symbol")).strong());
     let to32 = |c: mkaegis_core::Color| egui::Color32::from_rgba_unmultiplied(c.r, c.g, c.b, c.a);
     let hex = |c: egui::Color32| {
         let [r, g, b, a] = c.to_srgba_unmultiplied();
@@ -736,33 +752,33 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
     };
     egui::Grid::new("sym-grid").num_columns(2).show(ui, |ui| {
         if kind != GeometryType::Polyline {
-            ui.label("Fill");
+            ui.label(tr("Fill"));
             let mut c = to32(base.fill);
             if ui.color_edit_button_srgba(&mut c).changed() && renderer == "single" {
                 next = Some(json!({ "fill": hex(c) }));
             }
             ui.end_row();
         }
-        ui.label(if kind == GeometryType::Polyline { "Color" } else { "Outline" });
+        ui.label(if kind == GeometryType::Polyline { tr("Color") } else { tr("Outline") });
         let mut c = to32(base.outline);
         if ui.color_edit_button_srgba(&mut c).changed() {
             next = Some(json!({ "outline": hex(c) }));
         }
         ui.end_row();
-        ui.label("Width");
+        ui.label(tr("Width"));
         let mut w = base.width;
         if ui.add(egui::Slider::new(&mut w, 0.0..=8.0).step_by(0.1)).drag_stopped() {
             next = Some(json!({ "width": w }));
         }
         ui.end_row();
         if matches!(kind, GeometryType::Point | GeometryType::Multipoint) {
-            ui.label("Size");
+            ui.label(tr("Size"));
             let mut s = base.size;
             if ui.add(egui::Slider::new(&mut s, 1.0..=30.0).step_by(0.5)).drag_stopped() {
                 next = Some(json!({ "size": s }));
             }
             ui.end_row();
-            ui.label("Shape");
+            ui.label(tr("Shape"));
             ui.horizontal(|ui| {
                 for m in ["circle", "square", "triangle", "diamond"] {
                     if ui.small_button(m).clicked() {
@@ -780,24 +796,24 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
         app.run("layer.symbology", p);
     }
     ui.separator();
-    ui.label(egui::RichText::new("Transparency").strong());
+    ui.label(egui::RichText::new(tr("Transparency")).strong());
     let mut o = 100 - i32::from(opacity);
     if ui.add(egui::Slider::new(&mut o, 0..=100).suffix(" %")).drag_stopped() {
         app.run("layer.setOpacity", json!({ "layer": id, "opacity": 100 - o }));
     }
     ui.separator();
-    ui.label(egui::RichText::new("Labels").strong());
+    ui.label(egui::RichText::new(tr("Labels")).strong());
     let mut on = labels.is_some();
     let mut lf = labels.as_ref().map(|l| l.field.clone()).unwrap_or_else(|| all.first().cloned().unwrap_or_default());
     let mut size = labels.as_ref().map_or(9.0, |l| l.size);
-    let mut changed = ui.checkbox(&mut on, "Label features in this layer").changed();
+    let mut changed = ui.checkbox(&mut on, tr("Label features in this layer")).changed();
     if on {
         egui::ComboBox::from_id_salt("lbl-field").width(ui.available_width()).selected_text(lf.as_str()).show_ui(ui, |ui| {
             for name in &all {
                 changed |= ui.selectable_value(&mut lf, name.clone(), name).changed();
             }
         });
-        changed |= ui.add(egui::Slider::new(&mut size, 6.0..=24.0).text("pt")).drag_stopped();
+        changed |= ui.add(egui::Slider::new(&mut size, 6.0..=24.0).text(tr("pt"))).drag_stopped();
     }
     if changed {
         app.run("layer.labels", json!({ "layer": id, "field": on.then_some(lf), "size": size }));
@@ -806,14 +822,14 @@ fn symbology(app: &mut MapApp, ui: &mut Ui) {
 
 fn history(app: &mut MapApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    ui.label(egui::RichText::new("History").strong().color(t.text));
+    ui.label(egui::RichText::new(tr("History")).strong().color(t.text));
     ui.separator();
     egui::ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
         if app.session.history().is_empty() {
-            ui.label(egui::RichText::new("Nothing run yet.").color(t.muted));
+            ui.label(egui::RichText::new(tr("Nothing run yet.")).color(t.muted));
         }
         for h in app.session.history() {
-            let label = mkaegis_engine::Session::command(&h.command).map_or(h.command.as_str(), |c| c.label);
+            let label = mkaegis_engine::Session::command(&h.command).map_or(h.command.as_str(), |c| crate::i18n::command_label(c.id, c.label));
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new(if h.ok { "✔" } else { "✖" }).color(if h.ok { t.accent } else { t.error }));
                 ui.label(egui::RichText::new(label).strong());
@@ -828,9 +844,12 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
     ui.horizontal(|ui| {
         // Four tabs and the chevron share the pane's width.
         ui.spacing_mut().item_spacing.x = 2.0;
-        for (p, label) in
-            [(Pane::Geoprocessing, "Geoprocessing"), (Pane::Symbology, "Symbology"), (Pane::History, "History"), (Pane::Charts, "Charts")]
-        {
+        for (p, label) in [
+            (Pane::Geoprocessing, tr("Geoprocessing")),
+            (Pane::Symbology, tr("Symbology")),
+            (Pane::History, tr("History")),
+            (Pane::Charts, tr("Charts")),
+        ] {
             let sel = app.pane == Some(p);
             if ui.selectable_label(sel, egui::RichText::new(label).size(12.5).color(if sel { t.accent } else { t.text })).clicked() {
                 app.pane = Some(p);
@@ -844,7 +863,7 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
             }
             let icon = egui::Rect::from_center_size(rect.center(), egui::vec2(14.0, 14.0));
             crate::icons::paint(ui.painter(), icon, crate::icons::Icon::ChevronRight, t.accent, t.accent);
-            if r.on_hover_text("Close the pane").clicked() {
+            if r.on_hover_text(tr("Close the pane")).clicked() {
                 app.pane = None;
             }
         });
@@ -862,11 +881,36 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
 /// A conceptualization's name in the Spatial Weights form.
 fn method_label(method: &str) -> &'static str {
     match method {
-        "queen" => "Contiguity: queen (shared vertex)",
-        "rook" => "Contiguity: rook (shared edge)",
-        "knn" => "K nearest neighbors",
-        "distance" => "Distance band",
-        "kernel" => "Kernel (adaptive bisquare)",
+        "queen" => tr("Contiguity: queen (shared vertex)"),
+        "rook" => tr("Contiguity: rook (shared edge)"),
+        "knn" => tr("K nearest neighbors"),
+        "distance" => tr("Distance band"),
+        "kernel" => tr("Kernel (adaptive bisquare)"),
         _ => "",
+    }
+}
+
+/// The label of a parameter value a form offers (the value is what the command takes).
+fn option_label(value: &str) -> &str {
+    match value {
+        "meters" => tr("meters"),
+        "kilometers" => tr("kilometers"),
+        "area" => tr("Area (m²)"),
+        "areaHectares" => tr("Area (ha)"),
+        "areaKm2" => tr("Area (km²)"),
+        "length" => tr("Length (m)"),
+        "lengthKm" => tr("Length (km)"),
+        "centroidX" => tr("Centroid X"),
+        "centroidY" => tr("Centroid Y"),
+        "intersect" => tr("Intersect"),
+        "withinDistance" => tr("Within a distance"),
+        "within" => tr("Within"),
+        "contains" => tr("Contains"),
+        "haveTheirCenterIn" => tr("Have their center in"),
+        "row" => tr("Row"),
+        "binary" => tr("Binary"),
+        "variance" => tr("Variance-stabilizing"),
+        "none" => tr("None"),
+        other => other,
     }
 }

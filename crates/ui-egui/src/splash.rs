@@ -10,6 +10,7 @@ use zune_core::colorspace::ColorSpace;
 use zune_core::options::DecoderOptions;
 use zune_jpeg::JpegDecoder;
 
+use crate::i18n::tr;
 use crate::icons::{self, Icon};
 
 /// The window's size, in points: each half keeps the artwork's 680×800 proportions.
@@ -32,24 +33,33 @@ pub(crate) const ON_INK_SOFT: Color32 = Color32::from_rgba_premultiplied(184, 18
 pub(crate) const BRAND: Color32 = Color32::from_rgb(0xE8, 0x5A, 0x5F);
 pub(crate) const NAME: &str = "MK aeGIS";
 pub(crate) const MOTTO: &str = "Ex nihilo, ad æternum";
-pub(crate) const TAGLINE: &str = "Spatial statistics, open and auditable: every map with its method.";
-pub(crate) const HOUSE: &str = "A Morrison Kühlsen project";
+
+/// What MK aeGIS is, in a line, in the interface's language.
+pub(crate) fn tagline() -> &'static str {
+    tr("Spatial statistics, open and auditable: every map with its method.")
+}
+
+pub(crate) fn house() -> &'static str {
+    tr("A Morrison Kühlsen project")
+}
 
 /// The program's components, named in turn as the bar fills.
-const COMPONENTS: [&str; 12] = [
-    "coordinate systems and geodesics",
-    "the shapefile and dBASE reader",
-    "the GeoJSON reader and writer",
-    "the SQL query engine",
-    "the map renderer",
-    "symbology and classification",
-    "geoprocessing tools",
-    "spatial weights",
-    "spatial statistics",
-    "the attribute table",
-    "the command registry and history",
-    "the control channel and MCP",
-];
+fn components() -> [&'static str; 12] {
+    [
+        tr("coordinate systems and geodesics"),
+        tr("the shapefile and dBASE reader"),
+        tr("the GeoJSON and KML readers and writers"),
+        tr("the SQL query engine"),
+        tr("the map renderer"),
+        tr("symbology and classification"),
+        tr("geoprocessing tools"),
+        tr("spatial weights"),
+        tr("spatial statistics"),
+        tr("the attribute table"),
+        tr("the command registry and history"),
+        tr("the control channel and MCP"),
+    ]
+}
 
 #[derive(Debug, Default)]
 pub struct SplashScreen {
@@ -103,21 +113,22 @@ fn paint(painter: &egui::Painter, ctx: &egui::Context, rect: Rect, progress: f32
     icons::paint(painter, mark, Icon::Logo, BRAND, BRAND);
     painter.text(pos2(left + 58.0 * k, words.top() + 75.0 * k), Align2::LEFT_CENTER, NAME, FontId::proportional(34.0 * k), ON_INK);
     painter.text(pos2(left, words.top() + 128.0 * k), Align2::LEFT_CENTER, MOTTO, FontId::proportional(15.0 * k), ON_INK_SOFT);
-    let tagline = painter.layout(TAGLINE.to_string(), FontId::proportional(12.5 * k), ON_INK_SOFT, width);
+    let tagline = painter.layout(tagline().to_string(), FontId::proportional(12.5 * k), ON_INK_SOFT, width);
     let below = words.top() + 152.0 * k + tagline.size().y;
     painter.galley(pos2(left, words.top() + 152.0 * k), tagline, ON_INK_SOFT);
     painter.text(
         pos2(left, below + 10.0 * k),
         Align2::LEFT_TOP,
-        format!("Version {}", env!("CARGO_PKG_VERSION")),
+        crate::trf("Version {version}", &[("version", &env!("CARGO_PKG_VERSION"))]),
         FontId::proportional(12.5 * k),
         ON_INK_SOFT,
     );
 
     // The component loading, over the progress bar.
     let bar = Rect::from_min_size(pos2(left, words.bottom() - 96.0 * k), vec2(width, 3.0 * k));
-    let shown = ((progress * COMPONENTS.len() as f32) as usize).min(COMPONENTS.len() - 1);
-    let status = COMPONENTS.get(shown).map_or_else(String::new, |c| format!("Loading {c}…"));
+    let components = components();
+    let shown = ((progress * components.len() as f32) as usize).min(components.len() - 1);
+    let status = components.get(shown).map_or_else(String::new, |c| crate::trf("Loading {component}…", &[("component", c)]));
     painter.text(bar.left_top() - vec2(0.0, 10.0 * k), Align2::LEFT_BOTTOM, status, FontId::proportional(12.0 * k), ON_INK_SOFT);
     painter.rect_filled(bar, 0.0, Color32::from_white_alpha(28));
     painter.rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * progress, bar.height())), 0.0, BRAND);
@@ -129,7 +140,7 @@ fn paint(painter: &egui::Painter, ctx: &egui::Context, rect: Rect, progress: f32
         let size = vec2(logo_width, logo_width * texture.size_vec2().y / texture.size_vec2().x.max(1.0));
         painter.image(texture.id(), Rect::from_min_size(pos2(left, foot - size.y), size), uv, ON_INK);
     }
-    painter.text(pos2(left + width, foot - 4.0 * k), Align2::RIGHT_BOTTOM, HOUSE, FontId::proportional(11.0 * k), ON_INK_SOFT);
+    painter.text(pos2(left + width, foot - 4.0 * k), Align2::RIGHT_BOTTOM, house(), FontId::proportional(11.0 * k), ON_INK_SOFT);
 }
 
 /// Athena, the splash's artwork, as a texture (the File backstage shows it too).

@@ -5,6 +5,7 @@
 use egui::{Rect, Sense, Ui, vec2};
 use serde_json::json;
 
+use crate::i18n::{Language, tr};
 use crate::icons::{self, Icon};
 use crate::pane::{Pane, Tool as GpTool};
 use crate::theme::Tokens;
@@ -26,22 +27,39 @@ impl Tab {
 
     fn label(self) -> &'static str {
         match self {
-            Tab::Map => "Map",
-            Tab::Analysis => "Analysis",
-            Tab::Statistics => "Statistics",
-            Tab::Edit => "Edit",
-            Tab::View => "View",
-            Tab::Share => "Share",
+            Tab::Map => tr("Map"),
+            Tab::Analysis => tr("Analysis"),
+            Tab::Statistics => tr("Statistics"),
+            Tab::Edit => tr("Edit"),
+            Tab::View => tr("View"),
+            Tab::Share => tr("Share"),
         }
     }
 }
 
 const BUTTON: egui::Vec2 = vec2(66.0, 62.0);
+/// The widest a ribbon button grows for its label.
+const BUTTON_MAX_WIDTH: f32 = 120.0;
+const BUTTON_FONT: f32 = 11.0;
+
+/// A ribbon button's width: wide enough that no word of its label breaks and the label takes two
+/// lines at most. Portuguese words run longer than English ones (Geoprocessamento, coordenadas).
+fn button_width(ui: &Ui, label: &str) -> f32 {
+    let font = egui::FontId::proportional(BUTTON_FONT);
+    let color = egui::Color32::WHITE;
+    let longest = label.split_whitespace().map(|w| ui.painter().layout_no_wrap(w.to_string(), font.clone(), color).size().x).fold(0.0, f32::max);
+    let mut width = BUTTON.x.max(longest + 6.0).min(BUTTON_MAX_WIDTH);
+    while width < BUTTON_MAX_WIDTH && ui.painter().layout(label.to_string(), font.clone(), color, width - 4.0).rows.len() > 2 {
+        width += 6.0;
+    }
+    width
+}
 
 /// A large ribbon button: icon above, label below. Returns whether it was clicked.
 fn button(ui: &mut Ui, icon: Icon, label: &str, enabled: bool, checked: bool, tip: &str) -> bool {
     let t = Tokens::get(ui.ctx());
-    let (rect, response) = ui.allocate_exact_size(BUTTON, if enabled { Sense::click() } else { Sense::hover() });
+    let size = vec2(button_width(ui, label), BUTTON.y);
+    let (rect, response) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
     let response = response.on_hover_text(tip);
     // Named for screen readers (and UI tests), since the label is painted.
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
@@ -53,7 +71,7 @@ fn button(ui: &mut Ui, icon: Icon, label: &str, enabled: bool, checked: bool, ti
     let (fg, accent) = if enabled { (t.text, t.accent) } else { (t.muted.gamma_multiply(0.6), t.muted.gamma_multiply(0.6)) };
     let icon_rect = Rect::from_center_size(rect.center_top() + vec2(0.0, 18.0), vec2(26.0, 26.0));
     icons::paint(ui.painter(), icon_rect, icon, fg, accent);
-    let galley = ui.painter().layout(label.to_string(), egui::FontId::proportional(11.0), fg, BUTTON.x - 4.0);
+    let galley = ui.painter().layout(label.to_string(), egui::FontId::proportional(BUTTON_FONT), fg, rect.width() - 4.0);
     let pos = egui::pos2(rect.center().x - galley.size().x / 2.0, rect.top() + 34.0);
     ui.painter().galley(pos, galley, fg);
     enabled && response.clicked()
@@ -130,9 +148,9 @@ fn title_bar(app: &mut MapApp, ui: &mut Ui) {
     let (logo, _) = row.allocate_exact_size(vec2(24.0, 24.0), Sense::hover());
     icons::paint(row.painter(), logo, Icon::Logo, t.accent, t.accent);
     row.add_space(10.0);
-    row.label(egui::RichText::new("AutoSave").size(12.5).color(t.muted));
+    row.label(egui::RichText::new(tr("AutoSave")).size(12.5).color(t.muted));
     row.add_space(4.0);
-    let tip = if app.autosave { "AutoSave is on: every change is saved to the project file" } else { "AutoSave is off" };
+    let tip = if app.autosave { tr("AutoSave is on: every change is saved to the project file") } else { tr("AutoSave is off") };
     if switch(&mut row, app.autosave).on_hover_text(tip).clicked() {
         app.autosave = !app.autosave;
         if app.autosave && app.session.path.is_none() {
@@ -140,44 +158,46 @@ fn title_bar(app: &mut MapApp, ui: &mut Ui) {
         }
     }
     row.add_space(8.0);
-    if icon_button(&mut row, Icon::Save, "Save (Ctrl+S)", true).clicked() {
+    if icon_button(&mut row, Icon::Save, tr("Save (Ctrl+S)"), true).clicked() {
         app.save_project(false);
     }
-    let undo = app.session.can_undo().map(|l| format!("Undo {l}"));
-    if icon_button(&mut row, Icon::Undo, undo.as_deref().unwrap_or("Undo"), undo.is_some()).clicked() && undo.is_some() {
+    let undo = app.session.can_undo().map(|l| crate::trf("Undo {action}", &[("action", &tr(l))]));
+    if icon_button(&mut row, Icon::Undo, undo.as_deref().unwrap_or(tr("Undo")), undo.is_some()).clicked() && undo.is_some() {
         app.run("edit.undo", json!({}));
     }
-    let redo = app.session.can_redo().map(|l| format!("Redo {l}"));
-    if icon_button(&mut row, Icon::Redo, redo.as_deref().unwrap_or("Redo"), redo.is_some()).clicked() && redo.is_some() {
+    let redo = app.session.can_redo().map(|l| crate::trf("Redo {action}", &[("action", &tr(l))]));
+    if icon_button(&mut row, Icon::Redo, redo.as_deref().unwrap_or(tr("Redo")), redo.is_some()).clicked() && redo.is_some() {
         app.run("edit.redo", json!({}));
     }
     row.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
-        if icon_button(ui, Icon::Search, "Search commands and tools (Alt+Q)", true).clicked() {
+        if icon_button(ui, Icon::Search, tr("Search commands and tools (Alt+Q)"), true).clicked() {
             app.search = Some(String::new());
         }
         let has_layers = !app.session.map.layers.is_empty();
-        let share = icon_button(ui, Icon::Share, "Share: export the map or a layer", has_layers);
+        let share = icon_button(ui, Icon::Share, tr("Share: export the map or a layer"), has_layers);
         egui::Popup::menu(&share).show(|ui| {
-            if ui.button("Export Map (PNG)…").clicked() {
-                app.save_to("Export Map", "share.exportMap", &["png"], "map.png", json!({ "width": 1600, "height": 1000 }));
+            if ui.button(tr("Export Map (PNG)…")).clicked() {
+                app.save_to(tr("Export Map"), "share.exportMap", &["png"], "map.png", json!({ "width": 1600, "height": 1000 }));
             }
-            if ui.button("Export Features…").clicked()
+            if ui.button(tr("Export Features…")).clicked()
                 && let Some(l) = app.active_layer()
             {
                 let (id, name) = (l.id, format!("{}.geojson", l.name));
-                app.save_to("Export Features", "layer.export", &["geojson", "shp", "csv"], &name, json!({ "layer": id }));
+                app.save_to(tr("Export Features"), "layer.export", &["geojson", "shp", "csv"], &name, json!({ "layer": id }));
             }
         });
         let dark = ui.ctx().global_style().visuals.dark_mode;
-        let theme = icon_button(ui, Icon::Contrast, "Light or dark (right-click for more)", true);
+        let theme = icon_button(ui, Icon::Contrast, tr("Light or dark (right-click for more)"), true);
         if theme.clicked() {
             ui.ctx().set_theme(if dark { egui::ThemePreference::Light } else { egui::ThemePreference::Dark });
         }
         theme.context_menu(|ui| {
-            for (pref, name) in
-                [(egui::ThemePreference::Light, "Light"), (egui::ThemePreference::Dark, "Dark"), (egui::ThemePreference::System, "Follow the system")]
-            {
+            for (pref, name) in [
+                (egui::ThemePreference::Light, tr("Light")),
+                (egui::ThemePreference::Dark, tr("Dark")),
+                (egui::ThemePreference::System, tr("Follow the system")),
+            ] {
                 if ui.button(name).clicked() {
                     ui.ctx().set_theme(pref);
                 }
@@ -202,8 +222,8 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
         ui.spacing_mut().item_spacing.x = 16.0;
         ui.set_min_height(28.0);
         // File opens the backstage, as in MK Sigma: Home, New, Open, Info, Save, Export…
-        let file = ui.add(egui::Button::new(egui::RichText::new("File").size(14.0).color(t.accent)).frame(false).min_size(vec2(0.0, 28.0)));
-        if file.on_hover_text("New, open, save and export projects").clicked() {
+        let file = ui.add(egui::Button::new(egui::RichText::new(tr("File")).size(14.0).color(t.accent)).frame(false).min_size(vec2(0.0, 28.0)));
+        if file.on_hover_text(tr("New, open, save and export projects")).clicked() {
             app.open_backstage();
         }
         ui.add_space(6.0);
@@ -228,8 +248,11 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(4.0);
-            let (icon, tip) =
-                if app.ribbon_collapsed { (Icon::ChevronDown, "Show the ribbon (Ctrl+F1)") } else { (Icon::ChevronUp, "Hide the ribbon (Ctrl+F1)") };
+            let (icon, tip) = if app.ribbon_collapsed {
+                (Icon::ChevronDown, tr("Show the ribbon (Ctrl+F1)"))
+            } else {
+                (Icon::ChevronUp, tr("Hide the ribbon (Ctrl+F1)"))
+            };
             if icon_button(ui, icon, tip, true).clicked() {
                 app.ribbon_collapsed = !app.ribbon_collapsed;
             }
@@ -266,51 +289,51 @@ fn active_id(app: &MapApp) -> Option<u32> {
 
 fn map_tab(app: &mut MapApp, ui: &mut Ui) {
     let layers = has_layers(app);
-    group(ui, "Navigate", |ui| {
-        if button(ui, Icon::Explore, "Explore", true, app.tool == Tool::Explore, "Pan, zoom and identify features") {
+    group(ui, tr("Navigate"), |ui| {
+        if button(ui, Icon::Explore, tr("Explore"), true, app.tool == Tool::Explore, tr("Pan, zoom and identify features")) {
             app.tool = Tool::Explore;
         }
-        if button(ui, Icon::FullExtent, "Full Extent", layers, false, "Zoom to every layer") {
+        if button(ui, Icon::FullExtent, tr("Full Extent"), layers, false, tr("Zoom to every layer")) {
             app.run("map.fullExtent", json!({}));
         }
-        if button(ui, Icon::ZoomToLayer, "Zoom To Layer", layers, false, "Zoom to the layer selected in Contents")
+        if button(ui, Icon::ZoomToLayer, tr("Zoom To Layer"), layers, false, tr("Zoom to the layer selected in Contents"))
             && let Some(id) = active_id(app)
         {
             app.run("map.zoomToLayer", json!({ "layer": id }));
         }
     });
-    group(ui, "Layer", |ui| {
-        if button(ui, Icon::AddData, "Add Data", true, false, "Add a GeoJSON or shapefile layer") {
+    group(ui, tr("Layer"), |ui| {
+        if button(ui, Icon::AddData, tr("Add Data"), true, false, tr("Add a GeoJSON or shapefile layer")) {
             app.add_data();
         }
     });
     let selection = app.session.enabled("map.clearSelection");
-    group(ui, "Selection", |ui| {
-        if button(ui, Icon::Select, "Select", layers, app.tool == Tool::Select, "Click or drag a box on the map to select features") {
+    group(ui, tr("Selection"), |ui| {
+        if button(ui, Icon::Select, tr("Select"), layers, app.tool == Tool::Select, tr("Click or drag a box on the map to select features")) {
             app.tool = Tool::Select;
         }
-        if button(ui, Icon::SelectByAttributes, "Select By Attributes", layers, false, "Select features with a SQL clause")
+        if button(ui, Icon::SelectByAttributes, tr("Select By Attributes"), layers, false, tr("Select features with a SQL clause"))
             && let Some(id) = active_id(app)
         {
             app.dialog = Some(Dialog::SelectByAttributes { layer: id, clause: String::new(), mode: "new" });
         }
-        if button(ui, Icon::SelectByLocation, "Select By Location", layers, false, "Select features by their relation to another layer's") {
+        if button(ui, Icon::SelectByLocation, tr("Select By Location"), layers, false, tr("Select features by their relation to another layer's")) {
             app.gp.open(GpTool::SelectByLocation, active_id(app));
             app.pane = Some(Pane::Geoprocessing);
         }
-        if button(ui, Icon::ZoomToLayer, "Zoom To Selection", selection, false, "Zoom to the selected features") {
+        if button(ui, Icon::ZoomToLayer, tr("Zoom To Selection"), selection, false, tr("Zoom to the selected features")) {
             app.run("map.zoomToSelection", json!({}));
         }
-        if button(ui, Icon::Clear, "Clear", selection, false, "Clear the selection (Ctrl+Shift+A)") {
+        if button(ui, Icon::Clear, tr("Clear"), selection, false, tr("Clear the selection (Ctrl+Shift+A)")) {
             app.run("map.clearSelection", json!({}));
         }
     });
-    group(ui, "Appearance", |ui| {
-        if button(ui, Icon::Symbology, "Symbology", layers, app.pane == Some(Pane::Symbology), "Symbology and labels of the selected layer") {
+    group(ui, tr("Appearance"), |ui| {
+        if button(ui, Icon::Symbology, tr("Symbology"), layers, app.pane == Some(Pane::Symbology), tr("Symbology and labels of the selected layer")) {
             app.pane = Some(Pane::Symbology);
         }
         let labelled = app.active_layer().is_some_and(|l| l.labels.is_some());
-        if button(ui, Icon::Labels, "Label", layers, labelled, "Label the selected layer's features")
+        if button(ui, Icon::Labels, tr("Label"), layers, labelled, tr("Label the selected layer's features"))
             && let Some(l) = app.active_layer()
         {
             let id = l.id;
@@ -322,8 +345,8 @@ fn map_tab(app: &mut MapApp, ui: &mut Ui) {
             app.run("layer.labels", json!({ "layer": id, "field": field }));
         }
     });
-    group(ui, "Inquiry", |ui| {
-        if button(ui, Icon::Table, "Attribute Table", layers, app.show_table, "Open the selected layer's attribute table (Ctrl+T)") {
+    group(ui, tr("Inquiry"), |ui| {
+        if button(ui, Icon::Table, tr("Attribute Table"), layers, app.show_table, tr("Open the selected layer's attribute table (Ctrl+T)")) {
             app.show_table = !app.show_table;
         }
     });
@@ -331,21 +354,21 @@ fn map_tab(app: &mut MapApp, ui: &mut Ui) {
 
 fn analysis_tab(app: &mut MapApp, ui: &mut Ui) {
     let layers = has_layers(app);
-    group(ui, "Geoprocessing", |ui| {
-        if button(ui, Icon::Tools, "Tools", true, app.pane == Some(Pane::Geoprocessing), "Open the Geoprocessing pane") {
+    group(ui, tr("Geoprocessing"), |ui| {
+        if button(ui, Icon::Tools, tr("Tools"), true, app.pane == Some(Pane::Geoprocessing), tr("Open the Geoprocessing pane")) {
             app.pane = if app.pane == Some(Pane::Geoprocessing) { None } else { Some(Pane::Geoprocessing) };
             app.gp.tool = None;
         }
-        if button(ui, Icon::Statistics, "History", true, app.pane == Some(Pane::History), "Geoprocessing history") {
+        if button(ui, Icon::Statistics, tr("History"), true, app.pane == Some(Pane::History), tr("Geoprocessing history")) {
             app.pane = Some(Pane::History);
         }
     });
-    group(ui, "Tools", |ui| {
+    group(ui, tr("Tools"), |ui| {
         for (icon, label, tool) in [
-            (Icon::Buffer, "Buffer", GpTool::Buffer),
-            (Icon::Project, "Project", GpTool::Project),
-            (Icon::Calculate, "Calculate Geometry", GpTool::CalculateGeometry),
-            (Icon::Statistics, "Summary Statistics", GpTool::SummaryStatistics),
+            (Icon::Buffer, tr("Buffer"), GpTool::Buffer),
+            (Icon::Project, tr("Project|tool"), GpTool::Project),
+            (Icon::Calculate, tr("Calculate Geometry"), GpTool::CalculateGeometry),
+            (Icon::Statistics, tr("Summary Statistics"), GpTool::SummaryStatistics),
         ] {
             if button(ui, icon, label, layers, app.gp.tool == Some(tool) && app.pane == Some(Pane::Geoprocessing), tool.description()) {
                 app.gp.open(tool, active_id(app));
@@ -354,9 +377,9 @@ fn analysis_tab(app: &mut MapApp, ui: &mut Ui) {
         }
     });
     // Tables from statistics packages and spreadsheets: joined to a layer, or placed as points.
-    group(ui, "Tables", |ui| {
+    group(ui, tr("Tables"), |ui| {
         for (icon, label, tool, enabled) in
-            [(Icon::Table, "Join Field", GpTool::JoinField, layers), (Icon::AddData, "XY Table To Point", GpTool::XyTableToPoint, true)]
+            [(Icon::Table, tr("Join Field"), GpTool::JoinField, layers), (Icon::AddData, tr("XY Table To Point"), GpTool::XyTableToPoint, true)]
         {
             if button(ui, icon, label, enabled, app.gp.tool == Some(tool) && app.pane == Some(Pane::Geoprocessing), tool.description()) {
                 app.gp.open(tool, active_id(app));
@@ -370,9 +393,9 @@ fn analysis_tab(app: &mut MapApp, ui: &mut Ui) {
 fn statistics_tab(app: &mut MapApp, ui: &mut Ui) {
     let layers = has_layers(app);
     let weights = app.session.enabled("stats.weightsInfo");
-    group(ui, "Weights", |ui| {
+    group(ui, tr("Weights"), |ui| {
         let open = app.gp.tool == Some(GpTool::SpatialWeights) && app.pane == Some(Pane::Geoprocessing);
-        if button(ui, Icon::Weights, "Spatial Weights", layers, open, GpTool::SpatialWeights.description()) {
+        if button(ui, Icon::Weights, tr("Spatial Weights"), layers, open, GpTool::SpatialWeights.description()) {
             app.gp.open(GpTool::SpatialWeights, active_id(app));
             app.pane = Some(Pane::Geoprocessing);
         }
@@ -381,46 +404,46 @@ fn statistics_tab(app: &mut MapApp, ui: &mut Ui) {
         if button(
             ui,
             Icon::Select,
-            "Neighbors",
+            tr("Neighbors"),
             selected.is_some() && for_layer.is_some(),
             false,
-            "Select the neighbours of the selected feature, by the layer's latest weights",
+            tr("Select the neighbours of the selected feature, by the layer's latest weights"),
         ) && let (Some((_, row)), Some(name)) = (selected, for_layer)
         {
             app.run("stats.selectNeighbors", json!({ "weights": name, "row": row }));
         }
-        if button(ui, Icon::Open, "Import Weights", layers, false, "Read a GAL or GWT weights file for the selected layer")
+        if button(ui, Icon::Open, tr("Import Weights"), layers, false, tr("Read a GAL or GWT weights file for the selected layer"))
             && let Some(id) = active_id(app)
         {
             app.import_weights(id);
         }
-        if button(ui, Icon::Export, "Export Weights", weights, false, "Write the latest weights as a GAL or GWT file")
+        if button(ui, Icon::Export, tr("Export Weights"), weights, false, tr("Write the latest weights as a GAL or GWT file"))
             && let Some(name) = app.session.map.weights.last().map(|w| w.name.clone())
         {
-            app.save_to("Export Weights", "stats.exportWeights", &["gal", "gwt"], &format!("{name}.gal"), json!({ "weights": name }));
+            app.save_to(tr("Export Weights"), "stats.exportWeights", &["gal", "gwt"], &format!("{name}.gal"), json!({ "weights": name }));
         }
     });
-    group(ui, "Autocorrelation", |ui| {
+    group(ui, tr("Autocorrelation"), |ui| {
         let open = app.gp.tool == Some(GpTool::SpatialAutocorrelation) && app.pane == Some(Pane::Geoprocessing);
         let open_global = open && matches!(app.gp.statistic, "stats.globalMoran" | "stats.gearyC" | "stats.generalG");
-        if button(ui, Icon::Statistics, "Global Moran's I", weights, open_global, GpTool::SpatialAutocorrelation.description()) {
+        if button(ui, Icon::Statistics, tr("Global Moran's I"), weights, open_global, GpTool::SpatialAutocorrelation.description()) {
             open_statistic(app, "stats.globalMoran");
         }
     });
-    group(ui, "Explore", |ui| {
+    group(ui, tr("Explore"), |ui| {
         let open = app.pane == Some(Pane::Charts);
-        if button(ui, Icon::Statistics, "Charts", layers, open, "Histogram, box plot, scatter and Moran scatter plots, linked to the map") {
+        if button(ui, Icon::Statistics, tr("Charts"), layers, open, tr("Histogram, box plot, scatter and Moran scatter plots, linked to the map")) {
             app.pane = Some(Pane::Charts);
         }
     });
-    group(ui, "Local", |ui| {
+    group(ui, tr("Local"), |ui| {
         let open = app.gp.tool == Some(GpTool::SpatialAutocorrelation) && app.pane == Some(Pane::Geoprocessing);
-        let tip = "Where the clusters and outliers are: local Moran's I (LISA), mapped High-High, Low-Low, High-Low, Low-High";
-        if button(ui, Icon::Statistics, "Cluster Map (LISA)", weights, open && app.gp.statistic == "stats.localMoran", tip) {
+        let tip = tr("Where the clusters and outliers are: local Moran's I (LISA), mapped High-High, Low-Low, High-Low, Low-High");
+        if button(ui, Icon::Statistics, tr("Cluster Map (LISA)"), weights, open && app.gp.statistic == "stats.localMoran", tip) {
             open_statistic(app, "stats.localMoran");
         }
-        let tip = "Where values are significantly high or low with their neighbours: Getis-Ord Gi*, at 90, 95 and 99 % confidence";
-        if button(ui, Icon::Statistics, "Hot Spots (Gi*)", weights, open && app.gp.statistic == "stats.hotSpots", tip) {
+        let tip = tr("Where values are significantly high or low with their neighbours: Getis-Ord Gi*, at 90, 95 and 99 % confidence");
+        if button(ui, Icon::Statistics, tr("Hot Spots (Gi*)"), weights, open && app.gp.statistic == "stats.hotSpots", tip) {
             open_statistic(app, "stats.hotSpots");
         }
     });
@@ -434,35 +457,35 @@ fn open_statistic(app: &mut MapApp, command: &'static str) {
 }
 
 fn edit_tab(app: &mut MapApp, ui: &mut Ui) {
-    group(ui, "Manage Edits", |ui| {
-        if button(ui, Icon::Undo, "Undo", app.session.can_undo().is_some(), false, "Undo (Ctrl+Z)") {
+    group(ui, tr("Manage Edits"), |ui| {
+        if button(ui, Icon::Undo, tr("Undo"), app.session.can_undo().is_some(), false, tr("Undo (Ctrl+Z)")) {
             app.run("edit.undo", json!({}));
         }
-        if button(ui, Icon::Redo, "Redo", app.session.can_redo().is_some(), false, "Redo (Ctrl+Y)") {
+        if button(ui, Icon::Redo, tr("Redo"), app.session.can_redo().is_some(), false, tr("Redo (Ctrl+Y)")) {
             app.run("edit.redo", json!({}));
         }
     });
     let selected = app.active_layer().is_some_and(|l| !l.selection.is_empty());
-    group(ui, "Features", |ui| {
-        if button(ui, Icon::Select, "Select", has_layers(app), app.tool == Tool::Select, "Select features to edit") {
+    group(ui, tr("Features"), |ui| {
+        if button(ui, Icon::Select, tr("Select"), has_layers(app), app.tool == Tool::Select, tr("Select features to edit")) {
             app.tool = Tool::Select;
         }
-        if button(ui, Icon::Clear, "Delete", selected, false, "Delete the selected features of the selected layer (Delete)")
+        if button(ui, Icon::Clear, tr("Delete"), selected, false, tr("Delete the selected features of the selected layer (Delete)"))
             && let Some(id) = active_id(app)
         {
             app.run("feature.delete", json!({ "layer": id }));
         }
-        if button(ui, Icon::Table, "Attributes", has_layers(app), app.show_table, "Edit attributes in the table") {
+        if button(ui, Icon::Table, tr("Attributes"), has_layers(app), app.show_table, tr("Edit attributes in the table")) {
             app.show_table = true;
         }
     });
-    group(ui, "Fields", |ui| {
-        if button(ui, Icon::New, "Add Field", has_layers(app), false, "Add a field to the selected layer")
+    group(ui, tr("Fields"), |ui| {
+        if button(ui, Icon::New, tr("Add Field"), has_layers(app), false, tr("Add a field to the selected layer"))
             && let Some(id) = active_id(app)
         {
             app.dialog = Some(Dialog::AddField { layer: id, name: String::new(), kind: "double" });
         }
-        if button(ui, Icon::Calculate, "Calculate Field", has_layers(app), false, "Calculate a field with an expression")
+        if button(ui, Icon::Calculate, tr("Calculate Field"), has_layers(app), false, tr("Calculate a field with an expression"))
             && let Some(l) = app.active_layer()
         {
             let field = l.data.fields.first().map(|f| f.name.clone()).unwrap_or_default();
@@ -472,42 +495,53 @@ fn edit_tab(app: &mut MapApp, ui: &mut Ui) {
 }
 
 fn view_tab(app: &mut MapApp, ui: &mut Ui) {
-    group(ui, "Windows", |ui| {
-        if button(ui, Icon::Table, "Attribute Table", has_layers(app), app.show_table, "Show or hide the attribute table") {
+    group(ui, tr("Windows"), |ui| {
+        if button(ui, Icon::Table, tr("Attribute Table"), has_layers(app), app.show_table, tr("Show or hide the attribute table")) {
             app.show_table = !app.show_table;
         }
-        if button(ui, Icon::Tools, "Geoprocessing", true, app.pane == Some(Pane::Geoprocessing), "Show or hide the Geoprocessing pane") {
+        if button(ui, Icon::Tools, tr("Geoprocessing"), true, app.pane == Some(Pane::Geoprocessing), tr("Show or hide the Geoprocessing pane")) {
             app.pane = if app.pane == Some(Pane::Geoprocessing) { None } else { Some(Pane::Geoprocessing) };
         }
-        if button(ui, Icon::Symbology, "Symbology", has_layers(app), app.pane == Some(Pane::Symbology), "Show the Symbology pane") {
+        if button(ui, Icon::Symbology, tr("Symbology"), has_layers(app), app.pane == Some(Pane::Symbology), tr("Show the Symbology pane")) {
             app.pane = if app.pane == Some(Pane::Symbology) { None } else { Some(Pane::Symbology) };
         }
     });
-    group(ui, "Map", |ui| {
-        if button(ui, Icon::CoordinateSystem, "Coordinate System", true, false, "Change the map's coordinate system") {
+    group(ui, tr("Map"), |ui| {
+        if button(ui, Icon::CoordinateSystem, tr("Coordinate System"), true, false, tr("Change the map's coordinate system")) {
             app.dialog = Some(Dialog::CoordinateSystem { epsg: app.session.map.crs.epsg().to_string() });
         }
         let dark = ui.ctx().global_style().visuals.dark_mode;
-        if button(ui, Icon::FullExtent, if dark { "Light Theme" } else { "Dark Theme" }, true, false, "Switch between light and dark") {
+        if button(ui, Icon::FullExtent, if dark { tr("Light Theme") } else { tr("Dark Theme") }, true, false, tr("Switch between light and dark")) {
             ui.ctx().set_theme(if dark { egui::Theme::Light } else { egui::Theme::Dark });
+        }
+    });
+    group(ui, tr("Language"), |ui| {
+        // Two languages: the button goes to the other one, as the theme button does.
+        let next = Language::ALL.iter().copied().cycle().skip_while(|l| *l != app.language).nth(1).unwrap_or_default();
+        let tip = crate::trf(
+            "Interface language: {language}. Click for {next}.",
+            &[("language", &app.language.native_name()), ("next", &next.native_name())],
+        );
+        if button(ui, Icon::Language, app.language.native_name(), true, false, &tip) {
+            app.set_language(next);
         }
     });
 }
 
 fn share_tab(app: &mut MapApp, ui: &mut Ui) {
-    group(ui, "Output", |ui| {
-        if button(ui, Icon::Export, "Export Map", has_layers(app), false, "Export the current view as PNG") {
-            app.save_to("Export Map", "share.exportMap", &["png"], "map.png", json!({ "width": 1600, "height": 1000 }));
+    group(ui, tr("Output"), |ui| {
+        if button(ui, Icon::Export, tr("Export Map"), has_layers(app), false, tr("Export the current view as PNG")) {
+            app.save_to(tr("Export Map"), "share.exportMap", &["png"], "map.png", json!({ "width": 1600, "height": 1000 }));
         }
     });
-    group(ui, "Data", |ui| {
-        if button(ui, Icon::Export, "Export Features", has_layers(app), false, "Write the selected layer to GeoJSON or a shapefile")
+    group(ui, tr("Data"), |ui| {
+        if button(ui, Icon::Export, tr("Export Features"), has_layers(app), false, tr("Write the selected layer to GeoJSON or a shapefile"))
             && let Some(l) = app.active_layer()
         {
             let (id, name) = (l.id, format!("{}.geojson", l.name));
-            app.save_to("Export Features", "layer.export", &["geojson", "shp", "csv"], &name, json!({ "layer": id }));
+            app.save_to(tr("Export Features"), "layer.export", &["geojson", "shp", "csv"], &name, json!({ "layer": id }));
         }
-        if button(ui, Icon::Save, "Save Project", true, false, "Save the project (Ctrl+S)") {
+        if button(ui, Icon::Save, tr("Save Project"), true, false, tr("Save the project (Ctrl+S)")) {
             app.save_project(false);
         }
     });

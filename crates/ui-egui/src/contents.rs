@@ -6,6 +6,7 @@ use mkaegis_geom::GeometryType;
 use mkaegis_model::{Layer, Symbol};
 use serde_json::json;
 
+use crate::i18n::tr;
 use crate::theme::{Tokens, color};
 use crate::{Dialog, MapApp, Pane};
 
@@ -51,7 +52,7 @@ fn row(app: &mut MapApp, ui: &mut Ui, index: usize, last: usize) {
     let active = app.active == Some(id);
     let response = ui
         .horizontal(|ui| {
-            if ui.checkbox(&mut visible, "").on_hover_text("Visible").changed() {
+            if ui.checkbox(&mut visible, "").on_hover_text(tr("Visible")).changed() {
                 app.run("layer.setVisible", json!({ "layer": id, "visible": visible }));
             }
             if let [(label, s)] = legend.as_slice()
@@ -65,9 +66,9 @@ fn row(app: &mut MapApp, ui: &mut Ui, index: usize, last: usize) {
                 ui.label(egui::RichText::new(format!("({selected})")).size(10.5).color(t.accent));
             }
             if !crs_known {
-                ui.label(egui::RichText::new("CRS?").size(10.5).color(t.error)).on_hover_text(
+                ui.label(egui::RichText::new(tr("CRS?")).size(10.5).color(t.error)).on_hover_text(tr(
                     "Unknown coordinate system: the layer is drawn as it is, not reprojected, and can't be measured. Define Projection sets it.",
-                );
+                ));
             }
             r
         })
@@ -81,41 +82,41 @@ fn row(app: &mut MapApp, ui: &mut Ui, index: usize, last: usize) {
     }
     response.context_menu(|ui| {
         app.active = Some(id);
-        if ui.button("Zoom To Layer").clicked() {
+        if ui.button(tr("Zoom To Layer")).clicked() {
             app.run("map.zoomToLayer", json!({ "layer": id }));
             ui.close();
         }
-        if ui.button("Attribute Table").clicked() {
+        if ui.button(tr("Attribute Table")).clicked() {
             app.show_table = true;
             ui.close();
         }
-        if ui.button("Symbology").clicked() {
+        if ui.button(tr("Symbology")).clicked() {
             app.pane = Some(Pane::Symbology);
             ui.close();
         }
         ui.separator();
-        if ui.add_enabled(index > 0, egui::Button::new("Move Up")).clicked() {
+        if ui.add_enabled(index > 0, egui::Button::new(tr("Move Up"))).clicked() {
             app.run("layer.move", json!({ "layer": id, "to": "up" }));
             ui.close();
         }
-        if ui.add_enabled(index < last, egui::Button::new("Move Down")).clicked() {
+        if ui.add_enabled(index < last, egui::Button::new(tr("Move Down"))).clicked() {
             app.run("layer.move", json!({ "layer": id, "to": "down" }));
             ui.close();
         }
-        if ui.button("Rename").clicked() {
+        if ui.button(tr("Rename")).clicked() {
             app.dialog = Some(Dialog::Rename { layer: id, name: name.clone() });
             ui.close();
         }
-        if ui.button("Export Features…").clicked() {
-            app.save_to("Export Features", "layer.export", &["geojson", "shp", "csv"], &format!("{name}.geojson"), json!({ "layer": id }));
+        if ui.button(tr("Export Features…")).clicked() {
+            app.save_to(tr("Export Features"), "layer.export", &["geojson", "shp", "csv"], &format!("{name}.geojson"), json!({ "layer": id }));
             ui.close();
         }
-        if ui.button("Properties").clicked() {
+        if ui.button(tr("Properties")).clicked() {
             app.dialog = Some(Dialog::LayerInfo { layer: id });
             ui.close();
         }
         ui.separator();
-        if ui.button("Remove").clicked() {
+        if ui.button(tr("Remove")).clicked() {
             app.run("layer.remove", json!({ "layer": id }));
             ui.close();
         }
@@ -141,7 +142,7 @@ fn row(app: &mut MapApp, ui: &mut Ui, index: usize, last: usize) {
         if legend.len() > 40 {
             ui.horizontal(|ui| {
                 ui.add_space(30.0);
-                ui.label(egui::RichText::new(format!("… {} more", legend.len() - 40)).size(10.5).color(t.muted));
+                ui.label(egui::RichText::new(crate::trf("… {count} more", &[("count", &(legend.len() - 40))])).size(10.5).color(t.muted));
             });
         }
     }
@@ -149,8 +150,8 @@ fn row(app: &mut MapApp, ui: &mut Ui, index: usize, last: usize) {
 
 pub fn show(app: &mut MapApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    ui.label(egui::RichText::new("Contents").strong().size(14.0).color(t.text));
-    ui.label(egui::RichText::new("Drawing Order").size(10.5).color(t.muted));
+    ui.label(egui::RichText::new(tr("Contents")).strong().size(14.0).color(t.text));
+    ui.label(egui::RichText::new(tr("Drawing Order")).size(10.5).color(t.muted));
     ui.separator();
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         ui.horizontal(|ui| {
@@ -169,11 +170,11 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
         });
         if n == 0 {
             ui.add_space(12.0);
-            ui.label(egui::RichText::new("No layers yet.").color(t.muted));
-            if ui.link("Add Data…").clicked() {
+            ui.label(egui::RichText::new(tr("No layers yet.")).color(t.muted));
+            if ui.link(tr("Add Data…")).clicked() {
                 app.add_data();
             }
-            if ui.link("Add the sample data").clicked() {
+            if ui.link(tr("Add the sample data")).clicked() {
                 app.run("map.addSample", json!({}));
             }
         }

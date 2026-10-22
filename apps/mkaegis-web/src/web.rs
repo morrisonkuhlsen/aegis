@@ -7,12 +7,14 @@ use std::sync::PoisonError;
 
 use eframe::egui_wgpu::{WgpuSetup, wgpu};
 use mkaegis_engine::Session;
-use mkaegis_ui_egui::{Arrival, Inbox, MapApp, Services};
+use mkaegis_ui_egui::{Arrival, Inbox, Language, MapApp, Services};
 use wasm_bindgen::JsCast as _;
 use wasm_bindgen::closure::Closure;
 
 const CANVAS_ID: &str = "mkaegis_canvas";
 const LOADING_ID: &str = "mkaegis_loading";
+/// Where the interface language is kept between visits.
+const LANGUAGE_KEY: &str = "mkaegis.language";
 
 /// The app, and what the page around it needs from each frame.
 struct Shell {
@@ -75,6 +77,7 @@ pub fn start() {
                     let inbox = Inbox::default();
                     let mut app = MapApp::new(session);
                     app.services = services(Inbox::clone(&inbox), cc.egui_ctx.clone());
+                    app.language = language();
                     Ok(Box::new(Shell { app, inbox, unsaved }))
                 }),
             )
@@ -111,6 +114,13 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
         download: Some(Box::new(|name: &str, bytes: &[u8]| {
             if let Err(e) = download(name, bytes) {
                 log::error!("couldn't download {name}: {e}");
+            }
+        })),
+        save_language: Some(Box::new(|language: Language| {
+            if let Some(store) = local_storage()
+                && let Err(e) = store.set_item(LANGUAGE_KEY, language.code())
+            {
+                log::warn!("couldn't keep the language: {e:?}");
             }
         })),
         inbox: Some(inbox),
@@ -171,6 +181,18 @@ fn guard_leaving(unsaved: Rc<Cell<bool>>) {
         // Listening as long as the page lives.
         on_leave.forget();
     }
+}
+
+/// The language chosen on an earlier visit; else the browser's, when the interface has it.
+fn language() -> Language {
+    let saved = local_storage().and_then(|s| s.get_item(LANGUAGE_KEY).ok().flatten());
+    let browser = web_sys::window().and_then(|w| w.navigator().language());
+    saved.into_iter().chain(browser).find_map(|code| Language::from_code(&code)).unwrap_or_default()
+}
+
+/// The browser's storage for this site, when it allows it (a private window may not).
+fn local_storage() -> Option<web_sys::Storage> {
+    web_sys::window()?.local_storage().ok()?
 }
 
 /// The page's address has `?flag` (or `&flag`, `flag=…`).

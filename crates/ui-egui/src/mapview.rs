@@ -8,6 +8,7 @@ use mkaegis_geom::{Coord, Envelope};
 use mkaegis_render::{Options, Shape, Viewport};
 use serde_json::json;
 
+use crate::i18n::tr;
 use crate::theme::Tokens;
 use crate::{MapApp, Tool};
 
@@ -180,7 +181,7 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
         painter.text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
-            "Add data to the map: Map ▸ Add Data, or Project ▸ Add Sample Data",
+            tr("Add data to the map: Map ▸ Add Data, or Project ▸ Add Sample Data"),
             egui::FontId::proportional(14.0),
             t.muted,
         );
@@ -257,18 +258,21 @@ fn identify_popup(app: &mut MapApp, ui: &Ui, layer: u32, row: usize) {
                 if let Some(f) = l.data.features.get(row) {
                     for (field, v) in l.data.fields.iter().zip(&f.values) {
                         ui.label(egui::RichText::new(&field.name).strong());
-                        ui.label(v.to_string());
+                        ui.label(crate::i18n::value_text(v));
                         ui.end_row();
                     }
                     if let Some(g) = &f.geometry {
-                        ui.label(egui::RichText::new("Shape").strong());
-                        ui.label(format!("{} ({} vertices)", g.geometry_type().name(), g.vertex_count()));
+                        ui.label(egui::RichText::new(tr("Shape")).strong());
+                        ui.label(crate::trf(
+                            "{shape} ({count} vertices)",
+                            &[("shape", &crate::i18n::geometry_name(g.geometry_type())), ("count", &g.vertex_count())],
+                        ));
                         ui.end_row();
                     }
                 }
             });
             ui.separator();
-            select = ui.button("Select this feature").clicked();
+            select = ui.button(tr("Select this feature")).clicked();
         });
     if select {
         app.run("feature.select", json!({ "layer": layer, "rows": [row] }));

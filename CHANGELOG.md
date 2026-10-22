@@ -10,6 +10,8 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-22
+
 ### Changed results
 
 - **Projections no longer move points they can't hold** (#54). Project to Web Mercator
@@ -273,7 +275,8 @@ First release. It includes:
 - Every action is a command, reachable from the ribbon, the CLI, MCP and the control channel.
 - Builds for Linux, Windows and macOS.
 
-[Unreleased]: https://github.com/morrisonkuhlsen/mkaegis/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/morrisonkuhlsen/mkaegis/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/morrisonkuhlsen/mkaegis/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/morrisonkuhlsen/mkaegis/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/morrisonkuhlsen/mkaegis/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/morrisonkuhlsen/mkaegis/releases/tag/v0.1.0

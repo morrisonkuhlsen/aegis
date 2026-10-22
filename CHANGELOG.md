@@ -21,6 +21,9 @@ data and parameters. Read it before re-running an analysis with a new version.
   coordinates were read as degrees, so the features landed far away and every measurement on
   them was wrong. The `.prj` is kept, and exporting the layer to a shapefile writes it back.
   Projected data without a `.prj` now opens the same way, where it used to be refused.
+- **Buffer of a multipoint unions its circles** (#52). Where they overlap, the circles of one
+  feature used to be rings of one polygon that cut holes in each other: two points 500 m apart
+  with a 1 km buffer gave an area of about 0. Now they are one shape, of 4.1 km² in that example.
 
 ### Added
 

@@ -48,7 +48,15 @@ pub fn buffer(fc: &FeatureClass, distance: f64, name: &str) -> Result<FeatureCla
             continue;
         };
         let (m, mcrs) = metric(g, fc.crs)?;
-        let rings: Vec<Vec<Coord>> = m.coords().map(|c| algo::circle(c, distance, 72)).collect();
+        let circles: Vec<Vec<Coord>> = m.coords().map(|c| algo::circle(c, distance, 72)).collect();
+        // A multipoint's circles are unioned, so where they overlap they don't cut holes in
+        // each other (#52).
+        let rings = if circles.len() > 1 {
+            algo::union_convex(&circles)
+                .ok_or_else(|| Error::Geometry(format!("feature {}: the circles could not be joined", out.features.len() + 1)))?
+        } else {
+            circles
+        };
         let back = Geometry::polygon(rings)?.try_map(|p| mcrs.transform(fc.crs, p))?;
         out.push(Some(back), values)?;
     }
@@ -364,6 +372,23 @@ mod tests {
         assert!((area - expected).abs() / expected < 1e-3, "{area} vs {expected}");
         assert!(buffer(&cities(), -1.0, "b").is_err());
         assert!(buffer(&cities(), f64::NAN, "b").is_err());
+    }
+
+    /// #52: two points 500 m apart buffered by 1 km gave an area of about 0: each circle was a
+    /// hole of the other.
+    #[test]
+    fn a_multipoints_circles_are_unioned() {
+        let mut fc = FeatureClass::new("m", GeometryType::Multipoint, Crs::from_epsg(31983).unwrap(), vec![]);
+        fc.push(Some(Geometry::Multipoint(vec![Coord::new(330_000.0, 7_390_000.0), Coord::new(330_500.0, 7_390_000.0)])), vec![]).unwrap();
+        let b = buffer(&fc, 1000.0, "b").unwrap();
+        let Some(Geometry::Polygon(rings)) = &b.features[0].geometry else { panic!("no polygon") };
+        assert_eq!(rings.len(), 1);
+        let area = measure(b.features[0].geometry.as_ref().unwrap(), b.crs, Property::Area).unwrap();
+        // Two disks of r = 1000 m with centres d = 500 m apart, less their lens.
+        let (r, d) = (1000.0f64, 500.0f64);
+        let lens = 2.0 * r * r * (d / (2.0 * r)).acos() - d / 2.0 * (4.0 * r * r - d * d).sqrt();
+        let exact = 2.0 * std::f64::consts::PI * r * r - lens;
+        assert!((area - exact).abs() / exact < 0.005, "{area} vs {exact}");
     }
 
     #[test]

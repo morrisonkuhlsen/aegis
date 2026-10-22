@@ -17,9 +17,7 @@ None open: the six known ones were fixed in 0.1.2 (see [`CHANGELOG.md`](../CHANG
 
 ## 3. Wrong geometry, coordinates and data
 
-| Issue | Gap                                                        | Priority |
-|-------|------------------------------------------------------------|----------|
-| #54   | Projection edge cases return clamped values or NaN         | medium   |
+None open: #57 and #54 were fixed after 0.1.2 (see [`CHANGELOG.md`](../CHANGELOG.md)).
 
 ## 4. Statistics: the road to beta
 
@@ -57,3 +55,4 @@ interop, the web app, project hygiene) are ranked by their `priority:` label on
 | 2026-10-21 | #25 narrowed to what remains              |
 | 2026-10-21 | #27 narrowed to what remains              |
 | 2026-10-22 | #57 removed                               |
+| 2026-10-22 | #54 removed                               |

@@ -12,6 +12,15 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Changed results
 
+- **Projections no longer move points they can't hold** (#54). Project to Web Mercator
+  (3857) of a point past ±85.05° latitude is now an error; it used to be moved to 85.05°, up to
+  550 km away, with no warning. The map still draws such data at its edge. A UTM coordinate past
+  the pole or too far from its zone (a corrupt easting) is an error where it gave NaN.
+- **Longitudes from UTM and Web Mercator are in (−180°, 180°]** (#54): Project and GeoJSON
+  export of a point at 179°E in UTM zone 1 give 179°, not −181°.
+- **Buffer refuses distances over 1 000 km** (#54). A buffer is a circle drawn in a UTM zone,
+  1.2 % too small at 1 000 km and 11 % at 3 000 km; it used to accept up to 20 000 km. Geodesic
+  buffers come with #8.
 - **A shapefile record whose shape can't be read keeps its row** (#57). It used to be skipped,
   attributes and all, so counts, sums and every statistic on the layer's attributes left it
   out. It now reads with a null shape and its attributes, and the warning counts such records.

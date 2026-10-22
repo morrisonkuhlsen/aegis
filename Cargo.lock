@@ -1718,7 +1718,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "eframe",
  "egui",
@@ -1731,7 +1731,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-analysis"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-core",
  "mkaegis-crs",
@@ -1742,7 +1742,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-engine",
  "mkaegis-mcp",
@@ -1751,7 +1751,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -1759,7 +1759,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-crs"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-core",
  "mkaegis-geom",
@@ -1768,7 +1768,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-csv"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-core",
  "mkaegis-model",
@@ -1776,7 +1776,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-engine"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "log",
  "mkaegis-analysis",
@@ -1796,7 +1796,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-geojson"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-core",
  "mkaegis-crs",
@@ -1807,7 +1807,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-geom"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-core",
  "serde",
@@ -1815,7 +1815,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-kml"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-core",
  "mkaegis-crs",
@@ -1826,7 +1826,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-mcp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-engine",
  "serde_json",
@@ -1834,7 +1834,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-model"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-core",
  "mkaegis-crs",
@@ -1844,7 +1844,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-render"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-core",
  "mkaegis-crs",
@@ -1855,7 +1855,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-shp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-core",
  "mkaegis-crs",
@@ -1865,7 +1865,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-stats"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-core",
  "mkaegis-crs",
@@ -1876,7 +1876,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-ui-egui"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "egui",
  "egui_kittest",
@@ -1895,7 +1895,7 @@ dependencies = [
 
 [[package]]
 name = "mkaegis-web"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "eframe",
  "egui",
@@ -4114,7 +4114,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xtask"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mkaegis-engine",
  "serde_json",

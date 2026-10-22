@@ -1,6 +1,6 @@
 # MK aeGIS roadmap
 
-*Updated 2026-10-22, at version 0.2.0.*
+*Updated 2026-10-22, at version 0.3.0.*
 
 MK aeGIS is a statistical GIS: a geographic information system built for statisticians. This page
 is the one-page summary; the detail is in [`docs/`](docs/).
@@ -25,9 +25,9 @@ From `cargo xtask stats` and `cargo xtask parity`:
 | Measure                | Value  |
 |------------------------|--------|
 | Commands               | 56     |
-| Rust lines (16 crates) | 20,854 |
-| Tests (`#[test]`)      | 211    |
-| Releases               | 4      |
+| Rust lines (17 crates) | 22,280 |
+| Tests (`#[test]`)      | 221    |
+| Releases               | 5      |
 | Open issues (bugs)     | 0      |
 | Open issues (features) | 40     |
 
@@ -39,7 +39,7 @@ From `cargo xtask stats` and `cargo xtask parity`:
 | Geoprocessing      | Buffer (points), Project, Calculate Geometry, Select By Location, Summary Statistics                                                           | [`docs/parity-checklist.md`](docs/parity-checklist.md) |
 | Coordinate systems | WGS 84, SIRGAS 2000, Web Mercator, UTM on both datums                                                                                          | issue #9                                               |
 | File formats       | Shapefile, GeoJSON and KML in and out; `.aegis` projects; PNG export                                                                           | issue #14                                              |
-| User interface     | Ribbon, Contents, map, Geoprocessing/Symbology/History panes, table, light/dark                                                                | [`docs/architecture.md`](docs/architecture.md)         |
+| User interface     | Ribbon, Contents, map, Geoprocessing/Symbology/History panes, table, light/dark; English and Portuguese (Brazil)                               | [`docs/architecture.md`](docs/architecture.md)         |
 | Automation         | Every action is a command: CLI, MCP server, control channel                                                                                    | [`docs/control-protocol.md`](docs/control-protocol.md) |
 | Platforms          | Linux x86_64, Windows x64, macOS universal; the web app (browser, WebGPU or WebGL2) on GitHub Pages                                            | [`docs/releasing.md`](docs/releasing.md)               |
 
@@ -47,6 +47,7 @@ From `cargo xtask stats` and `cargo xtask parity`:
 
 | Date       | Version | What landed                                                                                    |
 |------------|---------|------------------------------------------------------------------------------------------------|
+| 2026-10-22 | 0.3.0   | Portuguese (Brazil) interface (#37); KML in and out (#14)                                      |
 | 2026-10-22 | 0.2.0   | The web app (#38); bad features kept (#57); projection edges (#54); CI on 3 OSes (#19)         |
 | 2026-10-21 | 0.1.2   | 14 bugs fixed: lost work and crashes, SQL NULL logic, weights, measures, Select By Location    |
 | 2026-10-21 | 0.1.1   | Windows starts on DirectX 12 (#82), no console window (#78); MK Sigma's dark palette           |

@@ -176,8 +176,9 @@ pub const EXPORT_WEIGHTS: CommandSpec = CommandSpec {
             "gwt" => mkaegis_stats::gal::write_gwt(&w.neighbours, &ids, &layer.name, &id_field)?,
             other => return Err(Error::param("path", format!("`.{other}`: weights are written as .gal or .gwt"))),
         };
-        crate::io::write_atomic(&file, text.as_bytes())?;
-        Ok(json!({ "message": format!("weights `{}` written to {}", w.name, file.display()) }))
+        let message = format!("weights `{}` written to {}", w.name, file.display());
+        s.disk.write(&file, text.as_bytes())?;
+        Ok(json!({ "message": message }))
     },
 };
 
@@ -192,10 +193,10 @@ pub const IMPORT_WEIGHTS: CommandSpec = CommandSpec {
     run: |s, p| {
         let layer = s.map.layer(&layer_key(p, "layer")?)?;
         let file = path(p, "path")?;
-        if std::fs::metadata(&file)?.len() > MAX_FILE_BYTES {
+        if s.disk.len(&file)? > MAX_FILE_BYTES {
             return Err(Error::param("path", format!("larger than {} MB", MAX_FILE_BYTES / 1024 / 1024)));
         }
-        let text = std::fs::read_to_string(&file)?;
+        let text = s.disk.read_text(&file)?;
         let (ids, _) = ids(layer, opt_str(p, "idField"))?;
         let ext = extension(&file);
         let raw = match ext.as_str() {

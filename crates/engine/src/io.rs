@@ -1,12 +1,14 @@
 //! Files in and out: data by extension (GeoJSON, shapefile; CSV tables) and the project file (`.aegis`,
-//! the map as JSON). Every file is written with [`write_atomic`], so a failed write never leaves
-//! a truncated file in place of a good one.
+//! the map as JSON), through the session's [`Disk`]. On the file system every file is written with
+//! [`write_atomic`], so a failed write never leaves a truncated file in place of a good one.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use mkaegis_core::{Error, Result};
 use mkaegis_model::{FeatureClass, Map};
+
+use crate::disk::Disk;
 
 /// The extension of the project file.
 pub const PROJECT_EXTENSION: &str = "aegis";
@@ -29,16 +31,16 @@ fn stem(path: &Path) -> String {
 }
 
 /// A feature class from a data file, and any warnings.
-pub fn read_data(path: &Path) -> Result<(FeatureClass, Vec<String>)> {
+pub fn read_data(disk: &Disk, path: &Path) -> Result<(FeatureClass, Vec<String>)> {
     match extension(path).as_str() {
         "geojson" | "json" => {
-            let text = std::fs::read_to_string(path)?;
+            let text = disk.read_text(path)?;
             let r = mkaegis_geojson::read(&text, &stem(path))?;
             let warnings = if r.skipped > 0 { vec![format!("{} features of another geometry type skipped", r.skipped)] } else { Vec::new() };
             Ok((r.data, warnings))
         }
         "shp" => {
-            let r = mkaegis_shp::read_path(path)?;
+            let r = mkaegis_shp::read_with(path, |p| disk.read(p))?;
             Ok((r.data, r.warnings))
         }
         other => Err(Error::NotAvailable(format!("reading `.{other}` files"))),
@@ -47,24 +49,24 @@ pub fn read_data(path: &Path) -> Result<(FeatureClass, Vec<String>)> {
 
 /// Writes a feature class to a data file chosen by extension, and returns warnings about what
 /// the format couldn't hold.
-pub fn write_data(fc: &FeatureClass, path: &Path) -> Result<Vec<String>> {
+pub fn write_data(disk: &mut Disk, fc: &FeatureClass, path: &Path) -> Result<Vec<String>> {
     match extension(path).as_str() {
-        "geojson" | "json" => write_atomic(path, mkaegis_geojson::write(fc)?.as_bytes()).map(|()| Vec::new()),
+        "geojson" | "json" => disk.write(path, mkaegis_geojson::write(fc)?.as_bytes()).map(|()| Vec::new()),
         // The attributes only: a table, for spreadsheets and statistics packages.
         "csv" => {
             let rows: Vec<&[mkaegis_core::Value]> = fc.features.iter().map(|f| f.values.as_slice()).collect();
-            write_atomic(path, mkaegis_csv::write(&fc.fields, &rows).as_bytes()).map(|()| Vec::new())
+            disk.write(path, mkaegis_csv::write(&fc.fields, &rows).as_bytes()).map(|()| Vec::new())
         }
         "shp" => {
             let files = mkaegis_shp::write(fc)?;
-            write_atomic(&path.with_extension("shp"), &files.shp)?;
-            write_atomic(&path.with_extension("shx"), &files.shx)?;
-            write_atomic(&path.with_extension("dbf"), &files.dbf)?;
+            disk.write(&path.with_extension("shp"), &files.shp)?;
+            disk.write(&path.with_extension("shx"), &files.shx)?;
+            disk.write(&path.with_extension("dbf"), &files.dbf)?;
             if let Some(prj) = &files.prj {
-                write_atomic(&path.with_extension("prj"), prj.as_bytes())?;
+                disk.write(&path.with_extension("prj"), prj.as_bytes())?;
             }
             if let Some(cpg) = &files.cpg {
-                write_atomic(&path.with_extension("cpg"), cpg.as_bytes())?;
+                disk.write(&path.with_extension("cpg"), cpg.as_bytes())?;
             }
             Ok(files.warnings)
         }
@@ -73,27 +75,27 @@ pub fn write_data(fc: &FeatureClass, path: &Path) -> Result<Vec<String>> {
 }
 
 /// A delimited text table (CSV, TSV), with column types overridden by name in `types`.
-pub fn read_table(path: &Path, types: &std::collections::HashMap<String, mkaegis_model::FieldType>) -> Result<mkaegis_csv::Table> {
-    if std::fs::metadata(path)?.len() > MAX_TABLE_BYTES {
+pub fn read_table(disk: &Disk, path: &Path, types: &std::collections::HashMap<String, mkaegis_model::FieldType>) -> Result<mkaegis_csv::Table> {
+    if disk.len(path)? > MAX_TABLE_BYTES {
         return Err(Error::format("CSV", format!("larger than {} MB", MAX_TABLE_BYTES >> 20)));
     }
-    mkaegis_csv::read(&std::fs::read(path)?, types)
+    mkaegis_csv::read(&disk.read(path)?, types)
 }
 
-pub fn save_project(map: &Map, path: &Path) -> Result<()> {
+pub fn save_project(disk: &mut Disk, map: &Map, path: &Path) -> Result<()> {
     let text = serde_json::to_string_pretty(&serde_json::json!({ "format": "aegis", "version": PROJECT_VERSION, "map": map }))
         .map_err(|e| Error::Internal(e.to_string()))?;
-    write_atomic(path, text.as_bytes())
+    disk.write(path, text.as_bytes())
 }
 
 /// A project file's map, checked (see `Map::validate`), and the warnings about what was
 /// repaired. A project from a newer MK aeGIS is refused rather than opened with parts missing
 /// and then saved back without them (#58).
-pub fn open_project(path: &Path) -> Result<(Map, Vec<String>)> {
-    if std::fs::metadata(path)?.len() > MAX_PROJECT_BYTES {
+pub fn open_project(disk: &Disk, path: &Path) -> Result<(Map, Vec<String>)> {
+    if disk.len(path)? > MAX_PROJECT_BYTES {
         return Err(Error::format("project", format!("larger than {} MB", MAX_PROJECT_BYTES >> 20)));
     }
-    let text = std::fs::read_to_string(path)?;
+    let text = disk.read_text(path)?;
     read_project(&text)
 }
 

@@ -107,6 +107,8 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
     let fields = |id: u32| -> Vec<String> {
         app.session.map.layers.iter().find(|l| l.id == id).map(|l| l.data.fields.iter().map(|f| f.name.clone()).collect()).unwrap_or_default()
     };
+    // In the browser a file is only a name: opened ones come from its picker, saved ones download.
+    let path_label = if app.session.disk.is_memory() { "File name" } else { "Path" };
     let mut action: Option<(&'static str, Json)> = None;
     let mut decided: Option<(Discard, bool)> = None;
     let mut keep = true;
@@ -114,7 +116,7 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
         ui.set_min_width(360.0);
         match &mut dialog {
             Dialog::Path { command, path, .. } => {
-                ui.label("Path");
+                ui.label(path_label);
                 let r = ui.add(egui::TextEdit::singleline(path).desired_width(f32::INFINITY));
                 let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 let (ok, cancel) = buttons(ui, !path.trim().is_empty());
@@ -124,7 +126,7 @@ pub fn show(app: &mut MapApp, ctx: &egui::Context) {
                 keep = !(ok || cancel || enter);
             }
             Dialog::SavePath { command, path, params, .. } => {
-                ui.label("Path");
+                ui.label(path_label);
                 ui.add(egui::TextEdit::singleline(path).desired_width(f32::INFINITY));
                 let (ok, cancel) = buttons(ui, !path.trim().is_empty());
                 if ok {

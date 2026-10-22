@@ -29,7 +29,7 @@ pub const ADD_DATA: CommandSpec = CommandSpec {
     enabled: always,
     run: |s, p| {
         let file = path(p, "path")?;
-        let (mut data, warnings) = crate::io::read_data(&file)?;
+        let (mut data, warnings) = crate::io::read_data(&s.disk, &file)?;
         data.name = s.map.unique_name(&data.name);
         let count = data.features.len();
         let first = s.map.layers.is_empty();

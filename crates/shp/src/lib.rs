@@ -210,10 +210,15 @@ fn prj_name(text: &str) -> String {
 
 /// Reads `name.shp` and its sidecar files (same stem, any case of extension).
 pub fn read_path(path: &Path) -> Result<Read> {
+    read_with(path, |p| Ok(std::fs::read(p)?))
+}
+
+/// [`read_path`] with each file's bytes from `read_file`: files held in memory, in the browser.
+pub fn read_with(path: &Path, read_file: impl Fn(&Path) -> Result<Vec<u8>>) -> Result<Read> {
     let sidecar = |ext: &str| -> Option<Vec<u8>> {
-        [ext.to_ascii_lowercase(), ext.to_ascii_uppercase()].iter().find_map(|e| std::fs::read(path.with_extension(e)).ok())
+        [ext.to_ascii_lowercase(), ext.to_ascii_uppercase()].iter().find_map(|e| read_file(&path.with_extension(e)).ok())
     };
-    let shp = std::fs::read(path)?;
+    let shp = read_file(path)?;
     let files = Files {
         shp,
         shx: sidecar("shx").unwrap_or_default(),

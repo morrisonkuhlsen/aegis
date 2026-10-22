@@ -42,6 +42,7 @@ fn services() -> Services {
                 let _ = std::fs::write(file, text.join("\n"));
             }
         })),
+        ..Default::default()
     }
 }
 

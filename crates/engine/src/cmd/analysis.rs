@@ -109,7 +109,7 @@ pub const JOIN_FIELD: CommandSpec = CommandSpec {
         let (fields, rows, source, mut warnings) = match (opt_str(p, "path"), opt_str(p, "joinLayer")) {
             (Some(_), None) => {
                 let file = path(p, "path")?;
-                let t = crate::io::read_table(&file, &types(p)?)?;
+                let t = crate::io::read_table(&s.disk, &file, &types(p)?)?;
                 let source = file.file_name().map_or_else(|| "the table".to_string(), |n| n.to_string_lossy().into_owned());
                 (t.fields, t.rows, source, t.warnings)
             }
@@ -151,7 +151,7 @@ pub const XY_TABLE_TO_POINT: CommandSpec = CommandSpec {
     enabled: |_| true,
     run: |s, p| {
         let file = path(p, "path")?;
-        let table = crate::io::read_table(&file, &types(p)?)?;
+        let table = crate::io::read_table(&s.disk, &file, &types(p)?)?;
         let crs = match opt_f64(p, "epsg")? {
             None => Crs::WGS84,
             Some(code) => Crs::from_epsg(u32::try_from(code as i64).map_err(|_| Error::param("epsg", "not an EPSG code"))?)?,
@@ -278,7 +278,7 @@ pub const EXPORT_MAP: CommandSpec = CommandSpec {
             if (1.0..=16_384.0).contains(&v) { Ok(v as u32) } else { Err(Error::param(k, "1 to 16384 pixels")) }
         };
         let png = mkaegis_render::export_png(&s.map, dim("width", 1600.0)?, dim("height", 1000.0)?, s.map.extent)?;
-        crate::io::write_atomic(&file, &png)?;
+        s.disk.write(&file, &png)?;
         Ok(json!({ "message": format!("map exported to {}", file.display()) }))
     },
 };

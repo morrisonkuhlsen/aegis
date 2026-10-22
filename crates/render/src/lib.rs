@@ -136,9 +136,10 @@ fn with_opacity(c: Color, opacity: u8) -> Color {
     c.with_alpha(((u16::from(c.a) * u16::from(opacity.min(100))) / 100) as u8)
 }
 
-/// The geometry in the map's CRS (`None` if it cannot be projected).
+/// The geometry in the map's CRS (`None` if it cannot be projected). Data in an unknown
+/// coordinate system, or a map in one, is drawn as it is (#6).
 pub fn project(g: &Geometry, from: Crs, to: Crs) -> Option<Geometry> {
-    if from == to { Some(g.clone()) } else { g.try_map(|c| from.transform(to, c)).ok() }
+    if from == to || !from.is_known() || !to.is_known() { Some(g.clone()) } else { g.try_map(|c| from.transform(to, c)).ok() }
 }
 
 fn push_geometry(out: &mut Vec<Shape>, vp: &Viewport, g: &Geometry, s: &Symbol, opacity: u8, ppp: f32) {

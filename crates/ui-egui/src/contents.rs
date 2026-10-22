@@ -41,6 +41,7 @@ fn row(app: &mut MapApp, ui: &mut Ui, index: usize, last: usize) {
     let kind = layer.data.geometry_type;
     let legend = layer.renderer.legend();
     let selected = layer.selection.len();
+    let crs_known = layer.data.crs.is_known();
     let active = app.active == Some(id);
     let response = ui
         .horizontal(|ui| {
@@ -56,6 +57,11 @@ fn row(app: &mut MapApp, ui: &mut Ui, index: usize, last: usize) {
             let r = ui.selectable_label(active, if active { text.strong() } else { text });
             if selected > 0 {
                 ui.label(egui::RichText::new(format!("({selected})")).size(10.5).color(t.accent));
+            }
+            if !crs_known {
+                ui.label(egui::RichText::new("CRS?").size(10.5).color(t.error)).on_hover_text(
+                    "Unknown coordinate system: the layer is drawn as it is, not reprojected, and can't be measured. Define Projection sets it.",
+                );
             }
             r
         })

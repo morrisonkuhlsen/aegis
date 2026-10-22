@@ -147,14 +147,21 @@ pub fn read(files: &Files, name: &str) -> Result<Read> {
     };
 
     let table = dbf::read(&files.dbf, files.cpg.as_deref())?;
-    let crs = match files.prj.as_deref().map(Crs::from_wkt) {
-        Some(Some(crs)) => crs,
-        prj => {
-            warnings.push(if prj.is_none() { "no .prj: assumed WGS 84".into() } else { "unrecognised .prj: assumed WGS 84".into() });
-            Crs::WGS84
+    // An unrecognised `.prj` makes the layer's coordinate system unknown, never WGS 84: projected
+    // coordinates read as degrees would land anywhere (#6). The text is kept for writing back.
+    let (crs, prj) = match files.prj.as_deref().map(|text| (text, Crs::from_wkt(text))) {
+        Some((_, Some(crs))) => (crs, None),
+        Some((text, None)) => {
+            warnings.push(format!(
+                "unrecognised .prj ({}): the coordinate system is unknown; the layer is drawn as it is, and Define Projection sets it",
+                prj_name(text)
+            ));
+            (Crs::UNKNOWN, Some(text.to_string()))
         }
+        None => (Crs::WGS84, None),
     };
     let mut data = FeatureClass::new(name, geometry_type, crs, table.fields);
+    data.prj = prj;
 
     let mut r = Bytes { b: &files.shp, at: HEADER };
     let mut rows = table.rows.into_iter();
@@ -183,10 +190,22 @@ pub fn read(files: &Files, name: &str) -> Result<Read> {
     if rows.next().is_some() {
         warnings.push("the .dbf has more rows than the .shp has shapes".into());
     }
-    if files.prj.is_none() && data.extent().is_some_and(|e| e.min_x < -180.5 || e.max_x > 360.5 || e.min_y < -90.5 || e.max_y > 90.5) {
-        return Err(Error::format("shapefile", "no .prj, and the coordinates are not longitude/latitude: the coordinate system is unknown"));
+    if files.prj.is_none() {
+        // Without a `.prj`, longitude/latitude is the usual guess, but only where it can be.
+        if data.extent().is_some_and(|e| e.min_x < -180.5 || e.max_x > 360.5 || e.min_y < -90.5 || e.max_y > 90.5) {
+            data.crs = Crs::UNKNOWN;
+            warnings.push("no .prj, and the coordinates are not longitude/latitude: the coordinate system is unknown; the layer is drawn as it is, and Define Projection sets it".into());
+        } else {
+            warnings.push("no .prj: assumed WGS 84".into());
+        }
     }
     Ok(Read { data, warnings })
+}
+
+/// The name a `.prj` gives its coordinate system (its first quoted text), for messages.
+fn prj_name(text: &str) -> String {
+    let name = text.split('"').nth(1).unwrap_or("no name");
+    name.chars().take(80).collect()
 }
 
 /// Reads `name.shp` and its sidecar files (same stem, any case of extension).
@@ -318,7 +337,7 @@ pub fn write(fc: &FeatureClass) -> Result<Files> {
     shx.extend_from_slice(&index);
     let rows: Vec<&[Value]> = fc.features.iter().map(|f| f.values.as_slice()).collect();
     let dbf = dbf::write(&fc.fields, &rows)?;
-    Ok(Files { shp, shx, dbf: dbf.bytes, prj: Some(fc.crs.to_prj()), cpg: Some("UTF-8".into()), warnings: dbf.warnings })
+    Ok(Files { shp, shx, dbf: dbf.bytes, prj: fc.crs.to_prj().or_else(|| fc.prj.clone()), cpg: Some("UTF-8".into()), warnings: dbf.warnings })
 }
 
 #[cfg(test)]
@@ -404,10 +423,29 @@ mod tests {
         assert!(read(&Files::default(), "x").is_err());
     }
 
+    /// #6: projected data without a `.prj` used to be refused, and with a `.prj` MK aeGIS
+    /// doesn't know it was read as WGS 84.
     #[test]
-    fn missing_prj_on_projected_data_is_an_error() {
+    fn missing_prj_on_projected_data_is_unknown() {
         let mut files = write(&polygons()).unwrap();
         files.prj = None;
-        assert!(read(&files, "x").is_err());
+        let back = read(&files, "x").unwrap();
+        assert_eq!(back.data.crs, Crs::UNKNOWN);
+        assert!(back.warnings.iter().any(|w| w.contains("coordinate system is unknown")), "{:?}", back.warnings);
+        assert_eq!(back.data.extent(), polygons().extent());
+    }
+
+    #[test]
+    fn an_unrecognised_prj_is_kept_and_written_back() {
+        let lcc = r#"PROJCS["ETRS89_LAEA_Europe",GEOGCS["GCS_ETRS_1989",DATUM["D_ETRS_1989",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Lambert_Azimuthal_Equal_Area"],UNIT["Meter",1.0]]"#;
+        let mut files = write(&polygons()).unwrap();
+        files.prj = Some(lcc.into());
+        let back = read(&files, "x").unwrap();
+        assert_eq!(back.data.crs, Crs::UNKNOWN);
+        assert_eq!(back.data.prj.as_deref(), Some(lcc));
+        assert!(back.warnings.iter().any(|w| w.contains("ETRS89_LAEA_Europe")), "{:?}", back.warnings);
+        // Coordinates are kept as they are, not read as degrees.
+        assert_eq!(back.data.extent(), polygons().extent());
+        assert_eq!(write(&back.data).unwrap().prj.as_deref(), Some(lcc));
     }
 }

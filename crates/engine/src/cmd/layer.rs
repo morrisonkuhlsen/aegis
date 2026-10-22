@@ -314,7 +314,7 @@ pub const INFO: CommandSpec = CommandSpec {
         let e = layer.data.extent();
         Ok(json!({
             "id": layer.id, "name": layer.name, "geometry": layer.data.geometry_type.name(),
-            "crs": { "epsg": layer.data.crs.epsg(), "name": layer.data.crs.name() },
+            "crs": { "epsg": layer.data.crs.epsg(), "name": layer.data.crs.name(), "known": layer.data.crs.is_known(), "prj": layer.data.prj },
             "features": layer.data.features.len(), "selected": layer.selection.len(),
             "extent": e.map(|e| vec![e.min_x, e.min_y, e.max_x, e.max_y]),
             "fields": layer.data.fields.iter().map(|f| json!({"name": f.name, "type": f.kind.name()})).collect::<Vec<_>>(),

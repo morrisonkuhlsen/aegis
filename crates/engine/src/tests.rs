@@ -1,3 +1,4 @@
+use mkaegis_crs::Crs;
 use serde_json::{Value as Json, json};
 
 use super::*;
@@ -369,6 +370,47 @@ fn weights_follow_their_layer_and_their_files_name_each_feature_once() {
     assert_eq!(lists[0], lists[1]);
     let err = s.execute("stats.exportWeights", &json!({ "weights": w, "path": gal, "idField": "ILHA" })).unwrap_err().to_string();
     assert!(err.contains("same id"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// #6: a `.prj` MK aeGIS doesn't know used to be read as WGS 84.
+#[test]
+fn an_unknown_coordinate_system_is_kept_until_defined() {
+    let dir = scratch("unknown-crs");
+    let mut s = Session::sample();
+    let file = dir.join("cidades.shp");
+    s.execute("layer.export", &json!({ "layer": "Cidades", "path": file.display().to_string() })).unwrap();
+    let prj = r#"PROJCS["Some_Local_Grid",GEOGCS["GCS_Unknown"],PROJECTION["Oblique_Stereographic"],UNIT["Meter",1.0]]"#;
+    std::fs::write(file.with_extension("prj"), prj).unwrap();
+    let r = s.execute("map.addData", &json!({ "path": file.display().to_string() })).unwrap();
+    assert!(r.to_string().contains("Some_Local_Grid"), "{r}");
+    let id = r["layer"].to_string();
+    let info = s.execute("layer.info", &json!({ "layer": id })).unwrap();
+    assert_eq!(info["crs"]["known"], json!(false), "{info}");
+    assert_eq!(info["crs"]["prj"], json!(prj));
+    let err = s.execute("analysis.buffer", &json!({ "layer": id, "distance": 10 })).unwrap_err().to_string();
+    assert!(err.contains("Define Projection"), "{err}");
+    assert!(s.execute("management.project", &json!({ "layer": id, "epsg": 4326 })).is_err());
+
+    // The `.prj` and the unknown state survive a project and an export.
+    let project = dir.join("unknown.aegis");
+    s.execute("project.saveAs", &json!({ "path": project.display().to_string() })).unwrap();
+    let mut t = Session::default();
+    t.execute("project.open", &json!({ "path": project.display().to_string() })).unwrap();
+    assert_eq!(t.map, s.map);
+    let again = dir.join("again.shp");
+    s.execute("layer.export", &json!({ "layer": id, "path": again.display().to_string() })).unwrap();
+    assert_eq!(std::fs::read_to_string(again.with_extension("prj")).unwrap(), prj);
+
+    // Define Projection sets it without moving the coordinates, and undoes.
+    let before = s.map.layer(&id).unwrap().data.extent();
+    s.execute("management.defineProjection", &json!({ "layer": id, "epsg": 4326 })).unwrap();
+    let layer = s.map.layer(&id).unwrap();
+    assert_eq!((layer.data.crs, layer.data.prj.clone(), layer.data.extent()), (Crs::WGS84, None, before));
+    s.execute("analysis.buffer", &json!({ "layer": id, "distance": 10 })).unwrap();
+    s.execute("edit.undo", &json!({})).unwrap();
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(s.map.layer(&id).unwrap().data.crs, Crs::UNKNOWN);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

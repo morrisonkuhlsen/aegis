@@ -87,6 +87,7 @@ pub static COMMANDS: &[CommandSpec] = &[
     layer::INFO,
     analysis::BUFFER,
     analysis::PROJECT,
+    analysis::DEFINE_PROJECTION,
     analysis::CALCULATE_GEOMETRY,
     analysis::SUMMARY_STATISTICS,
     analysis::EXPORT_MAP,

@@ -93,13 +93,17 @@ pub struct FeatureClass {
     pub name: String,
     pub geometry_type: GeometryType,
     pub crs: Crs,
+    /// The `.prj` text of a coordinate system MK aeGIS doesn't know (#6), kept so the data can
+    /// be written back with it. `None` when `crs` is known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prj: Option<String>,
     pub fields: Vec<Field>,
     pub features: Vec<Feature>,
 }
 
 impl FeatureClass {
     pub fn new(name: &str, geometry_type: GeometryType, crs: Crs, fields: Vec<Field>) -> Self {
-        FeatureClass { name: name.to_string(), geometry_type, crs, fields, features: Vec::new() }
+        FeatureClass { name: name.to_string(), geometry_type, crs, prj: None, fields, features: Vec::new() }
     }
 
     /// About how many bytes the features take in memory: coordinates, values and text. An
@@ -404,9 +408,10 @@ impl Map {
     }
 }
 
-/// An envelope from one CRS into another, by projecting points along its edges.
+/// An envelope from one CRS into another, by projecting points along its edges. Data in an
+/// unknown coordinate system, or a map in one, is placed as it is.
 pub fn project_envelope(e: Envelope, from: Crs, to: Crs) -> Option<Envelope> {
-    if from == to {
+    if from == to || !from.is_known() || !to.is_known() {
         return Some(e);
     }
     let steps = 16;

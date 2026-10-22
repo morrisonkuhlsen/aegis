@@ -61,6 +61,28 @@ pub const PROJECT: CommandSpec = CommandSpec {
     },
 };
 
+pub const DEFINE_PROJECTION: CommandSpec = CommandSpec {
+    id: "management.defineProjection",
+    label: "Define Projection",
+    ribbon: "Analysis ▸ Tools",
+    shortcut: None,
+    params: "{layer, epsg} — says which coordinate system the layer's coordinates are in; they don't move",
+    kind: Kind::Edit,
+    enabled: has_layers,
+    run: |s, p| {
+        let key = layer_key(p, "layer")?;
+        let code = req_f64(p, "epsg")?;
+        let crs = Crs::from_epsg(u32::try_from(code as i64).map_err(|_| Error::param("epsg", "not an EPSG code"))?)?;
+        let layer = s.map.layer_mut(&key)?;
+        let data = layer.data_mut();
+        let was = data.crs;
+        data.crs = crs;
+        data.prj = None;
+        s.view_serial += 1;
+        Ok(json!({ "message": format!("{} defined as {} (was {})", layer.name, crs.name(), was.name()) }))
+    },
+};
+
 pub const CALCULATE_GEOMETRY: CommandSpec = CommandSpec {
     id: "management.calculateGeometry",
     label: "Calculate Geometry Attributes",

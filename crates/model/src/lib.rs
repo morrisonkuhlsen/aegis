@@ -261,6 +261,91 @@ impl Map {
         Map { name: name.to_string(), crs, layers: Vec::new(), extent: None, background: Color::WHITE, next_id: 1, weights: Vec::new() }
     }
 
+    /// Checks a map read from a project file, which is hostile input (#58), and repairs what is
+    /// safe to repair. Refused: two layers with one id, two fields with one name, a row with more
+    /// or fewer values than fields or a value its field can't hold, a shape of another geometry
+    /// type or with a non-finite coordinate, more than `MAX_ITEMS` features or links. Repaired,
+    /// each with a warning: the next layer id behind the ids in use, selected rows past the
+    /// end, spatial weights for a missing layer or naming rows that don't exist (dropped).
+    pub fn validate(&mut self) -> Result<Vec<String>> {
+        let bad = |message: String| Err(Error::format("project", message));
+        let mut warnings = Vec::new();
+        let mut ids = BTreeSet::new();
+        let mut total = 0usize;
+        for layer in &mut self.layers {
+            if !ids.insert(layer.id) {
+                return bad(format!("two layers have the id {}", layer.id));
+            }
+            let layer_name = layer.name.clone();
+            let fc = layer.data_mut();
+            let mut names = BTreeSet::new();
+            for f in &fc.fields {
+                if !names.insert(f.name.to_ascii_lowercase()) {
+                    return bad(format!("layer `{}` has two fields named `{}`", fc.name, f.name));
+                }
+            }
+            total = total.saturating_add(fc.features.len());
+            if total > mkaegis_core::MAX_ITEMS {
+                return bad(format!("more than {} features", mkaegis_core::MAX_ITEMS));
+            }
+            let (kind, fields) = (fc.geometry_type, fc.fields.clone());
+            for (row, feature) in fc.features.iter_mut().enumerate() {
+                let at = || format!("layer `{layer_name}`, row {}", row + 1);
+                if let Some(g) = &feature.geometry {
+                    let fits = g.geometry_type() == kind || (kind == GeometryType::Multipoint && g.geometry_type() == GeometryType::Point);
+                    if !fits {
+                        return bad(format!("{}: a {} in a {} layer", at(), g.geometry_type().name(), kind.name()));
+                    }
+                    if !g.coords().all(|c| c.is_finite()) {
+                        return bad(format!("{}: a coordinate is not a finite number", at()));
+                    }
+                }
+                if feature.values.len() != fields.len() {
+                    return bad(format!("{}: {} values for {} fields", at(), feature.values.len(), fields.len()));
+                }
+                for (value, field) in feature.values.iter_mut().zip(&fields) {
+                    match field.kind.coerce(value.clone()) {
+                        Some(v) => *value = v,
+                        None => return bad(format!("{}: `{value}` doesn't fit the {} field `{}`", at(), field.kind.name(), field.name)),
+                    }
+                }
+            }
+            let n = layer.data.features.len();
+            let before = layer.selection.len();
+            layer.selection.retain(|r| *r < n);
+            if layer.selection.len() < before {
+                warnings.push(format!("layer `{}`: {} selected rows past its end were cleared", layer.name, before - layer.selection.len()));
+            }
+        }
+        // The next id comes after every id in use, or Add Data would give two layers one id.
+        if let Some(&last) = ids.last()
+            && self.next_id <= last
+        {
+            self.next_id = last.checked_add(1).ok_or_else(|| Error::format("project", "a layer id is too large"))?;
+        }
+        let mut links = 0usize;
+        let layers = &self.layers;
+        self.weights.retain(|w| {
+            let rows = w.neighbours.len();
+            links = links.saturating_add(w.neighbours.iter().map(Vec::len).sum::<usize>());
+            let problem = if !layers.iter().any(|l| l.id == w.layer) {
+                Some("its layer is not in the project")
+            } else if w.neighbours.iter().flatten().any(|(j, x)| *j as usize >= rows || !x.is_finite()) {
+                Some("it names rows that don't exist")
+            } else {
+                None
+            };
+            if let Some(p) = problem {
+                warnings.push(format!("spatial weights `{}` dropped: {p}", w.name));
+            }
+            problem.is_none()
+        });
+        if links > mkaegis_core::MAX_ITEMS {
+            return bad(format!("more than {} spatial weights links", mkaegis_core::MAX_ITEMS));
+        }
+        Ok(warnings)
+    }
+
     /// Adds a feature class as the top layer and returns the layer's id.
     pub fn add_layer(&mut self, data: FeatureClass) -> u32 {
         let id = self.next_id;

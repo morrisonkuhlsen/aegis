@@ -1,6 +1,42 @@
 use serde_json::{Value as Json, json};
 
 use super::*;
+use crate::cmd::{always, has_layers};
+
+/// Commands that change the map, then panic: the map must come back as it was (#59).
+pub(super) const FAILING: [CommandSpec; 2] = [
+    CommandSpec {
+        id: "test.editThenPanic",
+        label: "Edit Then Panic",
+        ribbon: "Test",
+        shortcut: None,
+        params: "{}",
+        kind: Kind::Edit,
+        enabled: always,
+        run: |s, _| {
+            if let Some(l) = s.map.layers.first_mut() {
+                l.name = "half done".into();
+                l.data_mut().features.clear();
+            }
+            panic!("a bug after the first change")
+        },
+    },
+    CommandSpec {
+        id: "test.selectThenPanic",
+        label: "Select Then Panic",
+        ribbon: "Test",
+        shortcut: None,
+        params: "{}",
+        kind: Kind::View,
+        enabled: has_layers,
+        run: |s, _| {
+            if let Some(l) = s.map.layers.first_mut() {
+                l.select([0, 1], mkaegis_model::SelectionMode::New);
+            }
+            panic!("a bug on the second layer")
+        },
+    },
+];
 
 /// A command that panicked shows up as this internal error.
 fn panicked(r: &Result<Json>) -> bool {
@@ -431,4 +467,60 @@ fn calculate_field_never_silently_wipes_a_column() {
     // Emptying a field on purpose still works.
     let r = s.execute("layer.calculateField", &json!({ "layer": "Cidades", "field": "POP", "expression": "null" })).unwrap();
     assert_eq!(r["nulls"].as_u64(), Some(23));
+}
+
+/// #59: a panic in any command that changes the map restores it; the restore path runs.
+#[test]
+fn a_panicking_command_leaves_the_map_as_it_was() {
+    let mut s = Session::sample();
+    let before = s.map.clone();
+    for id in ["test.editThenPanic", "test.selectThenPanic"] {
+        let r = s.execute(id, &json!({}));
+        assert!(panicked(&r), "{id}: {r:?}");
+        assert_eq!(s.map, before, "{id}");
+    }
+    assert!(s.can_undo().is_none(), "a failed command is no undo step");
+}
+
+/// #59: undo snapshots share every layer a step didn't change, and count only what it did.
+#[test]
+fn undo_shares_unchanged_layers_and_counts_changed_ones() {
+    let mut s = Session::sample();
+    for _ in 0..10 {
+        s.execute("layer.setVisible", &json!({ "layer": "Ilhas", "visible": false })).unwrap();
+        s.execute("layer.setVisible", &json!({ "layer": "Ilhas", "visible": true })).unwrap();
+    }
+    assert_eq!(s.undo.len(), 20);
+    assert!(s.undo.iter().all(|step| step.bytes == 0), "toggling visibility copies no features");
+    for step in &s.undo {
+        for (a, b) in step.map.layers.iter().zip(&s.map.layers) {
+            assert!(std::sync::Arc::ptr_eq(&a.data, &b.data));
+        }
+    }
+    s.execute("layer.calculateField", &json!({ "layer": "Cidades", "field": "POP", "expression": "POP * 2" })).unwrap();
+    let cidades = s.map.layer("Cidades").unwrap().data.approx_bytes();
+    assert_eq!(s.undo.last().map(|step| step.bytes), Some(cidades), "only the changed layer is held");
+    // Past the budget, the oldest steps go and the newest stays.
+    s.trim_undo(cidades / 2);
+    assert_eq!(s.undo.len(), 1);
+    assert_eq!(s.can_undo(), Some("Calculate Field"));
+}
+
+/// #59: undoing back to the saved state leaves nothing unsaved; redoing away from it does.
+#[test]
+fn undo_back_to_the_saved_state_is_not_modified() {
+    let dir = scratch("saved-state");
+    let mut s = Session::sample();
+    s.execute("project.saveAs", &json!({ "path": dir.join("p.aegis").display().to_string() })).unwrap();
+    s.execute("layer.rename", &json!({ "layer": "Cidades", "name": "Towns" })).unwrap();
+    assert!(s.modified);
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!(!s.modified, "back where it was saved");
+    s.execute("edit.redo", &json!({})).unwrap();
+    assert!(s.modified);
+    // Saved after the edit: undoing goes away from the saved state.
+    s.execute("project.save", &json!({})).unwrap();
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!(s.modified);
+    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -23,6 +23,16 @@ data and parameters. Read it before re-running an analysis with a new version.
   Esc or Back returns to the map. Recent projects are kept between runs. The control channel's
   `ui.set` takes `backstage`.
 
+### Fixed
+
+- **Memory:** every map-changing command used to copy the whole map for Undo, and 50 steps had
+  no byte limit: toggling a 1 GB layer's visibility 50 times held about 50 GB. Undo steps now
+  share every layer they didn't change, and the steps kept are capped at 1 GB of what they
+  changed (#59).
+- A failure inside a command that changes the selection or the view (not only edits) now
+  restores the map too (#59).
+- Undoing back to the saved state no longer marks the project unsaved (#59).
+
 ## [0.1.2] - 2026-10-21
 
 ### Changed results

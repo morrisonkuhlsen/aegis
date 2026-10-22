@@ -89,7 +89,7 @@ pub const SET_VALUE: CommandSpec = CommandSpec {
         let i = layer.data.field_index(field).ok_or_else(|| Error::NotFound(format!("field `{field}`")))?;
         let kind = layer.data.fields.get(i).map(|f| f.kind).ok_or_else(|| Error::NotFound(format!("field `{field}`")))?;
         let v = value_for(p.get("value").unwrap_or(&Json::Null), kind, field)?;
-        let slot = layer.data.features.get_mut(row).and_then(|f| f.values.get_mut(i)).ok_or_else(|| Error::param("row", "no such row"))?;
+        let slot = layer.data_mut().features.get_mut(row).and_then(|f| f.values.get_mut(i)).ok_or_else(|| Error::param("row", "no such row"))?;
         *slot = v;
         Ok(json!({ "message": "attribute edited" }))
     },
@@ -113,7 +113,7 @@ pub const DELETE: CommandSpec = CommandSpec {
             return Err(Error::param("rows", "nothing to delete: select features first"));
         }
         let mut i = 0;
-        layer.data.features.retain(|_| {
+        layer.data_mut().features.retain(|_| {
             let keep = !doomed.contains(&i);
             i += 1;
             keep

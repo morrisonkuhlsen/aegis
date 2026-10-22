@@ -2,6 +2,7 @@
 //! spatial statistics that take them come next.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use mkaegis_core::{Error, Result, Value};
 use mkaegis_geom::GeometryType;
@@ -215,7 +216,7 @@ fn add_weights(s: &mut Session, weights: Weights) -> Json {
     if let Some(o) = out.as_object_mut() {
         o.insert("message".into(), json!(message));
     }
-    s.map.weights.push(weights);
+    s.map.weights.push(Arc::new(weights));
     out
 }
 
@@ -258,7 +259,7 @@ fn standardization(p: &Json, default: Standardization) -> Result<Standardization
 }
 
 fn find<'a>(s: &'a Session, name: &str) -> Result<&'a Weights> {
-    s.map.weights.iter().find(|w| w.name.eq_ignore_ascii_case(name)).ok_or_else(|| not_found(name))
+    s.map.weights.iter().map(|w| &**w).find(|w| w.name.eq_ignore_ascii_case(name)).ok_or_else(|| not_found(name))
 }
 
 /// The layer weights were built for, found by id, never by name (a later layer named "3" is not

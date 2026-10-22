@@ -104,6 +104,11 @@ impl Standardization {
 }
 
 impl Weights {
+    /// About how many bytes the neighbour lists take in memory.
+    pub fn approx_bytes(&self) -> usize {
+        self.neighbours.iter().map(|row| std::mem::size_of::<Vec<(u32, f64)>>() + row.len() * std::mem::size_of::<(u32, f64)>()).sum()
+    }
+
     /// The number of rows the weights cover.
     pub fn n(&self) -> usize {
         self.neighbours.len()

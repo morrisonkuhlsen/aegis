@@ -124,6 +124,10 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Fixed
 
+- **Calculate Geometry Attributes refuses a property the layer's shapes don't have** (#5): an
+  area of points or lines, a length of points. It used to report "rows calculated" and add a
+  column of nulls; it now says what the property needs, and writes nothing. The form offers only
+  the properties the chosen layer has, and point layers are offered for their centroids.
 - **One bad feature no longer costs the whole file** (#57). In GeoJSON, a geometry that can't
   be read (a polygon whose exterior has fewer than 3 vertices, a position that isn't two numbers)
   failed the whole FeatureCollection; empty `coordinates`, which RFC 7946 allows, did too. In a

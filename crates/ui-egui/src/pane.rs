@@ -2,6 +2,7 @@
 //! the active layer, the geoprocessing History, and the linked Charts.
 
 use egui::Ui;
+use mkaegis_engine::Property;
 use mkaegis_geom::GeometryType;
 use mkaegis_model::Renderer;
 use serde_json::{Value as Json, json};
@@ -235,12 +236,20 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
             ("management.project", json!({ "layer": g.layer, "epsg": g.epsg.trim(), "output": (!g.output.is_empty()).then_some(&g.output) }))
         }
         Tool::CalculateGeometry => {
-            layer_combo(ui, app, "Input Features", "gp-in", &mut g.layer, |k| !matches!(k, GeometryType::Point));
+            layer_combo(ui, app, "Input Features", "gp-in", &mut g.layer, |_| true);
             ui.label("Target Field (new or numeric)");
             ui.add(egui::TextEdit::singleline(&mut g.field).hint_text("AREA_HA").desired_width(f32::INFINITY));
             ui.label("Property");
+            // Only what the layer's shapes have: no area of points, no length of points (#5).
+            let kind = g.layer.and_then(|id| app.session.map.layers.iter().find(|l| l.id == id)).map(|l| l.data.geometry_type);
+            let offered: Vec<&'static str> = Property::ALL.iter().filter(|(_, p)| kind.is_none_or(|k| p.fits(k))).map(|(name, _)| *name).collect();
+            if !offered.contains(&g.property)
+                && let Some(first) = offered.first()
+            {
+                g.property = first;
+            }
             egui::ComboBox::from_id_salt("gp-prop").width(ui.available_width()).selected_text(g.property).show_ui(ui, |ui| {
-                for p in ["area", "areaHectares", "areaKm2", "length", "lengthKm", "centroidX", "centroidY"] {
+                for p in offered {
                     ui.selectable_value(&mut g.property, p, p);
                 }
             });

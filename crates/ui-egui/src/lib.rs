@@ -1012,6 +1012,22 @@ mod tests {
         assert_eq!(harness.state().session.history().last().map(|h| h.command.as_str()), Some("feature.select"));
     }
 
+    /// The Join Field form kept widening the pane, frame after frame: its path row overflowed.
+    /// Every tool's form must leave the pane as wide as it was.
+    #[test]
+    fn tool_forms_keep_the_pane_width() {
+        let mut harness = harness(MapApp::new(Session::sample()));
+        for tool in [GpTool::JoinField, GpTool::XyTableToPoint, GpTool::SpatialAutocorrelation, GpTool::SpatialWeights, GpTool::Buffer] {
+            harness.state_mut().gp.open(tool, None);
+            harness.state_mut().pane = Some(Pane::Geoprocessing);
+            harness.run_steps(3);
+            let before = harness.get_by_label("Run").rect();
+            harness.run_steps(40);
+            let after = harness.get_by_label("Run").rect();
+            assert_eq!(before, after, "{tool:?}: the pane moved");
+        }
+    }
+
     #[test]
     fn closing_a_saved_map_does_not_ask() {
         let mut harness = harness(MapApp::new(Session::sample()));

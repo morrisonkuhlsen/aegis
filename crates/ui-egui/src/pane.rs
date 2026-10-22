@@ -335,14 +335,17 @@ fn gp(app: &mut MapApp, ui: &mut Ui) {
                 field_combo(ui, app, g.layer, "Input Join Field", "gp-key", &mut g.field, false);
             }
             ui.label(if tool == Tool::JoinField { "Join Table (CSV)" } else { "XY Table (CSV)" });
-            ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut g.path).hint_text("path to a .csv file").desired_width(ui.available_width() - 70.0));
+            // Right to left: the button first, then the path takes exactly what is left. Sizing
+            // the path by a guess at the button's width overflowed the row, and the pane, which
+            // fits its content, widened a little on every frame.
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Browse…").clicked()
                     && let Some(pick) = &app.services.open_file
                     && let Some(p) = pick("Table", &["csv", "tsv", "txt"])
                 {
                     g.path = p.display().to_string();
                 }
+                ui.add(egui::TextEdit::singleline(&mut g.path).hint_text("path to a .csv file").desired_width(ui.available_width()));
             });
             if g.columns_of != g.path {
                 g.columns_of = g.path.clone();

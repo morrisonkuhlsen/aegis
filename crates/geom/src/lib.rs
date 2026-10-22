@@ -13,6 +13,9 @@ pub mod wkt;
 use mkaegis_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+/// Why a ring is refused.
+pub const SHORT_RING: &str = "a polygon ring needs at least 3 vertices";
+
 /// A position in the layer's coordinate system (x = easting or longitude, y = northing or latitude).
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct Coord {
@@ -146,22 +149,21 @@ impl Geometry {
 
     /// A polygon from rings, closing any ring that is not closed. Rings need 3 distinct vertices.
     pub fn polygon(rings: Vec<Vec<Coord>>) -> Result<Geometry> {
-        let mut closed = Vec::with_capacity(rings.len());
-        for mut ring in rings {
-            if let (Some(first), Some(last)) = (ring.first().copied(), ring.last().copied())
-                && first != last
-            {
-                ring.push(first);
-            }
-            if ring.len() < 4 {
-                return Err(Error::Geometry("a polygon ring needs at least 3 vertices".into()));
-            }
-            closed.push(ring);
-        }
+        let closed = rings.into_iter().map(close_ring).collect::<Option<Vec<_>>>().ok_or_else(|| Error::Geometry(SHORT_RING.into()))?;
         if closed.is_empty() {
             return Err(Error::Geometry("a polygon needs at least one ring".into()));
         }
         Ok(Geometry::Polygon(closed))
+    }
+
+    /// A polygon as [`Geometry::polygon`] makes it, except that a ring with fewer than 3 vertices
+    /// (it has no area) is left out instead of failing the whole shape (#57). Returns the polygon,
+    /// `None` when no ring is left, and how many rings were left out.
+    pub fn polygon_lenient(rings: Vec<Vec<Coord>>) -> (Option<Geometry>, usize) {
+        let total = rings.len();
+        let closed: Vec<Vec<Coord>> = rings.into_iter().filter_map(close_ring).collect();
+        let left_out = total - closed.len();
+        ((!closed.is_empty()).then_some(Geometry::Polygon(closed)), left_out)
     }
 
     /// Every vertex, in order.
@@ -203,6 +205,17 @@ impl Geometry {
     }
 }
 
+/// The ring closed (its first vertex repeated at the end if it isn't), or `None` with fewer than
+/// 3 vertices.
+fn close_ring(mut ring: Vec<Coord>) -> Option<Vec<Coord>> {
+    if let (Some(first), Some(last)) = (ring.first().copied(), ring.last().copied())
+        && first != last
+    {
+        ring.push(first);
+    }
+    (ring.len() >= 4).then_some(ring)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,6 +227,16 @@ mod tests {
         assert_eq!(rings[0].len(), 4);
         assert!(Geometry::polygon(vec![vec![Coord::new(0.0, 0.0), Coord::new(1.0, 0.0)]]).is_err());
         assert!(Geometry::polygon(vec![]).is_err());
+    }
+
+    #[test]
+    fn a_lenient_polygon_leaves_out_only_the_short_rings() {
+        let shell = vec![Coord::new(0.0, 0.0), Coord::new(4.0, 0.0), Coord::new(4.0, 4.0), Coord::new(0.0, 0.0)];
+        let short = vec![Coord::new(1.0, 1.0), Coord::new(2.0, 1.0)];
+        let (g, left_out) = Geometry::polygon_lenient(vec![shell.clone(), short.clone(), vec![]]);
+        assert_eq!((g, left_out), (Some(Geometry::Polygon(vec![shell])), 2));
+        assert_eq!(Geometry::polygon_lenient(vec![short]), (None, 1));
+        assert_eq!(Geometry::polygon_lenient(vec![]), (None, 0));
     }
 
     #[test]

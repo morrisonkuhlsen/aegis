@@ -10,6 +10,8 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
 ### Added
 
 - **Basemaps** (#15): Contents › Basemap puts OpenStreetMap or satellite imagery under the
@@ -318,7 +320,8 @@ First release. It includes:
 - Every action is a command, reachable from the ribbon, the CLI, MCP and the control channel.
 - Builds for Linux, Windows and macOS.
 
-[Unreleased]: https://github.com/morrisonkuhlsen/mkaegis/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/morrisonkuhlsen/mkaegis/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/morrisonkuhlsen/mkaegis/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/morrisonkuhlsen/mkaegis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/morrisonkuhlsen/mkaegis/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/morrisonkuhlsen/mkaegis/compare/v0.1.1...v0.1.2

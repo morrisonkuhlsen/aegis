@@ -524,6 +524,29 @@ fn classifications_report_their_fit() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// #25: the charts' statistics are commands too, so scripts and agents get the same numbers.
+#[test]
+fn chart_statistics_are_queries() {
+    let mut s = Session::sample();
+    let h = s.execute("stats.histogram", &json!({ "layer": "Cidades", "field": "POP", "bins": "5" })).unwrap();
+    assert_eq!(h["counts"].as_array().unwrap().len(), 5);
+    assert_eq!(h["counts"].as_array().unwrap().iter().map(|c| c.as_u64().unwrap()).sum::<u64>(), 23);
+    let b = s.execute("stats.boxPlot", &json!({ "layer": "Cidades", "field": "POP" })).unwrap();
+    assert!(b["q1"].as_f64().unwrap() <= b["median"].as_f64().unwrap() && b["median"].as_f64().unwrap() <= b["q3"].as_f64().unwrap());
+    let f = s.execute("stats.scatterPlot", &json!({ "layer": "Cidades", "x": "POP", "y": "POP" })).unwrap();
+    assert_eq!((f["slope"].as_f64().unwrap(), f["r2"].as_f64().unwrap()), (1.0, 1.0));
+    s.execute("stats.weights", &json!({ "layer": "Cidades", "method": "knn", "k": 4, "name": "w" })).unwrap();
+    let m = s.execute("stats.moranScatter", &json!({ "weights": "w", "field": "POP" })).unwrap();
+    let i = s.execute("stats.globalMoran", &json!({ "weights": "w", "field": "POP", "permutations": 0 })).unwrap();
+    assert!((m["slope"].as_f64().unwrap() - i["value"].as_f64().unwrap()).abs() < 1e-12);
+    // Queries leave the map, its undo history and its revision alone.
+    let revision = s.revision;
+    s.execute("stats.histogram", &json!({ "layer": "Cidades", "field": "POP" })).unwrap();
+    assert_eq!(s.revision, revision);
+    assert!(s.execute("stats.histogram", &json!({ "layer": "Cidades", "field": "NOME" })).is_err());
+    assert!(s.execute("stats.histogram", &json!({ "layer": "Cidades", "field": "POP", "bins": "0" })).is_err());
+}
+
 #[test]
 fn data_and_projects_round_trip_through_files() {
     let dir = scratch("files");

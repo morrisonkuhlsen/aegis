@@ -15,6 +15,8 @@ pub use mkaegis_model::Map;
 use serde_json::Value as Json;
 
 pub use cmd::{COMMANDS, CommandSpec, Kind};
+/// The exploratory views' statistics, for the UI's charts (they draw what this computes).
+pub use mkaegis_stats::explore;
 
 /// Undo steps kept.
 const UNDO_DEPTH: usize = 50;

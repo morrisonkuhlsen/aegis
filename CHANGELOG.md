@@ -32,6 +32,17 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Added
 
+- **Charts linked to the map** (#25, in part): a Charts pane (Statistics ▸ Charts) with a
+  histogram, a box plot, a scatter plot and the Moran scatter plot.
+  - Bins: Sturges, Freedman–Diaconis, or a count.
+  - Box plot: fences at 1.5 or 3 × IQR, with the outliers.
+  - Scatter plot: least-squares line, r and R².
+  - Moran scatter plot: z against Wz, with its slope.
+
+  Selected features are highlighted in the chart. Dragging across a chart, or clicking a bar or
+  a point, selects features on the map, through `feature.select` (Shift adds). The same
+  statistics are commands: `stats.histogram`, `stats.boxPlot`, `stats.scatterPlot` and
+  `stats.moranScatter`.
 - **Statistical classification** (#26, in part) in Symbology and `layer.symbology`:
   - **Natural breaks**: Fisher's exact optimal classes, which Jenks's method approximates.
     Above 4,000 values it classifies a quantile sample, and says so.

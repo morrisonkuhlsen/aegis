@@ -7,6 +7,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 mod backstage;
+mod charts;
 mod contents;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod control;
@@ -26,6 +27,7 @@ use mkaegis_engine::Session;
 use serde_json::{Value as Json, json};
 
 pub use backstage::Page as BackstagePage;
+pub use charts::Chart;
 pub use dialogs::{Dialog, Discard};
 pub use pane::{Pane, Tool as GpTool};
 pub use ribbon::Tab;
@@ -73,6 +75,7 @@ pub struct MapApp {
     pub status: Option<(String, bool)>,
     pub services: Services,
     pub gp: pane::GpState,
+    pub charts: charts::ChartState,
     pub table_selected_only: bool,
     /// The ribbon hidden, only the tabs showing.
     pub ribbon_collapsed: bool,
@@ -118,6 +121,7 @@ impl MapApp {
             status: None,
             services: Services::default(),
             gp: pane::GpState::default(),
+            charts: charts::ChartState::default(),
             table_selected_only: false,
             ribbon_collapsed: false,
             autosave: false,
@@ -687,6 +691,7 @@ impl MapApp {
             (Pane::Geoprocessing, "Geoprocessing", icons::Icon::Tools),
             (Pane::Symbology, "Symbology", icons::Icon::Symbology),
             (Pane::History, "History", icons::Icon::History),
+            (Pane::Charts, "Charts", icons::Icon::Statistics),
         ] {
             let galley = ui.painter().layout_no_wrap(name.to_string(), egui::FontId::proportional(12.5), t.muted);
             let h = galley.size().x + 30.0;
@@ -965,6 +970,44 @@ mod tests {
             harness.state().session.map.layer("Cidades").map(|l| (l.data.field_index("LISA_CL").is_some(), l.renderer.field().map(str::to_string)));
         assert_eq!(layer.ok(), Some((true, Some("LISA_CL".to_string()))));
         harness.get_by_label("Features tested");
+    }
+
+    /// #25: clicking a histogram bar selects that bin's features, through `feature.select`.
+    #[test]
+    fn clicking_a_histogram_bar_selects_its_features() {
+        let mut harness = harness(MapApp::new(Session::sample()));
+        let cities = harness.state().session.map.layer("Cidades").map(|l| l.id).ok();
+        {
+            let app = harness.state_mut();
+            app.pane = Some(Pane::Charts);
+            app.charts.layer = cities;
+            app.charts.x = "POP".into();
+            app.charts.bins = "4".into();
+        }
+        harness.run_steps(3);
+        let plot = harness.state().charts.plot.expect("a plot was drawn");
+        // The first of four equal bins: a click in its middle column.
+        let at = egui::pos2(plot.left() + plot.width() / 8.0, plot.bottom() - 1.0);
+        harness.input_mut().events.push(egui::Event::PointerMoved(at));
+        harness.run_steps(1);
+        for pressed in [true, false] {
+            harness.input_mut().events.push(egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+            harness.run_steps(1);
+        }
+        harness.run_steps(1);
+        let layer = harness.state().session.map.layer("Cidades").unwrap();
+        let i = layer.data.field_index("POP").unwrap();
+        let pop: Vec<f64> = layer.data.features.iter().map(|f| f.values[i].as_f64().unwrap_or(f64::NAN)).collect();
+        let h = mkaegis_engine::explore::histogram(&pop, mkaegis_engine::explore::Bins::Count(4)).unwrap();
+        let expected: Vec<usize> = pop.iter().enumerate().filter(|(_, v)| h.bin_of(**v) == Some(0)).map(|(r, _)| r).collect();
+        assert!(!expected.is_empty());
+        assert_eq!(layer.selection.iter().copied().collect::<Vec<_>>(), expected);
+        assert_eq!(harness.state().session.history().last().map(|h| h.command.as_str()), Some("feature.select"));
     }
 
     #[test]

@@ -2,8 +2,8 @@
 //! touching the screen.
 //!
 //! `cargo run -p mkaegis-ui-egui --example snapshot -- [--sample] [--in file.geojson|.shp|.aegis]
-//!  [--cmd 'id={json}']... [--tab map|analysis|statistics|edit|view|share] [--pane geoprocessing|symbology|history]
-//!  [--tool buffer|project|calculate|attributes|location|statistics|weights|autocorrelation] [--click LABEL]...
+//!  [--cmd 'id={json}']... [--tab map|analysis|statistics|edit|view|share] [--pane geoprocessing|symbology|history|charts]
+//!  [--tool buffer|project|calculate|attributes|location|statistics|weights|autocorrelation] [--click LABEL]... [--chart histogram|box|scatter|moran]
 //!  [--table] [--select] [--dark]
 //!  [--splash] [--icon] [--backstage home|new|open|info|export] [--size 1280x800] out.png`
 
@@ -23,6 +23,7 @@ fn main() -> Result<(), String> {
     let mut icon = false;
     let mut cmds = Vec::new();
     let mut clicks = Vec::new();
+    let mut chart = None;
     let mut i = 0;
     while let Some(arg) = args.get(i) {
         let mut value = || {
@@ -51,12 +52,23 @@ fn main() -> Result<(), String> {
                 pane = match value()?.to_ascii_lowercase().as_str() {
                     "symbology" => Some(Pane::Symbology),
                     "history" => Some(Pane::History),
+                    "charts" => Some(Pane::Charts),
                     _ => Some(Pane::Geoprocessing),
                 }
             }
             "--tool" => gp = Some(value()?),
             // Clicks the widget with this label once the window is drawn (`--click Run`).
             "--click" => clicks.push(value()?),
+            "--chart" => {
+                use mkaegis_ui_egui::Chart;
+                chart = Some(match value()?.to_ascii_lowercase().as_str() {
+                    "box" | "boxplot" => Chart::BoxPlot,
+                    "scatter" => Chart::Scatter,
+                    "moran" => Chart::MoranScatter,
+                    _ => Chart::Histogram,
+                });
+                pane = Some(Pane::Charts);
+            }
             "--table" => table = true,
             "--select" => select = true,
             "--dark" => dark = true,
@@ -92,6 +104,9 @@ fn main() -> Result<(), String> {
     app.show_table = table;
     if select {
         app.tool = Tool::Select;
+    }
+    if let Some(kind) = chart {
+        app.charts.kind = kind;
     }
     if let Some(name) = gp {
         use mkaegis_ui_egui::GpTool as T;

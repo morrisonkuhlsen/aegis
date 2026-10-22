@@ -183,6 +183,7 @@ fn set(app: &mut MapApp, p: &Json) -> Result<(), String> {
             Some("geoprocessing") => Some(Pane::Geoprocessing),
             Some("symbology") => Some(Pane::Symbology),
             Some("history") => Some(Pane::History),
+            Some("charts") => Some(Pane::Charts),
             Some(other) => return Err(format!("unknown pane `{other}`")),
         };
     }

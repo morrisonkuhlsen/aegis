@@ -12,6 +12,7 @@ use mkaegis_model::weights::{Bandwidth, Kernel, Method, Standardization, Weights
 use mkaegis_model::{Field, FieldType, Layer, Renderer};
 use mkaegis_stats::Spec;
 use mkaegis_stats::autocorrelation::{self, Statistic};
+use mkaegis_stats::explore::{self, Bins};
 use mkaegis_stats::local::{self, Correction};
 use serde_json::{Value as Json, json};
 
@@ -365,6 +366,96 @@ pub const HOT_SPOTS: CommandSpec = CommandSpec {
         }))
     },
 };
+
+pub const HISTOGRAM: CommandSpec = CommandSpec {
+    id: "stats.histogram",
+    label: "Histogram",
+    ribbon: "Statistics ▸ Charts",
+    shortcut: None,
+    params: "{layer, field, bins?: sturges|fd|<count up to 200>} — bin edges and counts of a numeric field (NULLs left out)",
+    kind: Kind::Query,
+    enabled: has_layers,
+    run: |s, p| {
+        let layer = s.map.layer(&layer_key(p, "layer")?)?;
+        let values = column(layer, req_str(p, "field")?)?;
+        let rule = opt_str(p, "bins").map_or(Some(Bins::Sturges), Bins::parse).ok_or_else(|| Error::param("bins", "sturges, fd, or 1 to 200"))?;
+        let h = explore::histogram(&values, rule)?;
+        let missing = values.iter().filter(|x| !x.is_finite()).count();
+        Ok(json!({ "message": format!("{} bins", h.counts.len()), "edges": h.edges, "counts": h.counts, "missing": missing }))
+    },
+};
+
+pub const BOX_PLOT: CommandSpec = CommandSpec {
+    id: "stats.boxPlot",
+    label: "Box Plot",
+    ribbon: "Statistics ▸ Charts",
+    shortcut: None,
+    params: "{layer, field, hinge? (default 1.5)} — quartiles, fences, whiskers and the rows beyond the fences",
+    kind: Kind::Query,
+    enabled: has_layers,
+    run: |s, p| {
+        let layer = s.map.layer(&layer_key(p, "layer")?)?;
+        let values = column(layer, req_str(p, "field")?)?;
+        let b = explore::box_plot(&values, opt_f64(p, "hinge")?.unwrap_or(1.5))?;
+        let mut out = serde_json::to_value(&b).map_err(|e| Error::Internal(e.to_string()))?;
+        if let Some(o) = out.as_object_mut() {
+            o.insert("message".into(), json!(format!("median {}, {} outliers", number(b.median), b.outliers.len())));
+        }
+        Ok(out)
+    },
+};
+
+pub const SCATTER_PLOT: CommandSpec = CommandSpec {
+    id: "stats.scatterPlot",
+    label: "Scatter Plot",
+    ribbon: "Statistics ▸ Charts",
+    shortcut: None,
+    params: "{layer, x, y} — the least-squares line of y on x, Pearson's r and R² (rows with both values)",
+    kind: Kind::Query,
+    enabled: has_layers,
+    run: |s, p| {
+        let layer = s.map.layer(&layer_key(p, "layer")?)?;
+        let (x, y) = (column(layer, req_str(p, "x")?)?, column(layer, req_str(p, "y")?)?);
+        let f = explore::ols(&x, &y)?;
+        let mut out = serde_json::to_value(&f).map_err(|e| Error::Internal(e.to_string()))?;
+        if let Some(o) = out.as_object_mut() {
+            o.insert(
+                "message".into(),
+                json!(format!("y = {} + {}·x, r = {}, R² = {}", number(f.intercept), number(f.slope), number(f.r), number(f.r2))),
+            );
+        }
+        Ok(out)
+    },
+};
+
+pub const MORAN_SCATTER: CommandSpec = CommandSpec {
+    id: "stats.moranScatter",
+    label: "Moran Scatter Plot",
+    ribbon: "Statistics ▸ Charts",
+    shortcut: None,
+    params: "{weights, field} — standardised values z and their spatial lag Wz by row, and the slope (Moran's I with row-standardised weights)",
+    kind: Kind::Query,
+    enabled: has_weights,
+    run: |s, p| {
+        let w = find(s, req_str(p, "weights")?)?;
+        let layer = layer_of(s, w)?;
+        let field = req_str(p, "field")?;
+        let values = numeric_values(layer, field, "the Moran scatter plot")?;
+        let m = explore::moran_scatter(&values, &w.neighbours)?;
+        Ok(
+            json!({ "message": format!("slope {}", number(m.slope)), "slope": m.slope, "z": m.z, "lag": m.lag, "standardize": w.standardization.name() }),
+        )
+    },
+};
+
+/// A numeric field's values by row, NaN where a feature has none.
+fn column(layer: &Layer, field: &str) -> Result<Vec<f64>> {
+    let i = layer.data.field_index(field).ok_or_else(|| Error::NotFound(format!("field `{field}`")))?;
+    if layer.data.fields.get(i).is_some_and(|f| !f.kind.is_numeric()) {
+        return Err(Error::param("field", format!("`{field}` is not numeric")));
+    }
+    Ok(layer.data.features.iter().map(|f| f.values.get(i).and_then(Value::as_f64).unwrap_or(f64::NAN)).collect())
+}
 
 /// A numeric field's values on every feature of `layer`, for `what`: a statistic needs them all.
 fn numeric_values(layer: &Layer, field: &str, what: &str) -> Result<Vec<f64>> {

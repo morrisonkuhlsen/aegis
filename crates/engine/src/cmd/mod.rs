@@ -102,6 +102,10 @@ pub static COMMANDS: &[CommandSpec] = &[
     stats::GENERAL_G,
     stats::LOCAL_MORAN,
     stats::HOT_SPOTS,
+    stats::HISTOGRAM,
+    stats::BOX_PLOT,
+    stats::SCATTER_PLOT,
+    stats::MORAN_SCATTER,
     project::UNDO,
     project::REDO,
 ];

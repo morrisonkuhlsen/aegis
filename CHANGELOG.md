@@ -124,6 +124,12 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Fixed
 
+- **Command lines** (#63): `mkaegis a.shp --sample` drops the file no more (the sample goes
+  under it, either way round); `--control abc`, a `--control` without a port and an unknown
+  option are refused with the usage and exit code 2, as are `mkaegis-cli`'s usage errors (a
+  failed run stays 1). A control channel that can't open (a port in use) says so in the status
+  bar; the app logs warnings and errors to stderr. `MAP.AEGIS` opens as a project, and
+  `--out x.AEGIS` saves one.
 - **Calculate Geometry Attributes refuses a property the layer's shapes don't have** (#5): an
   area of points or lines, a length of points. It used to report "rows calculated" and add a
   column of nulls; it now says what the property needs, and writes nothing. The form offers only

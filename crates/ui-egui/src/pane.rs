@@ -635,7 +635,14 @@ pub fn show(app: &mut MapApp, ui: &mut Ui) {
             }
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("×").on_hover_text("Close the pane").clicked() {
+            // A chevron folds the pane to its strip, whose chevron points back to open it.
+            let (rect, r) = ui.allocate_exact_size(egui::vec2(24.0, 24.0), egui::Sense::click());
+            if r.hovered() {
+                ui.painter().rect_filled(rect, 4.0, t.window);
+            }
+            let icon = egui::Rect::from_center_size(rect.center(), egui::vec2(14.0, 14.0));
+            crate::icons::paint(ui.painter(), icon, crate::icons::Icon::ChevronRight, t.accent, t.accent);
+            if r.on_hover_text("Close the pane").clicked() {
                 app.pane = None;
             }
         });

@@ -212,11 +212,13 @@ impl MapApp {
             "management.project" => gp(self, T::Project),
             "management.calculateGeometry" => gp(self, T::CalculateGeometry),
             "analysis.summaryStatistics" => gp(self, T::SummaryStatistics),
-            "stats.globalMoran" | "stats.gearyC" | "stats.generalG" => {
+            "stats.globalMoran" | "stats.gearyC" | "stats.generalG" | "stats.localMoran" | "stats.hotSpots" => {
                 gp(self, T::SpatialAutocorrelation);
                 self.gp.statistic = match id {
                     "stats.gearyC" => "stats.gearyC",
                     "stats.generalG" => "stats.generalG",
+                    "stats.localMoran" => "stats.localMoran",
+                    "stats.hotSpots" => "stats.hotSpots",
                     _ => "stats.globalMoran",
                 };
             }
@@ -945,6 +947,24 @@ mod tests {
         harness.get_by_label("p (randomization, two-sided)");
         harness.get_by_label("Pseudo p (one-sided)");
         harness.get_by_label("999 (seed 12345)");
+    }
+
+    /// #24: Cluster Map (LISA) runs local Moran's I, writes its fields and maps the clusters.
+    #[test]
+    fn the_cluster_map_writes_fields_and_maps_them() {
+        let mut harness = harness(MapApp::new(Session::sample()));
+        harness.state_mut().run("stats.weights", json!({ "layer": "Cidades", "method": "knn", "k": 4 }));
+        harness.state_mut().tab = Tab::Statistics;
+        harness.run_steps(2);
+        harness.get_by_label("Cluster Map (LISA)").click();
+        harness.run_steps(2);
+        assert_eq!(harness.state().gp.statistic, "stats.localMoran");
+        harness.get_by_label("Run").click();
+        harness.run_steps(2);
+        let layer =
+            harness.state().session.map.layer("Cidades").map(|l| (l.data.field_index("LISA_CL").is_some(), l.renderer.field().map(str::to_string)));
+        assert_eq!(layer.ok(), Some((true, Some("LISA_CL".to_string()))));
+        harness.get_by_label("Features tested");
     }
 
     #[test]

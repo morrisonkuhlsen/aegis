@@ -1,15 +1,18 @@
-//! Statistics tab: spatial weights (build, inspect, select neighbours, import and export) and
-//! the global statistics that take them (Moran's I, Geary's C, General G).
+//! Statistics tab: spatial weights (build, inspect, select neighbours, import and export), the
+//! global statistics that take them (Moran's I, Geary's C, General G) and the local ones (LISA,
+//! Gi* hot spots), which write their results as fields on the layer.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use mkaegis_core::{Error, Result, Value};
 use mkaegis_geom::GeometryType;
-use mkaegis_model::Layer;
+use mkaegis_model::symbology::{HOT_SPOT_COLORS, LISA_COLORS};
 use mkaegis_model::weights::{Bandwidth, Kernel, Method, Standardization, Weights};
+use mkaegis_model::{Field, FieldType, Layer, Renderer};
 use mkaegis_stats::Spec;
 use mkaegis_stats::autocorrelation::{self, Statistic};
+use mkaegis_stats::local::{self, Correction};
 use serde_json::{Value as Json, json};
 
 use super::{CommandSpec, Kind, has_layers, layer_key, mode, opt_bool, opt_f64, opt_str, path, req_str};
@@ -252,29 +255,8 @@ fn global(s: &Session, p: &Json, stat: Statistic) -> Result<Json> {
     let w = find(s, req_str(p, "weights")?)?;
     let layer = layer_of(s, w)?;
     let field = req_str(p, "field")?;
-    let i = layer.data.field_index(field).ok_or_else(|| Error::NotFound(format!("field `{field}`")))?;
-    if layer.data.fields.get(i).is_some_and(|f| !f.kind.is_numeric()) {
-        return Err(Error::param("field", format!("`{field}` is not numeric")));
-    }
-    let values: Vec<Option<f64>> = layer.data.features.iter().map(|f| f.values.get(i).and_then(Value::as_f64)).collect();
-    let missing = values.iter().filter(|v| v.is_none()).count();
-    if missing > 0 {
-        let first = values.iter().position(Option::is_none).map_or(0, |r| r + 1);
-        return Err(Error::param(
-            "field",
-            format!("{missing} features have no `{field}` (the first is row {first}): {} needs a value at every feature", stat.name()),
-        ));
-    }
-    let values: Vec<f64> = values.into_iter().flatten().collect();
-    let permutations = match opt_f64(p, "permutations")? {
-        None => DEFAULT_PERMUTATIONS,
-        Some(x) if x.fract() == 0.0 && (0.0..=f64::from(autocorrelation::MAX_PERMUTATIONS)).contains(&x) => x as u32,
-        Some(_) => return Err(Error::param("permutations", format!("a whole number from 0 to {}", autocorrelation::MAX_PERMUTATIONS))),
-    };
-    let seed = match p.get("seed") {
-        None | Some(Json::Null) => DEFAULT_SEED,
-        Some(v) => v.as_u64().ok_or_else(|| Error::param("seed", "a whole number from 0"))?,
-    };
+    let values = numeric_values(layer, field, stat.name())?;
+    let (permutations, seed) = permutations_and_seed(p)?;
     let report = autocorrelation::global(stat, &values, &w.neighbours, permutations, seed)?;
     let inference = match &report.permutation {
         Some(perm) => format!("pseudo p = {} ({} permutations, seed {})", number(perm.p), perm.permutations, perm.seed),
@@ -295,6 +277,172 @@ fn global(s: &Session, p: &Json, stat: Statistic) -> Result<Json> {
         o.insert("weights".into(), json!(w.name));
     }
     Ok(out)
+}
+
+pub const LOCAL_MORAN: CommandSpec = CommandSpec {
+    id: "stats.localMoran",
+    label: "Cluster and Outlier Analysis (Anselin Local Moran's I)",
+    ribbon: "Statistics ▸ Local",
+    shortcut: None,
+    params: "{weights, field, permutations? (default 999, 0 for the z-score), seed? (default 12345), alpha? (default 0.05), \
+             correction?: none|bonferroni|fdr} — writes LISA_I, LISA_Z, LISA_P and LISA_CL on the layer and maps the clusters",
+    kind: Kind::Edit,
+    enabled: has_weights,
+    run: |s, p| {
+        let w = find(s, req_str(p, "weights")?)?;
+        let layer = layer_of(s, w)?;
+        let field = req_str(p, "field")?;
+        let values = numeric_values(layer, field, "Local Moran's I")?;
+        let (permutations, seed) = permutations_and_seed(p)?;
+        let (alpha, correction) = (alpha(p)?, correction(p)?);
+        let lisa = local::local_moran(&values, &w.neighbours, permutations, seed, alpha, correction)?;
+        let (layer_id, weights_name) = (layer.id, w.name.clone());
+        let float = |v: &[Option<f64>]| v.iter().map(|x| x.map_or(Value::Null, Value::Float)).collect::<Vec<_>>();
+        let columns = vec![
+            ("LISA_I", FieldType::Double, float(&lisa.i)),
+            ("LISA_Z", FieldType::Double, float(&lisa.z)),
+            ("LISA_P", FieldType::Double, float(&lisa.p)),
+            ("LISA_CL", FieldType::Text, lisa.cluster.iter().map(|c| Value::Text(c.name().into())).collect()),
+        ];
+        let layer = s.map.layers.iter_mut().find(|l| l.id == layer_id).ok_or_else(|| not_found(&weights_name))?;
+        write_columns(layer, columns)?;
+        layer.renderer = Renderer::categories("LISA_CL", &LISA_COLORS, layer.renderer.base());
+        let count = |c: local::Cluster| lisa.cluster.iter().filter(|x| **x == c).count();
+        let clusters = json!({
+            "High-High": count(local::Cluster::HighHigh), "Low-Low": count(local::Cluster::LowLow),
+            "High-Low": count(local::Cluster::HighLow), "Low-High": count(local::Cluster::LowHigh),
+            "Not significant": count(local::Cluster::NotSignificant), "No neighbours": count(local::Cluster::Island),
+        });
+        let m = &lisa.summary;
+        Ok(json!({
+            "message": format!(
+                "Local Moran's I of {field}: {} of {} features significant at {} ({}): {} High-High, {} Low-Low, {} High-Low, {} Low-High",
+                m.significant, m.tested, m.alpha, correction_text(m.correction),
+                count(local::Cluster::HighHigh), count(local::Cluster::LowLow), count(local::Cluster::HighLow), count(local::Cluster::LowHigh)
+            ),
+            "fields": ["LISA_I", "LISA_Z", "LISA_P", "LISA_CL"],
+            "clusters": clusters,
+            "summary": m,
+        }))
+    },
+};
+
+pub const HOT_SPOTS: CommandSpec = CommandSpec {
+    id: "stats.hotSpots",
+    label: "Hot Spot Analysis (Getis-Ord Gi*)",
+    ribbon: "Statistics ▸ Local",
+    shortcut: None,
+    params: "{weights, field, correction?: none|bonferroni|fdr} — writes GI_Z, GI_P, GI_BIN (−3 to 3) and GI_CL on the layer and maps \
+             the hot and cold spots at 90/95/99 % confidence",
+    kind: Kind::Edit,
+    enabled: has_weights,
+    run: |s, p| {
+        let w = find(s, req_str(p, "weights")?)?;
+        let layer = layer_of(s, w)?;
+        let field = req_str(p, "field")?;
+        let values = numeric_values(layer, field, "Gi*")?;
+        let hs = local::hot_spots(&values, &w.neighbours, correction(p)?)?;
+        let (layer_id, weights_name) = (layer.id, w.name.clone());
+        let label = |b: i8| HOT_SPOT_COLORS.get(usize::try_from(3 - i32::from(b)).unwrap_or(3)).map_or("Not significant", |c| c.0);
+        let columns = vec![
+            ("GI_Z", FieldType::Double, hs.z.iter().map(|z| Value::Float(*z)).collect()),
+            ("GI_P", FieldType::Double, hs.p.iter().map(|p| Value::Float(*p)).collect()),
+            ("GI_BIN", FieldType::Short, hs.bin.iter().map(|b| Value::Int(i64::from(*b))).collect()),
+            ("GI_CL", FieldType::Text, hs.bin.iter().map(|b| Value::Text(label(*b).into())).collect()),
+        ];
+        let layer = s.map.layers.iter_mut().find(|l| l.id == layer_id).ok_or_else(|| not_found(&weights_name))?;
+        write_columns(layer, columns)?;
+        layer.renderer = Renderer::categories("GI_CL", &HOT_SPOT_COLORS, layer.renderer.base());
+        let count = |f: fn(i8) -> bool| hs.bin.iter().filter(|b| f(**b)).count();
+        let (hot, cold) = (count(|b| b >= 2), count(|b| b <= -2));
+        let m = &hs.summary;
+        Ok(json!({
+            "message": format!("Gi* of {field}: {hot} hot and {cold} cold spots at 95 % confidence ({}), of {} features", correction_text(m.correction), m.tested),
+            "fields": ["GI_Z", "GI_P", "GI_BIN", "GI_CL"],
+            "hot": hot,
+            "cold": cold,
+            "summary": m,
+        }))
+    },
+};
+
+/// A numeric field's values on every feature of `layer`, for `what`: a statistic needs them all.
+fn numeric_values(layer: &Layer, field: &str, what: &str) -> Result<Vec<f64>> {
+    let i = layer.data.field_index(field).ok_or_else(|| Error::NotFound(format!("field `{field}`")))?;
+    if layer.data.fields.get(i).is_some_and(|f| !f.kind.is_numeric()) {
+        return Err(Error::param("field", format!("`{field}` is not numeric")));
+    }
+    let values: Vec<Option<f64>> = layer.data.features.iter().map(|f| f.values.get(i).and_then(Value::as_f64)).collect();
+    let missing = values.iter().filter(|v| v.is_none()).count();
+    if missing > 0 {
+        let first = values.iter().position(Option::is_none).map_or(0, |r| r + 1);
+        return Err(Error::param(
+            "field",
+            format!("{missing} features have no `{field}` (the first is row {first}): {what} needs a value at every feature"),
+        ));
+    }
+    Ok(values.into_iter().flatten().collect())
+}
+
+fn permutations_and_seed(p: &Json) -> Result<(u32, u64)> {
+    let permutations = match opt_f64(p, "permutations")? {
+        None => DEFAULT_PERMUTATIONS,
+        Some(x) if x.fract() == 0.0 && (0.0..=f64::from(autocorrelation::MAX_PERMUTATIONS)).contains(&x) => x as u32,
+        Some(_) => return Err(Error::param("permutations", format!("a whole number from 0 to {}", autocorrelation::MAX_PERMUTATIONS))),
+    };
+    let seed = match p.get("seed") {
+        None | Some(Json::Null) => DEFAULT_SEED,
+        Some(v) => v.as_u64().ok_or_else(|| Error::param("seed", "a whole number from 0"))?,
+    };
+    Ok((permutations, seed))
+}
+
+fn correction_text(correction: &str) -> &'static str {
+    match correction {
+        "fdr" => "FDR correction",
+        "bonferroni" => "Bonferroni correction",
+        _ => "no correction",
+    }
+}
+
+fn alpha(p: &Json) -> Result<f64> {
+    match opt_f64(p, "alpha")? {
+        None => Ok(0.05),
+        Some(a) if a > 0.0 && a < 1.0 => Ok(a),
+        Some(_) => Err(Error::param("alpha", "a significance level between 0 and 1")),
+    }
+}
+
+fn correction(p: &Json) -> Result<Correction> {
+    match opt_str(p, "correction") {
+        None => Ok(Correction::None),
+        Some(c) => Correction::parse(c).ok_or_else(|| Error::param("correction", "none, bonferroni or fdr")),
+    }
+}
+
+/// Writes result columns on a layer: an existing field of the same name and type is
+/// overwritten (a re-run), a field of another type is an error, a missing one is added.
+fn write_columns(layer: &mut Layer, columns: Vec<(&str, FieldType, Vec<Value>)>) -> Result<()> {
+    for (name, kind, _) in &columns {
+        if let Some(f) = layer.data.fields.iter().find(|f| f.name.eq_ignore_ascii_case(name))
+            && f.kind != *kind
+        {
+            return Err(Error::param("field", format!("the layer has a `{name}` field of another type: rename or delete it first")));
+        }
+    }
+    let data = layer.data_mut();
+    for (name, kind, values) in columns {
+        let i = match data.field_index(name) {
+            Some(i) => i,
+            None => data.add_field(Field::new(name, kind))?,
+        };
+        for (f, v) in data.features.iter_mut().zip(values) {
+            if let Some(slot) = f.values.get_mut(i) {
+                *slot = v;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// A statistic for a message: four decimals, or scientific notation when very small or large.

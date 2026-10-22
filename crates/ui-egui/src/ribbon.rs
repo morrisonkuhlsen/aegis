@@ -391,11 +391,29 @@ fn statistics_tab(app: &mut MapApp, ui: &mut Ui) {
     });
     group(ui, "Autocorrelation", |ui| {
         let open = app.gp.tool == Some(GpTool::SpatialAutocorrelation) && app.pane == Some(Pane::Geoprocessing);
-        if button(ui, Icon::Statistics, "Global Moran's I", weights, open, GpTool::SpatialAutocorrelation.description()) {
-            app.gp.open(GpTool::SpatialAutocorrelation, active_id(app));
-            app.pane = Some(Pane::Geoprocessing);
+        let open_global = open && matches!(app.gp.statistic, "stats.globalMoran" | "stats.gearyC" | "stats.generalG");
+        if button(ui, Icon::Statistics, "Global Moran's I", weights, open_global, GpTool::SpatialAutocorrelation.description()) {
+            open_statistic(app, "stats.globalMoran");
         }
     });
+    group(ui, "Local", |ui| {
+        let open = app.gp.tool == Some(GpTool::SpatialAutocorrelation) && app.pane == Some(Pane::Geoprocessing);
+        let tip = "Where the clusters and outliers are: local Moran's I (LISA), mapped High-High, Low-Low, High-Low, Low-High";
+        if button(ui, Icon::Statistics, "Cluster Map (LISA)", weights, open && app.gp.statistic == "stats.localMoran", tip) {
+            open_statistic(app, "stats.localMoran");
+        }
+        let tip = "Where values are significantly high or low with their neighbours: Getis-Ord Gi*, at 90, 95 and 99 % confidence";
+        if button(ui, Icon::Statistics, "Hot Spots (Gi*)", weights, open && app.gp.statistic == "stats.hotSpots", tip) {
+            open_statistic(app, "stats.hotSpots");
+        }
+    });
+}
+
+/// Opens the Spatial Autocorrelation tool on one of its statistics.
+fn open_statistic(app: &mut MapApp, command: &'static str) {
+    app.gp.open(GpTool::SpatialAutocorrelation, active_id(app));
+    app.gp.statistic = command;
+    app.pane = Some(Pane::Geoprocessing);
 }
 
 fn edit_tab(app: &mut MapApp, ui: &mut Ui) {

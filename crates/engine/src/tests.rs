@@ -453,6 +453,47 @@ fn global_autocorrelation_reports_its_inference() {
     assert!(err.contains("1 features have no `POP`"), "{err}");
 }
 
+/// #24: local statistics write their results as fields and map them, and re-run cleanly.
+#[test]
+fn local_statistics_write_fields_and_map_them() {
+    let mut s = Session::sample();
+    s.execute("stats.weights", &json!({ "layer": "Cidades", "method": "knn", "k": 4, "name": "w" })).unwrap();
+    let r = s.execute("stats.localMoran", &json!({ "weights": "w", "field": "POP", "correction": "fdr" })).unwrap();
+    assert!(r["message"].as_str().unwrap().starts_with("Local Moran's I of POP: "), "{}", r["message"]);
+    assert_eq!(r["summary"]["correction"], json!("fdr"));
+    let layer = s.map.layer("Cidades").unwrap();
+    for f in ["LISA_I", "LISA_Z", "LISA_P", "LISA_CL"] {
+        assert!(layer.data.field_index(f).is_some(), "{f}");
+    }
+    assert_eq!(layer.renderer.field(), Some("LISA_CL"));
+    // Σ Iᵢ = n · I with row-standardised weights.
+    let i = layer.data.field_index("LISA_I").unwrap();
+    let sum: f64 = layer.data.features.iter().filter_map(|f| f.values[i].as_f64()).sum();
+    let n = layer.data.features.len() as f64;
+    let global = s.execute("stats.globalMoran", &json!({ "weights": "w", "field": "POP", "permutations": 0 })).unwrap();
+    assert!((sum - n * global["value"].as_f64().unwrap()).abs() < 1e-9);
+    // A re-run overwrites its fields instead of adding more; Undo takes the run back.
+    let fields = s.map.layer("Cidades").unwrap().data.fields.len();
+    s.execute("stats.localMoran", &json!({ "weights": "w", "field": "POP" })).unwrap();
+    assert_eq!(s.map.layer("Cidades").unwrap().data.fields.len(), fields);
+    s.execute("edit.undo", &json!({})).unwrap();
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!(s.map.layer("Cidades").unwrap().data.field_index("LISA_I").is_none());
+
+    let h = s.execute("stats.hotSpots", &json!({ "weights": "w", "field": "POP" })).unwrap();
+    assert!(h["hot"].as_u64().is_some() && h["cold"].as_u64().is_some());
+    let layer = s.map.layer("Cidades").unwrap();
+    assert_eq!(layer.renderer.field(), Some("GI_CL"));
+    let bin = layer.data.field_index("GI_BIN").unwrap();
+    assert!(layer.data.features.iter().all(|f| (-3.0..=3.0).contains(&f.values[bin].as_f64().unwrap())));
+    // A field of the same name and another type is not overwritten.
+    s.execute("layer.addField", &json!({ "layer": "Ilhas", "name": "LISA_CL", "type": "double" })).unwrap();
+    s.execute("stats.weights", &json!({ "layer": "Ilhas", "method": "knn", "k": 1, "name": "wi" })).unwrap();
+    assert!(s.execute("stats.localMoran", &json!({ "weights": "wi", "field": "LISA_CL" })).is_err());
+    assert!(s.execute("stats.localMoran", &json!({ "weights": "w", "field": "POP", "correction": "holm" })).is_err());
+    assert!(s.execute("stats.localMoran", &json!({ "weights": "w", "field": "POP", "alpha": 1.5 })).is_err());
+}
+
 #[test]
 fn data_and_projects_round_trip_through_files() {
     let dir = scratch("files");

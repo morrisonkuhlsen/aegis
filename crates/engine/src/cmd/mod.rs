@@ -100,6 +100,8 @@ pub static COMMANDS: &[CommandSpec] = &[
     stats::GLOBAL_MORAN,
     stats::GEARY_C,
     stats::GENERAL_G,
+    stats::LOCAL_MORAN,
+    stats::HOT_SPOTS,
     project::UNDO,
     project::REDO,
 ];

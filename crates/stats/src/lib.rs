@@ -4,6 +4,7 @@
 //! - `weights`: contiguity, nearest neighbours, distance bands and kernels, standardised.
 //! - `gal`: weights as GAL and GWT text.
 //! - `autocorrelation`: global Moran's I, Geary's C and General G, with their inference.
+//! - `local`: local Moran's I (LISA) and Getis-Ord Gi*, with multiple-testing corrections.
 //! - `inference`: normal p-values and the seeded generator permutation tests use.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -11,6 +12,7 @@ pub mod autocorrelation;
 pub mod gal;
 pub mod inference;
 mod kdtree;
+pub mod local;
 pub mod weights;
 
 /// The most polygon vertices contiguity reads.

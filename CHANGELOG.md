@@ -32,6 +32,18 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Added
 
+- **Local statistics** (#24), written as fields on the layer and mapped at once:
+  - Cluster and Outlier Analysis (`stats.localMoran`, Statistics ▸ Cluster Map (LISA)): local
+    Moran's Iᵢ (Anselin 1995), its z-score under randomisation, and a pseudo p-value from
+    conditional permutations (999 from seed 12345 by default). Each feature is labelled
+    High-High, Low-Low, High-Low, Low-High or Not significant. Fields: `LISA_I`, `LISA_Z`,
+    `LISA_P` and `LISA_CL`.
+  - Hot Spot Analysis (`stats.hotSpots`, Statistics ▸ Hot Spots (Gi*)): Getis-Ord Gi* z-scores
+    and p-values, binned as hot and cold spots at 90, 95 and 99 % confidence. Fields: `GI_Z`,
+    `GI_P`, `GI_BIN` (−3 to 3) and `GI_CL`.
+  - Both take a multiple-testing correction, none by default: Bonferroni or the false
+    discovery rate (Benjamini–Hochberg). The result says how many features were tested and the
+    p-value threshold applied.
 - **Global spatial autocorrelation** (#23): Global Moran's I (`stats.globalMoran`), Geary's C
   (`stats.gearyC`) and Getis-Ord General G (`stats.generalG`) of a field, for a spatial weights
   matrix. Each reports the statistic and its expectation; z-scores and two-sided p-values under

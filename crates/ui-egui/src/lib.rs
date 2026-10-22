@@ -216,6 +216,8 @@ impl MapApp {
             "management.project" => gp(self, T::Project),
             "management.calculateGeometry" => gp(self, T::CalculateGeometry),
             "analysis.summaryStatistics" => gp(self, T::SummaryStatistics),
+            "management.joinField" => gp(self, T::JoinField),
+            "management.xyTableToPoint" => gp(self, T::XyTableToPoint),
             "stats.globalMoran" | "stats.gearyC" | "stats.generalG" | "stats.localMoran" | "stats.hotSpots" => {
                 gp(self, T::SpatialAutocorrelation);
                 self.gp.statistic = match id {
@@ -255,7 +257,7 @@ impl MapApp {
             "layer.export" => {
                 if let Some(l) = self.active_layer() {
                     let (layer, name) = (l.id, format!("{}.geojson", l.name));
-                    self.save_to("Export Features", "layer.export", &["geojson", "shp"], &name, json!({ "layer": layer }));
+                    self.save_to("Export Features", "layer.export", &["geojson", "shp", "csv"], &name, json!({ "layer": layer }));
                 }
             }
             "map.describe" | "feature.setValue" | "map.setExtent" => self.show_table = true,

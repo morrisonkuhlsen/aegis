@@ -1,4 +1,4 @@
-//! Files in and out: data by extension (GeoJSON, shapefile) and the project file (`.aegis`,
+//! Files in and out: data by extension (GeoJSON, shapefile; CSV tables) and the project file (`.aegis`,
 //! the map as JSON). Every file is written with [`write_atomic`], so a failed write never leaves
 //! a truncated file in place of a good one.
 
@@ -14,6 +14,8 @@ pub const PROJECT_EXTENSION: &str = "aegis";
 pub const PROJECT_VERSION: u64 = 1;
 /// The largest project file read: its JSON is held in memory whole, then the map.
 const MAX_PROJECT_BYTES: u64 = 1 << 30;
+/// The largest delimited text table read.
+const MAX_TABLE_BYTES: u64 = 512 << 20;
 
 /// The data file extensions Add Data opens.
 pub const DATA_EXTENSIONS: [&str; 3] = ["geojson", "json", "shp"];
@@ -48,6 +50,11 @@ pub fn read_data(path: &Path) -> Result<(FeatureClass, Vec<String>)> {
 pub fn write_data(fc: &FeatureClass, path: &Path) -> Result<Vec<String>> {
     match extension(path).as_str() {
         "geojson" | "json" => write_atomic(path, mkaegis_geojson::write(fc)?.as_bytes()).map(|()| Vec::new()),
+        // The attributes only: a table, for spreadsheets and statistics packages.
+        "csv" => {
+            let rows: Vec<&[mkaegis_core::Value]> = fc.features.iter().map(|f| f.values.as_slice()).collect();
+            write_atomic(path, mkaegis_csv::write(&fc.fields, &rows).as_bytes()).map(|()| Vec::new())
+        }
         "shp" => {
             let files = mkaegis_shp::write(fc)?;
             write_atomic(&path.with_extension("shp"), &files.shp)?;
@@ -63,6 +70,14 @@ pub fn write_data(fc: &FeatureClass, path: &Path) -> Result<Vec<String>> {
         }
         other => Err(Error::NotAvailable(format!("writing `.{other}` files"))),
     }
+}
+
+/// A delimited text table (CSV, TSV), with column types overridden by name in `types`.
+pub fn read_table(path: &Path, types: &std::collections::HashMap<String, mkaegis_model::FieldType>) -> Result<mkaegis_csv::Table> {
+    if std::fs::metadata(path)?.len() > MAX_TABLE_BYTES {
+        return Err(Error::format("CSV", format!("larger than {} MB", MAX_TABLE_BYTES >> 20)));
+    }
+    mkaegis_csv::read(&std::fs::read(path)?, types)
 }
 
 pub fn save_project(map: &Map, path: &Path) -> Result<()> {

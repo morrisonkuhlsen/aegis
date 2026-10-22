@@ -32,6 +32,17 @@ data and parameters. Read it before re-running an analysis with a new version.
 
 ### Added
 
+- **Tables** (#27, in part):
+  - **Join Field** (`management.joinField`): copies a CSV table's columns, or another layer's,
+    onto a layer by a common key. It reports the features matched and unmatched, the table rows
+    left unused and the keys the table repeats, with examples of each.
+  - **XY Table To Point** (`management.xyTableToPoint`): a layer from a CSV table's X/Y
+    columns, or from a column of WKT shapes. Rows without usable coordinates are skipped and
+    counted.
+  - Reading guesses the delimiter (`,` `;` tab `|`), a decimal comma and the encoding (UTF-8,
+    else Windows-1252), and infers column types, which `types` overrides. A code with leading
+    zeros (`0012`, IBGE and FIPS codes) is read as text and keeps its zeros.
+  - Export Features writes `.csv` too: the attribute table.
 - **Charts linked to the map** (#25, in part): a Charts pane (Statistics ▸ Charts) with a
   histogram, a box plot, a scatter plot and the Moran scatter plot.
   - Bins: Sturges, Freedman–Diaconis, or a count.

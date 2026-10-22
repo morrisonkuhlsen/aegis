@@ -107,7 +107,7 @@ fn row(app: &mut MapApp, ui: &mut Ui, index: usize, last: usize) {
             ui.close();
         }
         if ui.button("Export Features…").clicked() {
-            app.save_to("Export Features", "layer.export", &["geojson", "shp"], &format!("{name}.geojson"), json!({ "layer": id }));
+            app.save_to("Export Features", "layer.export", &["geojson", "shp", "csv"], &format!("{name}.geojson"), json!({ "layer": id }));
             ui.close();
         }
         if ui.button("Properties").clicked() {

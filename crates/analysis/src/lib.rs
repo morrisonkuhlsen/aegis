@@ -1,10 +1,13 @@
 //! Geoprocessing tools (L3), named after the toolboxes': Buffer (Analysis), Project and Calculate
-//! Geometry Attributes (Data Management), Select Layer By Location, Summary Statistics.
+//! Geometry Attributes (Data Management), Select Layer By Location, Summary Statistics, and
+//! Join Field (`join`).
 //!
 //! Distances and areas are in metres. Data in a UTM zone is measured as it is; data in any other
 //! CRS (geographic, Web Mercator) is measured in the UTM zone of each feature (good to a fraction
 //! of a percent inside a zone); geodesic measures come later.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+
+pub mod join;
 
 use mkaegis_core::{Error, Result, Value};
 use mkaegis_crs::{Crs, Kind};

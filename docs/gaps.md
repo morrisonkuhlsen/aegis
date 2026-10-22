@@ -1,6 +1,6 @@
 # Gaps: the ranked work list
 
-*Updated 2026-10-22, after 0.1.2.*
+*Updated 2026-10-22, at 0.2.0.*
 
 Pick work from the top. The order follows the project's rules: a crash or lost work outranks
 everything ("Never crash" in [`AGENTS.md`](../AGENTS.md)); then wrong statistical results, since

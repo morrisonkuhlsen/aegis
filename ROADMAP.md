@@ -1,13 +1,13 @@
 # MK aeGIS roadmap
 
-*Updated 2026-10-22, at version 0.1.2.*
+*Updated 2026-10-22, at version 0.2.0.*
 
 MK aeGIS is a statistical GIS: a geographic information system built for statisticians. This page
 is the one-page summary; the detail is in [`docs/`](docs/).
 
 ## Stage
 
-**Alpha (0.1.x).** The map handling a statistician needs before any statistic works: open
+**Alpha (0.x).** The map handling a statistician needs before any statistic works: open
 shapefiles and GeoJSON, project on the fly, symbolise, select by attributes and by location,
 edit attributes, buffer points, save a project, export a map. Spatial statistics have started
 with spatial weights. Nothing is stable yet: project files and command parameters may change
@@ -24,12 +24,12 @@ From `cargo xtask stats` and `cargo xtask parity`:
 
 | Measure                | Value  |
 |------------------------|--------|
-| Commands               | 44     |
-| Rust lines (15 crates) | 13,859 |
-| Tests (`#[test]`)      | 127    |
-| Releases               | 3      |
-| Open issues (bugs)     | 12     |
-| Open issues (features) | 43     |
+| Commands               | 56     |
+| Rust lines (16 crates) | 20,854 |
+| Tests (`#[test]`)      | 211    |
+| Releases               | 4      |
+| Open issues (bugs)     | 0      |
+| Open issues (features) | 40     |
 
 ## Dimensions
 
@@ -47,6 +47,7 @@ From `cargo xtask stats` and `cargo xtask parity`:
 
 | Date       | Version | What landed                                                                                    |
 |------------|---------|------------------------------------------------------------------------------------------------|
+| 2026-10-22 | 0.2.0   | The web app (#38); bad features kept (#57); projection edges (#54); CI on 3 OSes (#19)         |
 | 2026-10-21 | 0.1.2   | 14 bugs fixed: lost work and crashes, SQL NULL logic, weights, measures, Select By Location    |
 | 2026-10-21 | 0.1.1   | Windows starts on DirectX 12 (#82), no console window (#78); MK Sigma's dark palette           |
 | 2026-10-21 | 0.1.0   | First release: map handling, spatial weights (#22), Statistics tab, CI (#19), release archives |

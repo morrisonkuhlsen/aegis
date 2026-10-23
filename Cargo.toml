@@ -36,7 +36,7 @@ log = "0.4"
 # PNG encoding for map exports and offscreen snapshots. MIT/Apache, pure Rust.
 png = "0.18"
 # XML for KML (OGC 07-147r2), no default features: UTF-8 only, no serde. MIT.
-quick-xml = { version = "0.41", default-features = false }
+quick-xml = { version = "0.42", default-features = false }
 # HTTP for basemap tiles on the desktop (rustls TLS with ring, gzip). MIT OR Apache-2.0.
 ureq = "3"
 # JPEG decoding for the splash artwork. MIT/Apache/Zlib, pure Rust, builds for wasm.
@@ -44,9 +44,9 @@ zune-jpeg = "0.5"
 zune-core = "0.5"
 
 # ui
-egui = "0.36"
-eframe = { version = "0.36", default-features = false }
-egui_kittest = "0.36"
+egui = "0.37"
+eframe = { version = "0.37", default-features = false }
+egui_kittest = "0.37"
 rfd = "0.17"
 
 # web app (apps/mkaegis-web, wasm32 only): the browser's APIs, which eframe uses too
